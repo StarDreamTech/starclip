@@ -183,3 +183,31 @@ test('every built-in paper is selectable and switching paper keeps text in propo
     assert.deepEqual([rendered.at(-1)!.background, rendered.at(-1)!.fontSize, rendered.at(-1)!.padding], ['paper:original-clear-200', 12, 16]);
   } finally { fixture.unmount(); }
 });
+
+test('desktop font downloads report real progress inside the picker', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const install = deferred<HandwritingAssets>();
+  let emit: ((progress: { id: string; received: number; total: number }) => void) | undefined;
+  let released = 0;
+  const fixture = await mount({
+    handwritingAssets: async () => catalog(),
+    downloadHandwritingFont() { return install.promise; },
+    async onHandwritingFontProgress(callback: (progress: { id: string; received: number; total: number }) => void) { emit = callback; return () => { released++; }; },
+    async renderHandwriting() { return 'unused'; },
+  });
+  try {
+    await openFonts(fixture.root);
+    const bar = () => nodes(fixture.root).find(item => item.props.role === 'progressbar');
+    assert.equal(bar(), undefined, 'no progress bar before a download starts');
+    const downloading = button(fixture.root, '下载 原创字体2').props.onClick(); await flush();
+    assert(bar(), 'a progress bar appears while the download runs');
+    emit!({ id: 'two', received: 61_728, total: 123_456 }); await flush();
+    assert.equal(bar()!.props['aria-valuenow'], 50);
+    assert.match(text(bar()!), /50%/);
+    assert.match(text(fixture.root), /正在下载并验证… 50%/);
+    const installed = catalog(); installed.fonts[1]!.downloaded = true;
+    install.resolve(installed); await downloading; await flush();
+    assert.equal(released, 1, 'the progress subscription is released once the download settles');
+    assert.equal(bar(), undefined);
+  } finally { fixture.unmount(); }
+});

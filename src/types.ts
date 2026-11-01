@@ -94,6 +94,12 @@ export interface HandwritingPaper {
   color: string | null;
   previewUrl: string | null;
 }
+export interface HandwritingFontProgress {
+  id: string;
+  received: number;
+  total: number;
+}
+
 export interface HandwritingAssets {
   available: boolean;
   path: string | null;

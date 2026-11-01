@@ -4,6 +4,7 @@ export const enHandwriting: Record<string, string> = {
   '安装包不含完整字体。先看预览，点击哪款才下载哪款；下载后可离线使用。': 'Full fonts are not bundled with the app. Preview them first and download only the ones you choose. Downloaded fonts work offline.',
   '浏览器仅展示字体预览，请在桌面版下载字体并生成月光笺。': 'This browser preview shows font samples only. Download fonts and create Moonlight Notes in the desktop app.',
   '选择手写字体': 'Choose a handwriting font',
+  '字体下载进度': 'Font download progress',
   '搜索字体': 'Search fonts',
   '输入字体名称': 'Enter a font name',
   '字体筛选': 'Filter fonts',

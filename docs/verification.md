@@ -684,6 +684,17 @@
 - 浏览器演示实际切换：在「使用习惯 → 界面语言」选择 English 并保存后，主窗、设置、教程、星绘坊、月光笺、星尘整理、分享和星伴设置均切换；`document.title` 变为 `Starclip — Catch every spark`，`html[lang]` 为 `en-US`。逐页检查主要界面文案；可见中文仅剩用户示例数据（分组名、片段标题 / 正文）、「简体中文」语言自称、固定分享文案和 AI 配置示例，未发现遗漏的界面标签。
 - 未验证：打包后的 macOS / Windows 应用中的托盘菜单、原生窗口标题和英文界面实际切换；原生错误弹窗正文的英文覆盖；Windows 平台。以上为待实机核对的边界，不把浏览器检查表述为原生验收。
 
+## 本地工作区并入 main（2026-11-01，未推送）
+
+WorkBuddy 在 0.2.3 之上留下的未提交工作区（文件剪贴、统计三档模式、月光笺原纸下载、字体弹窗与下载进度、本地预览打包）已整体存档为本地分支 `wip/local-20261101`（未推送），其中 2026-10-30 至 11-01 的逐项验证记录随该分支保存。并入 main 时：
+
+- 文件剪贴、统计模式、月光笺纸张与 main 的 #13、#8、#10 是同一功能的两套实现，保留 main 版本；本地版本另有 Windows 导入 / 定位 / 写入等待修 P1 问题，未并入。原纸中带水印与学校抬头的纸张按 main 已记录的用户决定不接入。
+- 移植字体下载进度：`handwriting::download_font_bytes_with` 分块读取并约每 1% 回报一次，`download_handwriting_font` 转为 `handwriting-font-progress` 事件（`{ id, received, total }`，只发给 main 窗口），字体弹出列表底部显示进度条与已接收 / 总大小，下载结束释放订阅；`tests/handwriting-fonts.test.ts` 新增进度用例。
+- 移植 `npm run build:preview:mac`（`scripts/build-preview.mjs`）：**Starclip Preview** / `com.starclip.preview`、独立默认数据目录、本地 ad-hoc 签名，编译时清空线上统计地址、移除更新源与签名 / 公证凭据，输出 `.app` / DMG 至忽略的 `artifacts/preview-local.noindex/<构建时间>/`。不启动、不安装、不推送、不打 tag、不上传 Release、不部署 Worker、不触发 Homebrew。
+- 保留 `rust-toolchain.toml` 的 `rust-analyzer` 组件与 `.gitignore` 的 `.workbuddy-ai/`。
+
+本轮只做源码合并与自动检查，未启动预览、未做原生 GUI 验收。
+
 ## 尚未验证或未覆盖
 
 - Windows 安装程序运行、托盘与剪贴板的实机体验；没有操作远程 Windows 电脑。

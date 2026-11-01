@@ -245,6 +245,12 @@ pub fn select_app(directory: &Path, _selected: &Path) -> Result<HandwritingAsset
 
 /// Downloads only a built-in font ID. Call off the UI thread, without storage locks.
 pub fn download_font_bytes(id: &str) -> Result<Vec<u8>> {
+    download_font_bytes_with(id, |_, _| {})
+}
+
+/// Same as [`download_font_bytes`], reporting `(received, expected)` bytes while streaming
+/// so the desktop UI can show real progress instead of an indeterminate wait.
+pub fn download_font_bytes_with(id: &str, mut progress: impl FnMut(u64, u64)) -> Result<Vec<u8>> {
     let font = definition(id)?;
     let _guard = DOWNLOAD_GATE
         .try_lock()
@@ -272,11 +278,28 @@ pub fn download_font_bytes(id: &str) -> Result<Vec<u8>> {
     {
         return Err("字体下载大小与清单不符，未安装。".into());
     }
-    let mut bytes = Vec::with_capacity(font.bytes as usize);
-    response
-        .take(font.bytes.min(MAX_FONT) + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "GitHub 字体下载中断或超时，请检查网络后重试。")?;
+    let expected = font.bytes.min(MAX_FONT);
+    let mut bytes = Vec::with_capacity(expected as usize);
+    let mut reader = response.take(expected + 1);
+    // One report per percent keeps the bridge quiet while still feeling live.
+    let step = (expected / 100).max(16 * 1024);
+    let mut reported = 0u64;
+    progress(0, expected);
+    let mut chunk = [0u8; 16 * 1024];
+    loop {
+        let read = reader
+            .read(&mut chunk)
+            .map_err(|_| "GitHub 字体下载中断或超时，请检查网络后重试。")?;
+        if read == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&chunk[..read]);
+        let received = bytes.len() as u64;
+        if received == expected || received - reported >= step {
+            reported = received;
+            progress(received, expected);
+        }
+    }
     verify_font(font, &bytes)?;
     Ok(bytes)
 }

@@ -22,13 +22,15 @@
 
 ## 环境与检查
 
+本地预览打包：`npm run build:preview:mac`（`scripts/build-preview.mjs`）只生成独立 `Starclip Preview` / `com.starclip.preview` 的 macOS app / DMG，移入忽略的 `artifacts/preview-local.noindex/<构建时间>/`，不启动、不安装、不提交或部署；统计编译地址为空、updater endpoints 为空、本地 ad-hoc 签名。预览构建不等于 GUI / 原生操作验收，两者分开记录。
+
 - 字体下载复用 reqwest 0.13 系统代理与 TLS；rustls-no-provider 构建客户端前必须安装 ring provider，已有 provider 时保留。真实测试发现遗漏会 panic，不可改成绕过 TLS。GitHub 连接 10 秒 / 总计 60 秒超时，失败不安装半文件。
 
 内存测量先辨认正在运行的可执行文件、构建时间和关键接口；开发源码、隔离测试包、正式安装与线上 Release 是不同对象。用 `launchctl print pid/<pid>` 的应用域 / bundle ID 核实辅助进程，再用 `footprint --noCategories --format bytes` 汇总；不把系统所有 WebKit 相加，也不只量 Rust 主进程。RSS、虚拟地址空间、安装包大小与物理足迹不可混用。
 
 复测固定数据量、采集状态、主窗口 / 草稿状态、星伴大小与心情，分别记录打开、关主窗、收起星伴后的状态和等待时长。关窗后先用进程工具测量，CUA 读取可能激活 / 重建页面；确认页面退出与验证下降数值分开。短时波动不能证明泄漏或长期稳定。主窗早期关闭、busy 结束续办、设置子页草稿与重开令牌由 `window-release` / `settings-release` 回归保护；原生只把实际做过的场景记为通过。
 
-依据 `package.json`、`rust-toolchain.toml`、`src-tauri/Cargo.toml` 和 `.github/workflows/verify.yml`：Node.js 22.12+，Rust 1.90.0，Tauri 2。浏览器开发命令 `npm run dev` 固定在本机 1420 端口；桌面 `npm run tauri dev` 会启动原生应用，不能当作纯编译检查。
+依据 `package.json`、`rust-toolchain.toml`、`src-tauri/Cargo.toml` 和 `.github/workflows/verify.yml`：Node.js 22.12+，Rust 1.90.0，Tauri 2。`rust-toolchain.toml` 同时声明 `rustfmt`、`clippy`、`rust-analyzer`，让编辑器使用与固定工具链配套的分析器，避免扩展自带较新版本产生“toolchain too old”提示。2026-10-31 已在本机安装 1.90.0 配套分析器并用 `rustup run 1.90.0 rust-analyzer --version` 核对可运行；未验证编辑器重启后的实际加载。浏览器开发命令 `npm run dev` 固定在本机 1420 端口；桌面 `npm run tauri dev` 会启动原生应用，不能当作纯编译检查。
 
 有行为变化时执行相关前端和 Rust 基础检查：
 
