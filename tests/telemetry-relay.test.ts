@@ -28,7 +28,9 @@ function recorder(statuses = [204, 200]) {
 }
 
 test('explicitly enabled dual delivery rebuilds both payloads from fixed fields only', async () => {
-  assert.equal(payload.events.length, 9);
+  assert.equal(payload.events.length, 10);
+  // The process heartbeat is a normal whitelisted event name, never a free-form label.
+  assert.equal(EVENT_NAMES.includes('app_running'), true);
   const { calls, fetch } = recorder();
   const result = await handleRequest(request(payload, {
     headers: { 'Content-Type': 'application/json', Cookie: 'private-cookie', 'X-Forwarded-For': '192.0.2.23', 'User-Agent': 'private-agent' },
@@ -42,7 +44,9 @@ test('explicitly enabled dual delivery rebuilds both payloads from fixed fields 
   assert.equal(gaUrl.origin + gaUrl.pathname, 'https://www.google-analytics.com/mp/collect');
   assert.equal(gaUrl.searchParams.get('measurement_id'), env.GA4_MEASUREMENT_ID);
   assert.equal(gaUrl.searchParams.get('api_secret'), env.GA4_API_SECRET);
-  const expectedParams = (count: number) => ({ count, app_version: '0.2.2', platform: 'macos' });
+  const expectedParams = (count: number) => ({
+    count, app_version: '0.2.2', platform: 'macos', identity_mode: 'session',
+  });
   assert.deepEqual(google.body, {
     client_id: '81985529216486896.81985529216486896', non_personalized_ads: true,
     consent: { ad_user_data: 'DENIED', ad_personalization: 'DENIED' },
@@ -57,7 +61,8 @@ test('explicitly enabled dual delivery rebuilds both payloads from fixed fields 
       iKey: '12345678-1234-1234-1234-123456789abc',
       data: { baseType: 'EventData', baseData: {
         ver: 2, name: payload.events[index].name,
-        properties: { app_version: '0.2.2', platform: 'macos' }, measurements: { count: index + 1 },
+        properties: { app_version: '0.2.2', platform: 'macos', identity_mode: 'session' },
+        measurements: { count: index + 1 },
       } },
     });
   }
@@ -92,7 +97,7 @@ test('v2 forwards only the three normalized device properties to both providers'
     assert.equal(calls.length, 2);
     const properties = {
       app_version: payload.appVersion, platform, app_arch: device.architecture,
-      os_major: device.osMajor, device_model: device.model,
+      os_major: device.osMajor, device_model: device.model, identity_mode: 'session',
     };
     assert.deepEqual(calls[0].body.events, payload.events.map(event => ({
       name: event.name, params: { count: event.count, ...properties },
@@ -105,7 +110,8 @@ test('v2 rejects identity fields, arbitrary text, extra fields and models from a
   const device = { architecture: 'aarch64', osMajor: '26', model: 'Mac14,2' };
   const v2 = { ...payload, version: 2, device };
   const invalid = [
-    { ...v2, version: 1 }, { ...v2, version: 3 }, { ...v2, hostname: 'fixed-private-host' },
+    { ...v2, version: 1 }, { ...v2, installationId: '0123456789abcdef0123456789abcdef' },
+    { ...v2, hostname: 'fixed-private-host' },
     ...[null, [], {}, { ...device, serial: 'fixed-forbidden-serial' },
       { ...device, hostname: 'fixed-private-host' }, { ...device, hardwareUuid: 'fixed-uuid' },
       { ...device, architecture: 'Apple M4' }, { ...device, architecture: 'aarch64\n' },
@@ -121,6 +127,83 @@ test('v2 rejects identity fields, arbitrary text, extra fields and models from a
   ];
   const { calls, fetch } = recorder();
   for (const body of invalid) assert.equal((await handleRequest(request(body), env, fetch)).status, 400);
+  assert.equal(calls.length, 0);
+});
+
+test('v3 installation mode derives client_id from the installation id and labels identity_mode', async () => {
+  const device = { architecture: 'aarch64', osMajor: '26', model: 'Mac14,2' };
+  const installationId = 'fedcba9876543210fedcba9876543210';
+  const v3 = { ...payload, version: 3, device, installationId };
+  const { calls, fetch } = recorder();
+  assert.equal((await handleRequest(request(v3), env, fetch)).status, 204);
+  assert.equal(calls.length, 2);
+  const [google, microsoft] = calls;
+  // Only the persistent identity reaches GA4, and only as client_id.
+  assert.equal(google.body.client_id, '18364758544493064721.18364758544493064721');
+  assert.equal(Object.hasOwn(google.body, 'user_id'), false);
+  assert.equal(Object.hasOwn(google.body, 'identity_mode'), false);
+  assert.deepEqual(google.body.events, payload.events.map(event => ({
+    name: event.name,
+    params: {
+      count: event.count, app_version: '0.2.2', platform: 'macos',
+      identity_mode: 'installation',
+      app_arch: 'aarch64', os_major: '26', device_model: 'Mac14,2',
+    },
+  })));
+  for (const item of microsoft.body) {
+    assert.deepEqual(item.data.baseData.properties, {
+      app_version: '0.2.2', platform: 'macos', identity_mode: 'installation',
+      app_arch: 'aarch64', os_major: '26', device_model: 'Mac14,2',
+    });
+  }
+  for (const call of calls) {
+    const forwarded = JSON.stringify(call.body);
+    assert.doesNotMatch(forwarded, new RegExp(installationId));
+    assert.doesNotMatch(forwarded, new RegExp(payload.sessionId));
+  }
+});
+
+test('v3 session mode keeps the ephemeral client_id and never requires an installation id', async () => {
+  const device = { architecture: 'x86_64', osMajor: '11', model: 'Surface' };
+  const v3 = { ...payload, version: 3, platform: 'windows', device };
+  const { calls, fetch } = recorder();
+  assert.equal((await handleRequest(request(v3), env, fetch)).status, 204);
+  assert.equal(calls[0].body.client_id, '81985529216486896.81985529216486896');
+  for (const event of calls[0].body.events) assert.equal(event.params.identity_mode, 'session');
+  for (const item of calls[1].body) assert.equal(item.data.baseData.properties.identity_mode, 'session');
+});
+
+test('each protocol version rejects the fields of the others and malformed identifiers', async () => {
+  const device = { architecture: 'aarch64', osMajor: '26', model: 'Mac14,2' };
+  const installationId = '0123456789abcdef0123456789abcdef';
+  const v1 = { ...payload };
+  const v2 = { ...payload, version: 2, device };
+  const v3 = { ...payload, version: 3, device };
+  const v3Installation = { ...v3, installationId };
+  const invalid = [
+    // Cross-version fields: v1 never carries a device or identity, v2 never carries an identity.
+    { ...v1, device }, { ...v1, installationId }, { ...v2, installationId },
+    // v3 always carries the normalized device block, and version 4 does not exist yet.
+    { ...payload, version: 3 }, { ...payload, version: 3, installationId },
+    { ...v3, version: 4 }, { ...v3Installation, version: 4 },
+    // Any extra field is rejected instead of being silently dropped.
+    { ...v3, hostname: 'fixed-private-host' },
+    { ...v3Installation, hostname: 'fixed-private-host' },
+    { ...v3Installation, userId: 'fixed-user' },
+    // Installation identifiers must be exactly 32 lowercase hex characters.
+    ...['F'.repeat(32), '0123456789abcdef0123456789abcde', `${installationId}0`,
+      '0123456789abcdef0123456789abcdeg', '', ' 0123456789abcdef0123456789abcdef',
+      '0123456789abcdef-0123456789abcde'].map(value => ({ ...v3, installationId: value })),
+    ...['0123456789ABCDEF0123456789abcdef', 'fedcba98-7654-3210-fedc-ba9876543210']
+      .map(value => ({ ...v3, installationId: value })),
+    ...[null, 0, [], {}, true].map(value => ({ ...v3, installationId: value })),
+    // The session identifier stays independently validated in v3.
+    { ...v3, sessionId: installationId.toUpperCase() }, { ...v3, sessionId: '' },
+  ];
+  const { calls, fetch } = recorder();
+  for (const body of invalid) {
+    assert.equal((await handleRequest(request(body), env, fetch)).status, 400, JSON.stringify(body).slice(0, 120));
+  }
   assert.equal(calls.length, 0);
 });
 

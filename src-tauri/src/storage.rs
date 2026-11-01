@@ -13,7 +13,7 @@ use std::{
 const DATABASE: &str = "starclip.sqlite3";
 const SELECTION: &str = "handwriting-app.json";
 const LOCATOR: &str = "data-location.json";
-const MANAGED_DIRECTORIES: [&str; 2] = ["renderers", "fonts"];
+const MANAGED_DIRECTORIES: [&str; 3] = ["renderers", "fonts", "papers"];
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -1072,15 +1072,19 @@ mod tests {
         create_private_directory(&source.join("fonts")).unwrap();
         let font = b"original synthetic font fixture, never parsed as TTF";
         fs::write(source.join("fonts/sample.ttf"), font).unwrap();
+        create_private_directory(&source.join("papers")).unwrap();
+        let paper = b"original synthetic paper fixture";
+        fs::write(source.join("papers/sample.img"), paper).unwrap();
         assert_eq!(
             storage.info().unwrap().total_bytes,
-            before + font.len() as u64
+            before + font.len() as u64 + paper.len() as u64
         );
         let target = scratch.0.join("migrated");
         let plan = storage.plan(DirectoryMode::Move, &scratch.0).unwrap();
         assert_eq!(plan.total_bytes, storage.info().unwrap().total_bytes);
         storage.apply(&store, DirectoryMode::Move, &target).unwrap();
         assert_eq!(fs::read(target.join("fonts/sample.ttf")).unwrap(), font);
+        assert_eq!(fs::read(target.join("papers/sample.img")).unwrap(), paper);
         assert_eq!(fs::read(source.join("fonts/sample.ttf")).unwrap(), font);
         assert!(!legacy.join("fonts").exists());
         assert!(
@@ -1098,12 +1102,14 @@ mod tests {
         let (snapshot, manifest) =
             verified_recovery(&storage.recovery_directory(), &point.id).unwrap();
         assert_eq!(fs::read(snapshot.join("fonts/sample.ttf")).unwrap(), font);
+        assert_eq!(fs::read(snapshot.join("papers/sample.img")).unwrap(), paper);
         assert_eq!(manifest.files["fonts/sample.ttf"].bytes, font.len() as u64);
         fs::write(target.join("fonts/sample.ttf"), b"changed fixed fixture").unwrap();
         storage.restore_recovery_point(&store, &point.id).unwrap();
         let restored = PathBuf::from(storage.pending_path().unwrap());
         assert_ne!(restored, target);
         assert_eq!(fs::read(restored.join("fonts/sample.ttf")).unwrap(), font);
+        assert_eq!(fs::read(restored.join("papers/sample.img")).unwrap(), paper);
         assert_eq!(
             fs::read(target.join("fonts/sample.ttf")).unwrap(),
             b"changed fixed fixture"

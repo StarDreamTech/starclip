@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import { compileScript, parse } from '@vue/compiler-sfc';
 import { createRenderer, markRaw, nextTick } from 'vue';
-import type { TelemetryState } from '../src/telemetry-api.ts';
+import type { TelemetryMode, TelemetryState } from '../src/telemetry-api.ts';
 
 // Exercise the real settings panel without a WebView, network or clipboard.
 type TestNode = { type: string; text: string; props: Record<string, any>; children: TestNode[]; parent?: TestNode };
@@ -53,7 +53,10 @@ async function loadApi(desktop: boolean) {
   return import('data:text/javascript;base64,' + Buffer.from(code + `\n// module ${moduleNumber++}`).toString('base64'));
 }
 
-const initialState = (): TelemetryState => ({ revision: 0, enabled: false, configured: false, endpointHost: null, queuedEvents: [], lastResult: 'never' });
+const initialState = (): TelemetryState => ({
+  revision: 0, mode: 'off', enabled: false, configured: false, endpointHost: null, queuedEvents: [],
+  lastResult: 'never', identityError: null, identityPresent: false,
+});
 const eventNames = ['app_started', 'studio_opened', 'card_exported', 'backup_exported', 'backup_imported', 'update_check_completed', 'update_download_completed', 'update_install_started', 'font_downloaded'];
 function nativeMock(initial: TelemetryState = initialState()) {
   let state = { ...initial };
@@ -64,9 +67,19 @@ function nativeMock(initial: TelemetryState = initialState()) {
     async getTelemetryState() { calls.push('read'); return { ...state }; },
     async onTelemetryStateChanged(callback: typeof receive) { calls.push('listen'); receive = callback; return () => { calls.push('dispose'); }; },
     send(value: TelemetryState) { state = value; receive(value); },
-    async setTelemetryEnabled(enabled: boolean) {
-      calls.push(`enabled:${enabled}`);
-      state = { ...state, revision: state.revision + 1, enabled, queuedEvents: enabled ? state.queuedEvents : [], lastResult: enabled ? 'never' : 'disabled' };
+    async setTelemetryMode(mode: TelemetryMode) {
+      calls.push(`mode:${mode}`);
+      const installation = mode === 'installation';
+      state = {
+        ...state, revision: state.revision + 1, mode, enabled: mode !== 'off',
+        queuedEvents: mode === 'off' ? [] : state.queuedEvents, lastResult: mode === 'off' ? 'disabled' : 'never',
+        identityPresent: installation, identityError: null,
+      };
+      return { ...state };
+    },
+    async resetTelemetryIdentity() {
+      calls.push('reset');
+      state = { ...state, revision: state.revision + 1, identityPresent: true, identityError: null, queuedEvents: [] };
       return { ...state };
     },
     async flushTelemetry() { calls.push('send'); state = { ...state, revision: state.revision + 1, queuedEvents: [], lastResult: 'sent' }; return { ...state }; },
@@ -78,34 +91,51 @@ function telemetrySwitch(root: TestNode): TestNode {
   const found = nodes(root).find(item => item.props.role === 'switch' && item.props['aria-label'] === '帮助改进星笺');
   assert(found, 'missing usage consent switch'); return found;
 }
+function modeInput(root: TestNode, mode: TelemetryMode): TestNode {
+  const found = nodes(root).find(item => item.type === 'input' && item.props.value === mode);
+  assert(found, `missing mode option: ${mode}`); return found;
+}
 
 test('an unconfigured receiver cannot enable or send despite the default-on policy', async () => {
   const mock = nativeMock(); const { root, app } = await mount(mock);
   assert.deepEqual(mock.calls, ['listen', 'read'], 'opening settings only reads local state');
   assert.equal(telemetrySwitch(root).props['aria-checked'], false);
   assert.equal(telemetrySwitch(root).props.disabled, true);
-  assert.match(text(root), /默认开启 · 随时关闭 · 独立即时保存/);
+  assert.match(text(root), /默认开启 · 随时切换 · 独立即时保存/);
   assert.match(text(root), /接收端未配置，当前不会收集或发送使用统计/);
   assert.equal(button(root, '发送待发统计').props.disabled, true);
-  await telemetrySwitch(root).props.onClick(); await button(root, '发送待发统计').props.onClick(); await flush();
+  // Only "send nothing" stays selectable while the relay is unconfigured.
+  assert.equal(modeInput(root, 'off').props.disabled, false);
+  assert.equal(modeInput(root, 'session').props.disabled, true);
+  assert.equal(modeInput(root, 'installation').props.disabled, true);
+  await telemetrySwitch(root).props.onClick(); await modeInput(root, 'session').props.onChange();
+  await button(root, '发送待发统计').props.onClick(); await flush();
   assert.deepEqual(mock.calls, ['listen', 'read']);
   app.unmount(); assert.equal(mock.calls.at(-1), 'dispose');
 });
 
-test('configured native preferences show default-on or a saved opt-out without changing either choice', async () => {
-  for (const enabled of [true, false]) {
-    const mock = nativeMock({ ...initialState(), configured: true, enabled, endpointHost: 'fixture.example' });
+test('configured native preferences show the saved mode without changing it', async () => {
+  for (const mode of ['off', 'session', 'installation'] as const) {
+    const mock = nativeMock({
+      ...initialState(), mode, enabled: mode !== 'off', configured: true, endpointHost: 'fixture.example',
+      identityPresent: mode === 'installation',
+    });
     const { root, app } = await mount(mock);
-    assert.equal(telemetrySwitch(root).props['aria-checked'], enabled);
+    assert.equal(telemetrySwitch(root).props['aria-checked'], mode !== 'off');
     assert.equal(telemetrySwitch(root).props.disabled, false);
-    assert.match(text(root), /默认开启 · 随时关闭 · 独立即时保存/);
-    assert.deepEqual(mock.calls, ['listen', 'read'], 'mounting must not enable, disable or flush telemetry');
+    assert.equal(modeInput(root, mode).props.checked, true);
+    for (const other of ['off', 'session', 'installation'] as const) {
+      assert.equal(modeInput(root, other).props.checked, other === mode);
+      assert.equal(modeInput(root, other).props.disabled, false);
+    }
+    assert.match(text(root), /默认开启 · 随时切换 · 独立即时保存/);
+    assert.deepEqual(mock.calls, ['listen', 'read'], 'mounting must not change the mode or flush telemetry');
     app.unmount();
   }
 });
 
 test('statistics deliveries and network failures stay silent, including an IPC rejection', async () => {
-  const mock = nativeMock({ ...initialState(), configured: true, enabled: true, queuedEvents: [{ name: 'app_started', count: 1 }] });
+  const mock = nativeMock({ ...initialState(), mode: 'session', enabled: true, configured: true, queuedEvents: [{ name: 'app_started', count: 1 }] });
   let rejectSend = false;
   const send = mock.flushTelemetry;
   mock.flushTelemetry = async () => { if (rejectSend) throw new Error('FIXTURE_NETWORK_FAILURE'); return send(); };
@@ -115,16 +145,17 @@ test('statistics deliveries and network failures stay silent, including an IPC r
   await button(root, '发送待发统计').props.onClick(); await flush();
   assert.doesNotMatch(text(root), /使用统计已发送|暂时未能发送统计/);
   assert.doesNotMatch(text(root), /Microsoft|Application Insights|两个服务|报表|入库/);
-  mock.send({ ...initialState(), revision: 2, configured: true, enabled: true, lastResult: 'failed' }); await flush();
+  mock.send({ ...initialState(), revision: 2, mode: 'session', enabled: true, configured: true, lastResult: 'failed' }); await flush();
   assert.doesNotMatch(text(root), /使用统计已发送|暂时未能发送统计/);
   assert.deepEqual(mock.calls, ['listen', 'read', 'send']);
-  mock.send({ ...initialState(), revision: 3, configured: true, enabled: true, queuedEvents: [{ name: 'studio_opened', count: 1 }] }); await flush();
+  mock.send({ ...initialState(), revision: 3, mode: 'session', enabled: true, configured: true, queuedEvents: [{ name: 'studio_opened', count: 1 }] }); await flush();
   rejectSend = true;
   await button(root, '发送待发统计').props.onClick(); await flush();
   assert.doesNotMatch(text(root), /FIXTURE_NETWORK_FAILURE/);
   assert.equal(nodes(root).some(item => item.props.role === 'alert'), false);
   assert.match(text(root), /最多保留 72 小时、每种 100 次/);
-  assert.match(text(root), /不收集序列号、电脑名称、用户名或永久设备标识/);
+  assert.match(text(root), /不收集序列号、电脑名称、用户名或系统账户标识/);
+  assert.doesNotMatch(text(root), /永久设备标识/);
   app.unmount();
 });
 
@@ -132,46 +163,46 @@ test('enabling waits for confirmation and a failed save keeps consent off', asyn
   const mock = nativeMock({ ...initialState(), configured: true, endpointHost: 'fixture.example' });
   const saving = deferred<TelemetryState>(); const busy: boolean[] = [];
   let attempts = 0;
-  mock.setTelemetryEnabled = async enabled => {
-    mock.calls.push(`enabled:${enabled}`);
-    return ++attempts === 1 ? saving.promise : { ...initialState(), revision: 1, configured: true, enabled };
+  mock.setTelemetryMode = async mode => {
+    mock.calls.push(`mode:${mode}`);
+    return ++attempts === 1 ? saving.promise : { ...initialState(), revision: 1, mode, enabled: true, configured: true };
   };
   const { root, app } = await mount(mock, { onBusy: (value: boolean) => busy.push(value) });
   assert.equal(telemetrySwitch(root).props.disabled, false);
   const toggle = telemetrySwitch(root).props.onClick(); await flush();
   assert.equal(telemetrySwitch(root).props['aria-checked'], false, 'consent is not optimistically enabled');
   assert.equal(telemetrySwitch(root).props.disabled, true); assert.equal(busy.at(-1), true);
-  await telemetrySwitch(root).props.onClick(); assert.equal(mock.calls.filter(call => call === 'enabled:true').length, 1);
+  await telemetrySwitch(root).props.onClick(); assert.equal(mock.calls.filter(call => call === 'mode:session').length, 1);
   saving.reject(new Error('固定测试：统计偏好保存失败')); await toggle; await flush();
   assert.equal(telemetrySwitch(root).props['aria-checked'], false);
   assert.equal(telemetrySwitch(root).props.disabled, true); assert.equal(busy.at(-1), false);
   assert.match(text(root), /统计偏好保存失败/); assert(!mock.calls.includes('send'));
   await button(root, '重试保存统计选择').props.onClick(); await flush();
-  assert.deepEqual(mock.calls.filter(call => call.startsWith('enabled:')), ['enabled:true', 'enabled:true']);
+  assert.deepEqual(mock.calls.filter(call => call.startsWith('mode:')), ['mode:session', 'mode:session']);
   assert.equal(telemetrySwitch(root).props.disabled, false);
   assert.equal(telemetrySwitch(root).props['aria-checked'], true);
   app.unmount();
 });
 
 test('confirmed disable clears the displayed pending queue without flushing it', async () => {
-  const mock = nativeMock({ ...initialState(), revision: 3, configured: true, enabled: true, queuedEvents: [{ name: 'card_exported', count: 2 }] });
+  const mock = nativeMock({ ...initialState(), revision: 3, mode: 'session', enabled: true, configured: true, queuedEvents: [{ name: 'card_exported', count: 2 }] });
   const { root, app } = await mount(mock);
   assert.match(text(root), /导出图片卡片 · 2/);
   await telemetrySwitch(root).props.onClick(); await flush();
   assert.equal(telemetrySwitch(root).props['aria-checked'], false);
   assert.match(text(root), /没有待发送事件/); assert.match(text(root), /统计已关闭，待发送事件已清空/);
   assert.equal(button(root, '发送待发统计').props.disabled, true);
-  assert.deepEqual(mock.calls, ['listen', 'read', 'enabled:false']);
+  assert.deepEqual(mock.calls, ['listen', 'read', 'mode:off']);
   app.unmount();
 });
 
 test('retrying a failed consent write preserves the disable choice after runtime collection already stopped', async () => {
-  const mock = nativeMock({ ...initialState(), revision: 4, configured: true, enabled: true, queuedEvents: [{ name: 'studio_opened', count: 2 }] });
-  const save = mock.setTelemetryEnabled; let attempts = 0;
-  mock.setTelemetryEnabled = async enabled => {
-    if (++attempts > 1) return save(enabled);
-    mock.calls.push(`enabled:${enabled}`);
-    mock.send({ ...initialState(), revision: 5, configured: true, enabled: false, lastResult: 'disabled' });
+  const mock = nativeMock({ ...initialState(), revision: 4, mode: 'session', enabled: true, configured: true, queuedEvents: [{ name: 'studio_opened', count: 2 }] });
+  const save = mock.setTelemetryMode; let attempts = 0;
+  mock.setTelemetryMode = async mode => {
+    if (++attempts > 1) return save(mode);
+    mock.calls.push(`mode:${mode}`);
+    mock.send({ ...initialState(), revision: 5, mode: 'off', enabled: false, configured: true, lastResult: 'disabled' });
     throw new Error('固定测试：本次已停止，但偏好保存失败，重启前请重试。');
   };
   const { root, app, exposed } = await mount(mock);
@@ -182,17 +213,56 @@ test('retrying a failed consent write preserves the disable choice after runtime
   assert.equal(exposed.canRelease, false, 'an unsaved consent choice keeps the settings state alive');
   assert.equal(telemetrySwitch(root).props.disabled, true);
   await telemetrySwitch(root).props.onClick(); await flush();
-  assert.deepEqual(mock.calls.filter(call => call.startsWith('enabled:')), ['enabled:false']);
+  assert.deepEqual(mock.calls.filter(call => call.startsWith('mode:')), ['mode:off']);
   await button(root, '重试保存统计选择').props.onClick(); await flush();
-  assert.deepEqual(mock.calls.filter(call => call.startsWith('enabled:')), ['enabled:false', 'enabled:false']);
+  assert.deepEqual(mock.calls.filter(call => call.startsWith('mode:')), ['mode:off', 'mode:off']);
   assert.equal(telemetrySwitch(root).props['aria-checked'], false);
   assert.equal(exposed.canRelease, true); assert.doesNotMatch(text(root), /重试保存统计选择|偏好保存失败/);
   assert(!mock.calls.includes('send')); app.unmount();
 });
 
+test('per-installation reporting is only reachable through its own explicit choice', async () => {
+  const mock = nativeMock({ ...initialState(), revision: 2, configured: true, endpointHost: 'fixture.example' });
+  const { root, app } = await mount(mock);
+  assert.doesNotMatch(text(root), /本机统计标识已保存|重置统计标识/);
+  // Turning the master switch on selects the default per-run identity, never the persistent one.
+  await telemetrySwitch(root).props.onClick(); await flush();
+  assert.deepEqual(mock.calls, ['listen', 'read', 'mode:session']);
+  assert.equal(modeInput(root, 'session').props.checked, true);
+  await modeInput(root, 'installation').props.onChange(); await flush();
+  assert.equal(mock.calls.at(-1), 'mode:installation');
+  assert.equal(modeInput(root, 'installation').props.checked, true);
+  assert.match(text(root), /本机统计标识已保存，只用于区分安装次数/);
+  assert.match(text(root), /用于估算活跃安装数/);
+  await button(root, '重置统计标识').props.onClick(); await flush();
+  assert.equal(mock.calls.at(-1), 'reset');
+  assert.match(text(root), /统计标识已重置，后续统计将使用新的编号/);
+  // Selecting the mode that is already active never writes again.
+  await modeInput(root, 'installation').props.onChange(); await flush();
+  assert.equal(mock.calls.at(-1), 'reset');
+  app.unmount();
+});
+
+test('a local identity failure is shown and stops the per-installation mode', async () => {
+  const mock = nativeMock({
+    ...initialState(), revision: 6, mode: 'installation', enabled: false, configured: true,
+    identityError: '统计标识未能保存，已停止按安装统计。', identityPresent: false,
+    queuedEvents: [{ name: 'app_started', count: 1 }],
+  });
+  const { root, app } = await mount(mock);
+  const alerts = nodes(root).filter(item => item.props.role === 'alert').map(text);
+  assert.deepEqual(alerts, ['统计标识未能保存，已停止按安装统计。']);
+  assert.doesNotMatch(text(root), /本机统计标识已保存/);
+  // Consent stays on, but the backend reports that nothing can be delivered.
+  assert.equal(telemetrySwitch(root).props['aria-checked'], true);
+  assert.equal(button(root, '发送待发统计').props.disabled, true);
+  assert.equal(button(root, '重置统计标识').props.disabled, false);
+  app.unmount();
+});
+
 test('event preview renders only fixed labels and bounded counts, never arbitrary payload fields', async () => {
   const mock = nativeMock({
-    ...initialState(), configured: true, enabled: true,
+    ...initialState(), configured: true, mode: 'session', enabled: true,
     queuedEvents: [
       { name: 'card_exported', count: 3, payload: 'FIXTURE_PRIVATE_PAYLOAD', content: '<img src=x>' },
       { name: 'update_download_completed', count: 2 },
@@ -207,6 +277,7 @@ test('event preview renders only fixed labels and bounded counts, never arbitrar
   assert.deepEqual(nodes(root).filter(item => item.type === 'li').map(text), ['导出图片卡片 · 3', '更新包下载完成 · 2', '开始安装更新 · 1']);
   assert.match(text(root), /统计在后台静默发送，失败不提示/);
   assert.match(text(root), /安装计数表示开始尝试，不代表安装成功；退出前未送达的计数可能丢失/);
+  assert.match(text(root), /运行时长以每小时一次的固定心跳统计/);
   assert.doesNotMatch(text(root), /FIXTURE_|<img src=x>/);
   assert.equal(nodes(root).some(item => item.type === 'img'), false);
   assert(!mock.calls.includes('send'), 'preview does not send events'); app.unmount();
@@ -216,14 +287,14 @@ test('a newer event wins over both a delayed initial read and a delayed preferen
   const mock = nativeMock(); const read = deferred<TelemetryState>();
   mock.getTelemetryState = async () => { mock.calls.push('read'); return read.promise; };
   const { root, app } = await mount(mock);
-  mock.send({ ...initialState(), revision: 5, configured: true, enabled: true, queuedEvents: [{ name: 'studio_opened', count: 4 }] });
+  mock.send({ ...initialState(), revision: 5, mode: 'session', enabled: true, configured: true, queuedEvents: [{ name: 'studio_opened', count: 4 }] });
   read.resolve({ ...initialState(), revision: 2 }); await flush();
   assert.equal(telemetrySwitch(root).props['aria-checked'], true); assert.match(text(root), /打开星绘坊 · 4/);
   const saved = deferred<TelemetryState>();
-  mock.setTelemetryEnabled = async enabled => { mock.calls.push(`enabled:${enabled}`); return saved.promise; };
+  mock.setTelemetryMode = async mode => { mock.calls.push(`mode:${mode}`); return saved.promise; };
   const disabling = telemetrySwitch(root).props.onClick(); await flush();
-  mock.send({ ...initialState(), revision: 7, configured: true, enabled: false, lastResult: 'disabled' });
-  saved.resolve({ ...initialState(), revision: 6, configured: true, enabled: true, queuedEvents: [{ name: 'studio_opened', count: 9 }] });
+  mock.send({ ...initialState(), revision: 7, mode: 'off', enabled: false, configured: true, lastResult: 'disabled' });
+  saved.resolve({ ...initialState(), revision: 6, mode: 'session', enabled: true, configured: true, queuedEvents: [{ name: 'studio_opened', count: 9 }] });
   await disabling; await flush();
   assert.equal(telemetrySwitch(root).props['aria-checked'], false); assert.match(text(root), /没有待发送事件/);
   assert.doesNotMatch(text(root), /打开星绘坊 · 9/); app.unmount();
@@ -234,8 +305,9 @@ test('browser panel remains offline and disabled even when handlers are invoked 
   const { root, app } = await mount(mock);
   assert.match(text(root), /使用统计设置仅在桌面版可用/);
   assert.equal(telemetrySwitch(root).props.disabled, true);
-  await telemetrySwitch(root).props.onClick(); await button(root, '发送待发统计').props.onClick();
-  await button(root, '清空待发送事件').props.onClick(); await flush();
+  await telemetrySwitch(root).props.onClick(); await modeInput(root, 'installation').props.onChange();
+  await button(root, '发送待发统计').props.onClick(); await button(root, '清空待发送事件').props.onClick();
+  await flush();
   assert.deepEqual(mock.calls, []); app.unmount(); assert.deepEqual(mock.calls, []);
 });
 
@@ -257,7 +329,7 @@ test('retry after subscription failure reconnects before reading local telemetry
   assert.match(text(root), /统计订阅失败/); assert.deepEqual(mock.calls, []);
   await button(root, '重新读取').props.onClick(); await flush();
   assert.equal(attempts, 2); assert.deepEqual(mock.calls, ['listen', 'read']);
-  mock.send({ ...initialState(), revision: 3, configured: true, enabled: true }); await flush();
+  mock.send({ ...initialState(), revision: 3, mode: 'session', enabled: true, configured: true }); await flush();
   assert.equal(telemetrySwitch(root).props['aria-checked'], true); app.unmount();
 });
 
@@ -271,8 +343,12 @@ test('actual browser API never invokes native IPC or subscribes, and studio even
   assert.equal(api.telemetryDesktopAvailable, false);
   assert.deepEqual(api.initialTelemetryState(), initialState());
   assert.deepEqual([...api.usageEventNames].sort(), [...eventNames].sort());
+  // The heartbeat is a backend event and must never become a recordable UI action.
+  assert.equal(api.usageEventNames.includes('app_running'), false);
+  assert.deepEqual([...api.telemetryModes], ['off', 'session', 'installation']);
   await assert.rejects(api.getTelemetryState(), /桌面版/);
-  await assert.rejects(api.setTelemetryEnabled(true), /桌面版/);
+  await assert.rejects(api.setTelemetryMode('session'), /桌面版/);
+  await assert.rejects(api.resetTelemetryIdentity(), /桌面版/);
   await assert.rejects(api.flushTelemetry(), /桌面版/);
   await assert.rejects(api.clearTelemetryQueue(), /桌面版/);
   (await api.onTelemetryStateChanged(() => assert.fail('browser event')))();

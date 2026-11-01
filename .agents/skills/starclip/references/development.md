@@ -22,13 +22,15 @@
 
 ## 环境与检查
 
+2026-10-31 用户要求核对 WorkBuddy 工作区，并询问只本地打包预览、不发布 Brew / 线上版本。新增 `npm run build:preview:mac`（`scripts/build-preview.mjs`），只生成独立 `Starclip Preview` / `com.starclip.preview` 的 macOS app / DMG，移入忽略的 `.noindex` 目录，不启动、不安装、不提交或部署；统计编译地址为空、updater endpoints 为空、本地 ad-hoc 签名。仍须记录预览构建与 GUI / 原生文件操作的不同验证边界。该轮 Node 194、core 131 / 3 ignored、desktop 147 / 3 ignored、Web / fmt / macOS release 检查通过，Windows 源码发现构建阻断及原生 API 错误，详见 [复核记录](../../../../docs/verification.md#workbuddy-改动复核与本地预览2026-10-31)。WorkBuddy 原文“Windows 类型检查通过”已经修正；本机 macOS 构建不会检查 `cfg(windows)`。
+
 - 字体下载复用 reqwest 0.13 系统代理与 TLS；rustls-no-provider 构建客户端前必须安装 ring provider，已有 provider 时保留。真实测试发现遗漏会 panic，不可改成绕过 TLS。GitHub 连接 10 秒 / 总计 60 秒超时，失败不安装半文件。
 
 内存测量先辨认正在运行的可执行文件、构建时间和关键接口；开发源码、隔离测试包、正式安装与线上 Release 是不同对象。用 `launchctl print pid/<pid>` 的应用域 / bundle ID 核实辅助进程，再用 `footprint --noCategories --format bytes` 汇总；不把系统所有 WebKit 相加，也不只量 Rust 主进程。RSS、虚拟地址空间、安装包大小与物理足迹不可混用。
 
 复测固定数据量、采集状态、主窗口 / 草稿状态、星伴大小与心情，分别记录打开、关主窗、收起星伴后的状态和等待时长。关窗后先用进程工具测量，CUA 读取可能激活 / 重建页面；确认页面退出与验证下降数值分开。短时波动不能证明泄漏或长期稳定。主窗早期关闭、busy 结束续办、设置子页草稿与重开令牌由 `window-release` / `settings-release` 回归保护；原生只把实际做过的场景记为通过。
 
-依据 `package.json`、`rust-toolchain.toml`、`src-tauri/Cargo.toml` 和 `.github/workflows/verify.yml`：Node.js 22.12+，Rust 1.90.0，Tauri 2。浏览器开发命令 `npm run dev` 固定在本机 1420 端口；桌面 `npm run tauri dev` 会启动原生应用，不能当作纯编译检查。
+依据 `package.json`、`rust-toolchain.toml`、`src-tauri/Cargo.toml` 和 `.github/workflows/verify.yml`：Node.js 22.12+，Rust 1.90.0，Tauri 2。`rust-toolchain.toml` 同时声明 `rustfmt`、`clippy`、`rust-analyzer`，让编辑器使用与固定工具链配套的分析器，避免扩展自带较新版本产生“toolchain too old”提示。2026-10-31 已在本机安装 1.90.0 配套分析器并用 `rustup run 1.90.0 rust-analyzer --version` 核对可运行；未验证编辑器重启后的实际加载。浏览器开发命令 `npm run dev` 固定在本机 1420 端口；桌面 `npm run tauri dev` 会启动原生应用，不能当作纯编译检查。
 
 有行为变化时执行相关前端和 Rust 基础检查：
 
@@ -122,3 +124,10 @@ Tauri 资产解析器在正式包中读取嵌入资产，在带 `devUrl` 的开�
 - GA 长期持续观察与 Windows 原生断网；固定范围 `count` 汇总和 macOS 进程级断网 / 重启 / 恢复联网已验收，不承诺永久存储。23 项字体逐款 GUI、图片 OCR、规则试跑 / 扫描暂停续扫等见产品决策；原 9 项来源展示已按用户确认修正。分享 AI / 隐私主题与中英文素材已实现，系统图片剪贴板、跨应用粘贴与 Windows 原生分享仍待验收。
 - 文件历史、GIF、富文本、自动粘贴、云同步 / 账号 / 剪贴内容公开链接、代码执行与内置模型分析尚未实现；已有只读 AI 接口不等于内置模型。稳定版提醒已实现，预览通道未开放，不承诺 LTS 维护年限。
 - 无 Apple 公证或 Windows 发行者代码签名；本地 ad-hoc 与 Tauri 更新签名不等于系统发行者认证。待办不代表排期，后续新方案标「待定」。
+
+## 2026-10-31 纸张与布局验证
+
+- 新纸张实现与验收见 `docs/verification.md` 的「月光笺纸张与紧凑布局」。前端 196 项通过、无 desktop 核心 132 项通过、macOS desktop lib 148 项通过，各 Rust 套件 4 项 ignored。原纸 9 项真实公共夹具的显式 ignored 测试另 1 项通过；不能拿此测试替代新纸原生 GUI 下载 / 导出验收。
+- `handwriting::tests::all_original_papers_render_offline_from_verified_fixtures` 使用 `STARCLIP_PAPER_FIXTURES`（固定 bgs 原图）、`STARCLIP_FONT_FIXTURE`（公开 ma-shan-zheng 字体）、`STARCLIP_PAPER_OUTPUT`。只放公开夹具及原创文字，勿指向真实剪贴数据。三个名为 #000000 的上游 PNG 实为全透明，必须保留 alpha，不能按文件名猜颜色。
+- 浏览器 650 px 下应用底层有既有最小宽度，检查月光笺模态的 clientWidth / scrollWidth，而不把底层横向滚动误认成新模态溢出。DOM 注入渲染夹具需复制组件 scope 属性，否则 scoped CSS 不生效，不能据此误判真实预览裁切。
+- 本轮独立 macOS arm64 预览 DMG 为 7,739,846 B（7.74 MB），位于忽略的 `artifacts/preview-local.noindex/2026-10-30T17-30-14-979Z/`；本地签名与 DMG 完整性校验通过，未启动 / 安装 / 发布。哈希与边界查验证记录。

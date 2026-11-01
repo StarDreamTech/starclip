@@ -14,6 +14,8 @@ use std::{
     },
     time::Duration,
 };
+#[path = "handwriting_papers.rs"]
+mod papers;
 #[path = "handwriting_render.rs"]
 mod rendering;
 
@@ -58,12 +60,6 @@ fn definition(id: &str) -> Result<&'static FontDefinition> {
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HandwritingAsset {
-    pub name: String,
-    pub path: String,
-}
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct HandwritingFont {
     pub id: String,
     pub name: String,
@@ -83,7 +79,7 @@ pub struct HandwritingAssets {
     pub available: bool,
     pub path: Option<String>,
     pub fonts: Vec<HandwritingFont>,
-    pub backgrounds: Vec<HandwritingAsset>,
+    pub backgrounds: Vec<papers::PaperAsset>,
     pub error: Option<String>,
 }
 #[derive(Clone, Debug, Deserialize)]
@@ -154,7 +150,7 @@ pub fn assets(directory: &Path) -> HandwritingAssets {
                 source_url: font.source_url.clone(),
             })
             .collect(),
-        backgrounds: vec![],
+        backgrounds: papers::assets(directory),
         error: None,
     }
 }
@@ -166,10 +162,30 @@ pub fn select_app(directory: &Path, _selected: &Path) -> Result<HandwritingAsset
 
 /// Downloads only a built-in font ID. Call off the UI thread, without storage locks.
 pub fn download_font_bytes(id: &str) -> Result<Vec<u8>> {
+    download_font_bytes_with(id, |_, _| {})
+}
+
+/// Same as [`download_font_bytes`], reporting `(received, expected)` bytes while streaming
+/// so the desktop UI can show real progress instead of an indeterminate wait.
+pub fn download_font_bytes_with(id: &str, mut progress: impl FnMut(u64, u64)) -> Result<Vec<u8>> {
     let font = definition(id)?;
+    let bytes = download_asset_bytes(&font.url, font.bytes, "字体", &mut progress)?;
+    verify_font(font, &bytes)?;
+    Ok(bytes)
+}
+
+fn download_asset_bytes(
+    url: &str,
+    expected: u64,
+    label: &str,
+    mut progress: impl FnMut(u64, u64),
+) -> Result<Vec<u8>> {
+    if expected == 0 || expected > MAX_FONT {
+        return Err("素材大小超过限制，未下载。".into());
+    }
     let _guard = DOWNLOAD_GATE
         .try_lock()
-        .map_err(|_| "已有字体正在下载，请稍后重试。")?;
+        .map_err(|_| "已有素材正在下载，请稍后重试。")?;
     // Reuse the updater's ring provider; an already installed provider is retained.
     let _ = rustls::crypto::ring::default_provider().install_default();
     let client = reqwest::blocking::Client::builder()
@@ -179,33 +195,63 @@ pub fn download_font_bytes(id: &str) -> Result<Vec<u8>> {
         .timeout(Duration::from_secs(60))
         .user_agent(concat!("Starclip/", env!("CARGO_PKG_VERSION")))
         .build()
-        .map_err(|_| "无法创建字体下载连接，请稍后重试。")?;
-    let response = client.get(&font.url).send().map_err(download_error)?;
+        .map_err(|_| "无法创建素材下载连接，请稍后重试。")?;
+    let response = client.get(url).send().map_err(download_error)?;
     if !response.status().is_success() {
         return Err(format!(
-            "GitHub 字体下载链接返回 HTTP {}，请稍后重试。",
+            "GitHub {label}下载链接返回 HTTP {}，请稍后重试。",
             response.status().as_u16()
         ));
     }
     if response
         .content_length()
-        .is_some_and(|size| size != font.bytes)
+        .is_some_and(|size| size != expected)
     {
-        return Err("字体下载大小与清单不符，未安装。".into());
+        return Err("素材下载大小与清单不符，未安装。".into());
     }
-    let mut bytes = Vec::with_capacity(font.bytes as usize);
-    response
-        .take(font.bytes.min(MAX_FONT) + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "GitHub 字体下载中断或超时，请检查网络后重试。")?;
-    verify_font(font, &bytes)?;
+    let mut bytes = Vec::with_capacity(expected as usize);
+    let mut reader = response.take(expected + 1);
+    // One report per percent keeps the bridge quiet while still feeling live.
+    let step = (expected / 100).max(16 * 1024);
+    let mut reported = 0u64;
+    progress(0, expected);
+    let mut chunk = [0u8; 16 * 1024];
+    loop {
+        let read = reader
+            .read(&mut chunk)
+            .map_err(|_| "GitHub 素材下载中断或超时，请检查网络后重试。")?;
+        if read == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&chunk[..read]);
+        let received = bytes.len() as u64;
+        if received == expected || received - reported >= step {
+            reported = received;
+            progress(received, expected);
+        }
+    }
+    if bytes.len() as u64 != expected {
+        return Err(format!("{label}下载不完整或大小不符，未安装，请重试。"));
+    }
     Ok(bytes)
+}
+
+pub fn download_paper_bytes_with(id: &str, progress: impl FnMut(u64, u64)) -> Result<Vec<u8>> {
+    let paper = papers::definition(id)?;
+    let bytes = download_asset_bytes(&paper.url, paper.bytes, "纸张", progress)?;
+    papers::verify(paper, &bytes)?;
+    Ok(bytes)
+}
+
+pub fn install_paper(directory: &Path, id: &str, bytes: Vec<u8>) -> Result<HandwritingAssets> {
+    papers::install(directory, id, &bytes)?;
+    Ok(assets(directory))
 }
 fn download_error(error: reqwest::Error) -> String {
     if error.is_timeout() {
-        "连接 GitHub 字体服务超时，请检查网络后重试。"
+        "连接 GitHub 素材服务超时，请检查网络后重试。"
     } else {
-        "GitHub 字体链接访问失败，请检查网络连接后重试。"
+        "GitHub 素材链接访问失败，请检查网络连接后重试。"
     }
     .into()
 }
@@ -298,12 +344,22 @@ fn color(value: &str) -> [u8; 4] {
         u8::from_str_radix(&value[1..3], 16).unwrap(),
         u8::from_str_radix(&value[3..5], 16).unwrap(),
         u8::from_str_radix(&value[5..7], 16).unwrap(),
-        255,
+        if value.len() == 9 {
+            u8::from_str_radix(&value[7..9], 16).unwrap()
+        } else {
+            255
+        },
     ]
 }
 fn solid_dimensions(background: &str) -> Result<(u32, u32)> {
     let parts: Vec<_> = background.split(':').collect();
-    if parts.len() != 4 || parts[0] != "solid" || !is_color(parts[1]) {
+    if parts.len() != 4
+        || parts[0] != "solid"
+        || !(is_color(parts[1])
+            || (parts[1].len() == 9
+                && parts[1].starts_with('#')
+                && parts[1][1..].bytes().all(|b| b.is_ascii_hexdigit())))
+    {
         return Err("请选择纯色纸张。".into());
     }
     let width: u32 = parts[2].parse().map_err(|_| "纸张宽度无效。")?;
@@ -327,7 +383,11 @@ fn validate_options(options: &HandwritingOptions) -> Result<(u32, u32)> {
         return Err("字号需为 8–120，边距为 0–240，墨色为 #RRGGBB。".into());
     }
     definition(&options.font)?;
-    let dimensions = solid_dimensions(&options.background)?;
+    let dimensions = if options.background.starts_with("paper:") {
+        papers::dimensions(&options.background, options.padding)?
+    } else {
+        solid_dimensions(&options.background)?
+    };
     if dimensions.0.saturating_sub(options.padding * 2) < options.font_size * 2
         || dimensions.1.saturating_sub(options.padding * 2) < options.font_size * 2
     {
@@ -341,16 +401,28 @@ pub fn render(directory: &Path, options: HandwritingOptions) -> Result<String> {
         .try_lock()
         .map_err(|_| "已有手写渲染任务，请等待完成后重试。")?;
     let bytes = installed_bytes(directory, definition(&options.font)?)?;
-    let paper = color(options.background.split(':').nth(1).unwrap());
-    let image = rendering::render(
-        &bytes,
-        &options.text,
-        options.font_size,
-        options.padding,
-        dimensions,
-        paper,
-        color(&options.ink),
-    )?;
+    let image = if options.background.starts_with("paper:") {
+        let (image, bounds) = papers::canvas(directory, &options.background)?;
+        rendering::render_on_paper(
+            &bytes,
+            &options.text,
+            options.font_size,
+            options.padding,
+            image,
+            bounds,
+            color(&options.ink),
+        )?
+    } else {
+        rendering::render(
+            &bytes,
+            &options.text,
+            options.font_size,
+            options.padding,
+            dimensions,
+            color(options.background.split(':').nth(1).unwrap()),
+            color(&options.ink),
+        )?
+    };
     let mut png = Cursor::new(Vec::new());
     image
         .write_to(&mut png, image::ImageFormat::Png)
@@ -437,6 +509,67 @@ mod tests {
             );
         }
     }
+    #[test]
+    #[ignore = "Explicit local verification using downloaded public font and paper fixtures; no clipboard or network"]
+    fn all_original_papers_render_offline_from_verified_fixtures() {
+        let scratch = Scratch::new();
+        let fixtures = PathBuf::from(
+            std::env::var("STARCLIP_PAPER_FIXTURES").expect("paper fixture directory"),
+        );
+        let font_fixture =
+            PathBuf::from(std::env::var("STARCLIP_FONT_FIXTURE").expect("public font fixture"));
+        let font = definition("ma-shan-zheng").unwrap();
+        write_font(&scratch.0, font, &fs::read(font_fixture).unwrap()).unwrap();
+        let output = PathBuf::from(
+            std::env::var("STARCLIP_PAPER_OUTPUT").expect("fixed-data output directory"),
+        );
+        fs::create_dir_all(&output).unwrap();
+        let entries: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("../../public/handwriting-papers/catalog.json"))
+                .unwrap();
+        for paper in entries {
+            let id = paper["id"].as_str().unwrap();
+            let original_bytes = fs::read(fixtures.join(paper["file"].as_str().unwrap())).unwrap();
+            let original = image::load_from_memory(&original_bytes).unwrap().to_rgba8();
+            let background = if let Some(solid) = paper["solid"].as_str() {
+                solid.to_owned()
+            } else {
+                install_paper(&scratch.0, id, original_bytes).unwrap();
+                format!("paper:{id}")
+            };
+            let encoded = render(
+                &scratch.0,
+                HandwritingOptions {
+                    text: "星光落在纸上。\n纸张与文字都留在本机。".into(),
+                    font: font.id.clone(),
+                    background,
+                    font_size: if original.width() < 400 { 16 } else { 30 },
+                    ink: paper["ink"].as_str().unwrap().into(),
+                    padding: paper["padding"].as_u64().unwrap() as u32,
+                },
+            )
+            .unwrap();
+            let png = base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .unwrap();
+            let rendered = image::load_from_memory(&png).unwrap().to_rgba8();
+            assert_eq!(rendered.dimensions(), original.dimensions(), "{id}");
+            assert_eq!(
+                rendered.get_pixel(0, 0),
+                original.get_pixel(0, 0),
+                "original corner retained: {id}"
+            );
+            assert!(
+                rendered
+                    .pixels()
+                    .zip(original.pixels())
+                    .any(|(a, b)| a != b),
+                "text must appear: {id}"
+            );
+            fs::write(output.join(format!("{id}.png")), png).unwrap();
+        }
+    }
+
     #[test]
     fn validates_limits_and_never_accepts_arbitrary_font_or_background_paths() {
         let mut opts = options();

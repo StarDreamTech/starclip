@@ -3,6 +3,8 @@ export const EVENT_NAMES = Object.freeze([
   'app_started', 'studio_opened', 'card_exported', 'backup_exported',
   'backup_imported', 'update_check_completed', 'font_downloaded',
   'update_download_completed', 'update_install_started',
+  // Process heartbeat: "the app was running and tried to report", nothing more.
+  'app_running',
 ]);
 const MAX_BODY_BYTES = 4096;
 const WINDOWS_MODELS = Object.freeze([
@@ -31,11 +33,27 @@ function validDevice(device, platform) {
   return platform === 'linux' && device.model === 'LinuxPC';
 }
 
+const SESSION_FIELDS = ['version', 'sessionId', 'appVersion', 'platform', 'events'];
+
+// Each protocol version has one exact field set. v3 adds the installation
+// identity, and only in per-installation mode.
+function shapeOf(value) {
+  if (value?.version === 1 && exactKeys(value, SESSION_FIELDS)) return 'v1';
+  if (value?.version === 2 && exactKeys(value, [...SESSION_FIELDS, 'device'])) return 'v2';
+  if (value?.version !== 3) return null;
+  if (exactKeys(value, [...SESSION_FIELDS, 'device'])) return 'v3-session';
+  if (exactKeys(value, [...SESSION_FIELDS, 'device', 'installationId'])) return 'v3-installation';
+  return null;
+}
+
 export function validPayload(value) {
-  const fields = ['version', 'sessionId', 'appVersion', 'platform', 'events'];
-  return ((value?.version === 1 && exactKeys(value, fields))
-      || (value?.version === 2 && exactKeys(value, [...fields, 'device']) && validDevice(value.device, value.platform)))
+  const shape = shapeOf(value);
+  if (!shape) return false;
+  const deviceValid = shape === 'v1' || validDevice(value.device, value.platform);
+  return deviceValid
     && typeof value.sessionId === 'string' && /^[a-f0-9]{32}$/.test(value.sessionId)
+    && (shape !== 'v3-installation'
+      || (typeof value.installationId === 'string' && /^[a-f0-9]{32}$/.test(value.installationId)))
     && typeof value.appVersion === 'string' && value.appVersion.length <= 64
     && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(value.appVersion)
     && ['macos', 'windows', 'linux'].includes(value.platform)
@@ -46,7 +64,8 @@ export function validPayload(value) {
 }
 
 function deviceProperties(payload) {
-  return payload.version === 2 ? {
+  // v2 and v3 both carry the normalized device block; v1 never does.
+  return payload.version === 2 || payload.version === 3 ? {
     app_arch: payload.device.architecture,
     os_major: payload.device.osMajor,
     device_model: payload.device.model,
@@ -110,17 +129,31 @@ async function readPayload(request) {
   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(body)); } catch { throw 400; }
 }
 
+// Low-cardinality label derived from the protocol shape, never from data.
+function identityMode(payload) {
+  return payload.version === 3 && payload.installationId ? 'installation' : 'session';
+}
+
+function clientId(payload) {
+  // GA4 accepts two positive decimal numbers. Per-installation mode reuses the
+  // persistent 128-bit value; per-session mode keeps the ephemeral one.
+  const hex = payload.version === 3 && payload.installationId ? payload.installationId : payload.sessionId;
+  return [hex.slice(0, 16), hex.slice(16)]
+    .map(part => (BigInt(`0x${part}`) + 1n).toString()).join('.');
+}
+
 function googleBody(payload) {
-  // GA4 accepts two positive decimal numbers; keep the desktop's ephemeral 128-bit randomness.
-  const clientId = [payload.sessionId.slice(0, 16), payload.sessionId.slice(16)]
-    .map(hex => (BigInt(`0x${hex}`) + 1n).toString()).join('.');
   return {
-    client_id: clientId,
+    client_id: clientId(payload),
+    // No user_id and no custom dimensions: only event parameters.
     non_personalized_ads: true,
     consent: { ad_user_data: 'DENIED', ad_personalization: 'DENIED' },
     events: payload.events.map(event => ({
       name: event.name,
-      params: { count: event.count, app_version: payload.appVersion, platform: payload.platform, ...deviceProperties(payload) },
+      params: {
+        count: event.count, app_version: payload.appVersion, platform: payload.platform,
+        identity_mode: identityMode(payload), ...deviceProperties(payload),
+      },
     })),
   };
 }
@@ -135,7 +168,10 @@ function microsoftBody(payload, key) {
       baseType: 'EventData',
       baseData: {
         ver: 2, name: event.name,
-        properties: { app_version: payload.appVersion, platform: payload.platform, ...deviceProperties(payload) },
+        properties: {
+          app_version: payload.appVersion, platform: payload.platform,
+          identity_mode: identityMode(payload), ...deviceProperties(payload),
+        },
         measurements: { count: event.count },
       },
     },

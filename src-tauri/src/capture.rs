@@ -3,6 +3,9 @@
 pub enum CaptureKey {
     Text(String),
     Image(String),
+    /// Joined native paths. Kept separate from `Text` so a file list and text
+    /// that happens to read like a path never suppress each other.
+    Files(String),
 }
 
 #[derive(Default)]
@@ -70,6 +73,24 @@ mod tests {
         state.skip_invalid(Some(3));
         assert!(!state.should_read(Some(3)));
         assert!(state.should_read(Some(4)));
+    }
+    #[test]
+    fn file_lists_have_their_own_identity_space() {
+        let files = CaptureKey::Files("/original/one.txt\n/original/two".into());
+        let mut state = CaptureState::default();
+        state.accept(Some(9), Some(files.clone()));
+        assert!(!state.needs_capture(&Some(files.clone())));
+        // The same joined paths as plain text must still be a new copy.
+        assert!(state.needs_capture(&Some(CaptureKey::Text(
+            "/original/one.txt\n/original/two".into()
+        ))));
+        // Reordering is a different list, so it is captured again.
+        assert!(state.needs_capture(&Some(CaptureKey::Files(
+            "/original/two\n/original/one.txt".into()
+        ))));
+        state.copied(files.clone());
+        assert!(state.should_read(Some(10)));
+        assert!(!state.needs_capture(&Some(files)));
     }
     #[test]
     fn fallback_captures_current_item_once_and_empty_clipboards_are_not_records() {

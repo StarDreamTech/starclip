@@ -2,6 +2,7 @@ pub mod ai_access;
 pub mod ai_transport;
 pub mod appearance;
 pub mod capture;
+pub mod clipboard_files;
 #[cfg(feature = "desktop")]
 mod desktop;
 pub mod handwriting;
@@ -99,10 +100,15 @@ mod capability_tests {
             "import_appearance_sticker",
             "remove_appearance_sticker",
             "get_telemetry_state",
-            "set_telemetry_enabled",
+            "set_telemetry_mode",
+            "reset_telemetry_identity",
             "record_usage_event",
             "flush_telemetry",
             "clear_telemetry_queue",
+            "copy_clip_paths",
+            "reveal_clip_file",
+            "check_clip_files",
+            "download_handwriting_paper",
         ] {
             assert!(main_commands["commands"]["allow"]
                 .as_array()

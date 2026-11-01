@@ -2,7 +2,7 @@ use crate::appearance::{self, Appearance};
 use crate::images::{self, ImageMetadata, PreparedImage};
 use crate::privacy::{self, Metadata, PrivacyRescan, PrivacyRules};
 use crate::starpet_growth::{GrowthChange, GrowthState, MAX_REVISION};
-use crate::telemetry::TelemetryPreferences;
+use crate::telemetry::{TelemetryMode, TelemetryPreferences};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ use std::{
 };
 
 pub type Result<T> = std::result::Result<T, String>;
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 pub const MAX_CONTENT_BYTES: usize = 256 * 1024;
 const MAX_BACKUP_BYTES: usize = 20 * 1024 * 1024;
 const MAX_BACKUP_CLIPS: usize = 10_000;
@@ -86,6 +86,33 @@ pub struct HistoryPage {
     pub history: HistorySummary,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileEntryKind {
+    File,
+    Directory,
+    Unknown,
+}
+
+impl FileEntryKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Directory => "directory",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// One referenced path. The record stores references only; file contents are
+/// never read and folders are never scanned.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileEntry {
+    pub path: String,
+    pub entry_kind: FileEntryKind,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Clip {
@@ -99,6 +126,8 @@ pub struct Clip {
     pub language: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<ImageMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entries: Option<Vec<FileEntry>>,
     pub pinned: bool,
     #[serde(default)]
     pub keep_forever: bool,
@@ -501,6 +530,7 @@ fn clip_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clip> {
             }),
             None => None,
         },
+        entries: None,
         keep_forever: row.get(10)?,
         privacy_manual: metadata.privacy_manual,
         is_private: metadata.is_private(),
@@ -594,6 +624,33 @@ pub fn validate_content(content: &str, title: &str) -> Result<()> {
         return Err("标题不能超过 200 个字符。".into());
     }
     Ok(())
+}
+
+/// Re-validates a backed-up file list without touching the disk, so restoring
+/// on another machine never depends on the original paths still existing.
+fn validate_backup_entries(entries: &[FileEntry]) -> Result<String> {
+    if entries.is_empty() || entries.len() > crate::clipboard_files::MAX_ITEMS {
+        return Err("备份文件记录数量无效。".into());
+    }
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut bytes = 0usize;
+    for entry in entries {
+        let path = entry.path.as_str();
+        if path.is_empty()
+            || path.contains('\0')
+            || path.contains('\n')
+            || path.contains('\r')
+            || !Path::new(path).is_absolute()
+            || !seen.insert(path)
+        {
+            return Err("备份文件路径无效。".into());
+        }
+        bytes = bytes.saturating_add(path.len() + 1);
+    }
+    if bytes > crate::clipboard_files::MAX_BYTES {
+        return Err("备份文件列表超过 256 KiB。".into());
+    }
+    Ok(crate::clipboard_files::content(entries))
 }
 
 fn validate_group(name: &str, color: &str) -> Result<()> {
@@ -730,6 +787,7 @@ impl Store {
             "SELECT id,name,color FROM groups LIMIT 0",
             "SELECT key,value FROM preferences LIMIT 0",
             "SELECT clip_id,width,height,bytes,png,thumbnail FROM clip_images LIMIT 0",
+            "SELECT clip_id,position,path,entry_kind FROM clip_files LIMIT 0",
             "SELECT clip_id,metadata FROM clip_privacy LIMIT 0",
         ] {
             conn.prepare(query).map_err(|_| "数据库结构损坏，请从恢复点恢复。".to_string())?;
@@ -896,14 +954,31 @@ impl Store {
                 DROP TABLE clips;
                 ALTER TABLE clips_images_upgrade RENAME TO clips;").map_err(sql_error)?;
         }
-        tx.execute_batch("CREATE INDEX IF NOT EXISTS clips_updated ON clips(updated_at DESC);
-            CREATE UNIQUE INDEX IF NOT EXISTS clips_text_content ON clips(content) WHERE kind<>'image';
-            CREATE UNIQUE INDEX IF NOT EXISTS clips_image_content ON clips(content) WHERE kind='image';
+        tx.execute_batch(
+            "CREATE INDEX IF NOT EXISTS clips_updated ON clips(updated_at DESC);
             CREATE TABLE IF NOT EXISTS clip_images (
                 clip_id INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE,
                 width INTEGER NOT NULL CHECK(width>0), height INTEGER NOT NULL CHECK(height>0),
                 bytes INTEGER NOT NULL CHECK(bytes>0), png BLOB NOT NULL, thumbnail BLOB NOT NULL
-            );").map_err(sql_error)?;
+            );",
+        )
+        .map_err(sql_error)?;
+        // File records need their own identity space: the text index must stop
+        // covering them, otherwise a file list would collide with pasted text
+        // that happens to read like a path. Dropping only relaxes the predicate.
+        tx.execute_batch("DROP INDEX IF EXISTS clips_text_content;
+            CREATE UNIQUE INDEX IF NOT EXISTS clips_text_content ON clips(content) WHERE kind NOT IN ('image','file');
+            CREATE UNIQUE INDEX IF NOT EXISTS clips_image_content ON clips(content) WHERE kind='image';
+            CREATE UNIQUE INDEX IF NOT EXISTS clips_file_content ON clips(content) WHERE kind='file';
+            CREATE TABLE IF NOT EXISTS clip_files (
+                clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL CHECK(position>=0),
+                path TEXT NOT NULL,
+                entry_kind TEXT NOT NULL CHECK(entry_kind IN ('file','directory','unknown')),
+                PRIMARY KEY(clip_id,position)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS clip_files_path ON clip_files(clip_id,path);")
+            .map_err(sql_error)?;
         tx.execute_batch("CREATE TABLE IF NOT EXISTS clip_privacy (clip_id INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE, metadata TEXT NOT NULL);").map_err(sql_error)?;
         let rules = read_privacy_rules(&tx)?;
         let ids = {
@@ -1022,7 +1097,7 @@ impl Store {
         }
     }
 
-    pub fn set_telemetry_enabled(&self, enabled: bool) -> Result<TelemetryPreferences> {
+    pub fn set_telemetry_mode(&self, mode: TelemetryMode) -> Result<TelemetryPreferences> {
         // Only an explicit local choice can replace damaged preferences. This
         // never touches ordinary settings or retention.
         let mut preferences = TelemetryPreferences {
@@ -1030,7 +1105,7 @@ impl Store {
                 .telemetry_preferences()
                 .map(|value| value.revision)
                 .unwrap_or(0),
-            enabled,
+            mode,
         };
         preferences.revision = preferences
             .revision
@@ -1485,7 +1560,7 @@ impl Store {
             "kept" => predicates.push("c.keep_forever=1".into()),
             "link" => predicates
                 .push("(c.kind='link' OR json_array_length(p.metadata,'$.linkHosts')>0)".into()),
-            "text" | "code" | "color" | "image" => {
+            "text" | "code" | "color" | "image" | "file" => {
                 predicates.push("c.kind=?".into());
                 values.push(query.filter.clone().into());
             }
@@ -1538,8 +1613,9 @@ impl Store {
             _ => return Err("隐私筛选无效。".into()),
         }
         if query.ai_eligible {
+            // Creation features only accept text and recognized-image records.
             predicates.push(format!(
-                "c.kind!='image' AND NOT {private} AND NOT {pending}"
+                "c.kind NOT IN ('image','file') AND NOT {private} AND NOT {pending}"
             ));
         }
         let from = "FROM clips c LEFT JOIN clip_privacy p ON p.clip_id=c.id";
@@ -1559,11 +1635,12 @@ impl Store {
         let page = query.page.max(1).min(last);
         let offset = u64::from(page - 1) * u64::from(HISTORY_PAGE_SIZE);
         let mut statement = self.conn.prepare(&format!("{CLIP_SELECT} WHERE {where_sql} ORDER BY c.updated_at DESC,c.id DESC LIMIT {HISTORY_PAGE_SIZE} OFFSET {offset}")).map_err(sql_error)?;
-        let clips = statement
+        let mut clips = statement
             .query_map(rusqlite::params_from_iter(values.iter()), clip_from_row)
             .map_err(sql_error)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(sql_error)?;
+        Self::fill_entries(&self.conn, &mut clips)?;
         let mut counts = BTreeMap::new();
         let mut statement = self
             .conn
@@ -1639,6 +1716,50 @@ impl Store {
         })
     }
 
+    /// File references live in their own table, so pages never duplicate rows.
+    fn fill_entries(conn: &Connection, clips: &mut [Clip]) -> Result<()> {
+        let ids: Vec<i64> = clips
+            .iter()
+            .filter(|clip| clip.kind == "file")
+            .map(|clip| clip.id)
+            .collect();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let placeholders = vec!["?"; ids.len()].join(",");
+        let mut statement = conn
+            .prepare(&format!(
+                "SELECT clip_id,path,entry_kind FROM clip_files WHERE clip_id IN ({placeholders}) ORDER BY clip_id,position"
+            ))
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(rusqlite::params_from_iter(ids.iter()), |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(sql_error)?;
+        let mut grouped: HashMap<i64, Vec<FileEntry>> = HashMap::new();
+        for row in rows {
+            let (id, path, kind) = row.map_err(sql_error)?;
+            let entry_kind = match kind.as_str() {
+                "file" => FileEntryKind::File,
+                "directory" => FileEntryKind::Directory,
+                _ => FileEntryKind::Unknown,
+            };
+            grouped
+                .entry(id)
+                .or_default()
+                .push(FileEntry { path, entry_kind });
+        }
+        for clip in clips.iter_mut().filter(|clip| clip.kind == "file") {
+            clip.entries = grouped.remove(&clip.id);
+        }
+        Ok(())
+    }
+
     pub fn clips(&self) -> Result<Vec<Clip>> {
         let mut stmt = self
             .conn
@@ -1647,8 +1768,11 @@ impl Store {
             ))
             .map_err(sql_error)?;
         let rows = stmt.query_map([], clip_from_row).map_err(sql_error)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(sql_error)
+        let mut clips = rows
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(sql_error)?;
+        Self::fill_entries(&self.conn, &mut clips)?;
+        Ok(clips)
     }
 
     pub fn groups(&self) -> Result<Vec<Group>> {
@@ -1690,6 +1814,8 @@ impl Store {
             .map_err(sql_error)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(sql_error)?;
+        let mut clips = clips;
+        Self::fill_entries(&self.conn, &mut clips)?;
         Ok(clips)
     }
 
@@ -1699,11 +1825,14 @@ impl Store {
     }
 
     pub fn clip(&self, id: i64) -> Result<Clip> {
-        self.conn
+        let mut clip = self
+            .conn
             .query_row(&format!("{CLIP_SELECT} WHERE c.id=?1"), [id], clip_from_row)
             .optional()
             .map_err(sql_error)?
-            .ok_or_else(|| "这条星笺已被删除。".into())
+            .ok_or_else(|| "这条星笺已被删除。".to_string())?;
+        Self::fill_entries(&self.conn, std::slice::from_mut(&mut clip))?;
+        Ok(clip)
     }
 
     pub fn add(&self, content: &str, title: &str, group_id: Option<i64>) -> Result<Clip> {
@@ -1765,17 +1894,74 @@ impl Store {
         let timestamp = now();
         let tx = self.conn.unchecked_transaction().map_err(sql_error)?;
         tx.execute("INSERT INTO clips(content,title,kind,group_id,created_at,updated_at,keep_forever) VALUES(?1,?2,?3,?4,?5,?5,?6)
-            ON CONFLICT(content) WHERE kind<>'image' DO UPDATE SET updated_at=excluded.updated_at,
+            ON CONFLICT(content) WHERE kind NOT IN ('image','file') DO UPDATE SET updated_at=excluded.updated_at,
             title=CASE WHEN excluded.title<>'' THEN excluded.title ELSE clips.title END,
             group_id=COALESCE(excluded.group_id,clips.group_id),
             keep_forever=MAX(clips.keep_forever,excluded.keep_forever)", params![content, title.trim(), classify(content), group_id, timestamp, keep_forever]).map_err(sql_error)?;
         let id = tx
             .query_row(
-                "SELECT id FROM clips WHERE content=?1 AND kind<>'image'",
+                "SELECT id FROM clips WHERE content=?1 AND kind NOT IN ('image','file')",
                 [content],
                 |row| row.get(0),
             )
             .map_err(sql_error)?;
+        scan_clip(&tx, id, &self.privacy_rules()?, false)?;
+        Self::prune_with_settings(&tx, &self.settings()?, timestamp)?;
+        let clip = self.clip(id)?;
+        tx.commit().map_err(sql_error)?;
+        Ok(clip)
+    }
+
+    /// Stores a native file list. Paths are only ever references: nothing is
+    /// read from disk beyond metadata, and the original files are never touched.
+    pub fn add_files(
+        &self,
+        entries: &[FileEntry],
+        title: &str,
+        group_id: Option<i64>,
+        keep_forever: bool,
+    ) -> Result<Clip> {
+        if entries.is_empty() {
+            return Err("没有可记录的文件。".into());
+        }
+        let content = crate::clipboard_files::content(entries);
+        validate_content(&content, title)?;
+        let timestamp = now();
+        let tx = self.conn.unchecked_transaction().map_err(sql_error)?;
+        tx.execute("INSERT INTO clips(content,title,kind,group_id,created_at,updated_at,keep_forever) VALUES(?1,?2,'file',?3,?4,?4,?5)
+            ON CONFLICT(content) WHERE kind='file' DO UPDATE SET updated_at=excluded.updated_at,
+            title=CASE WHEN excluded.title<>'' THEN excluded.title ELSE clips.title END,
+            group_id=COALESCE(excluded.group_id,clips.group_id),
+            keep_forever=MAX(clips.keep_forever,excluded.keep_forever)",
+            params![content, title.trim(), group_id, timestamp, keep_forever]).map_err(sql_error)?;
+        let id: i64 = tx
+            .query_row(
+                "SELECT id FROM clips WHERE content=?1 AND kind='file'",
+                [&content],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        // Re-copying the same paths keeps one record but refreshes entry kinds,
+        // so a folder that became a file (or a vanished path) is not stale.
+        tx.execute("DELETE FROM clip_files WHERE clip_id=?1", [id])
+            .map_err(sql_error)?;
+        {
+            let mut statement = tx
+                .prepare(
+                    "INSERT INTO clip_files(clip_id,position,path,entry_kind) VALUES(?1,?2,?3,?4)",
+                )
+                .map_err(sql_error)?;
+            for (position, entry) in entries.iter().enumerate() {
+                statement
+                    .execute(params![
+                        id,
+                        position as i64,
+                        entry.path,
+                        entry.entry_kind.as_str()
+                    ])
+                    .map_err(sql_error)?;
+            }
+        }
         scan_clip(&tx, id, &self.privacy_rules()?, false)?;
         Self::prune_with_settings(&tx, &self.settings()?, timestamp)?;
         let clip = self.clip(id)?;
@@ -1799,6 +1985,9 @@ impl Store {
             Some(id) => {
                 if self.clip(id)?.kind == "image" {
                     return Err("图片不能转换为代码，请新建代码片段。".into());
+                }
+                if self.clip(id)?.kind == "file" {
+                    return Err("文件记录不能转换为代码，请新建代码片段。".into());
                 }
                 self.conn.execute("UPDATE clips SET content=?1,title=?2,kind='code',language=?3,group_id=?4,updated_at=?5,pinned=1 WHERE id=?6", params![content,title.trim(),language,group_id,timestamp,id])
                     .map_err(|error| match error {
@@ -1898,7 +2087,9 @@ impl Store {
 
     /// This only reads rows, file sizes and SQLite page statistics; it never prunes.
     pub fn preview_cleanup(&self, filter: &CleanupFilter) -> Result<CleanupSnapshot> {
-        if !["all", "text", "link", "code", "color", "image"].contains(&filter.kind.as_str()) {
+        if !["all", "text", "link", "code", "color", "image", "file"]
+            .contains(&filter.kind.as_str())
+        {
             return Err("不支持的清理内容类型。".into());
         }
         let cutoff = now().saturating_sub(i64::from(filter.older_than_days) * 86_400_000);
@@ -2154,7 +2345,7 @@ impl Store {
         }
         let json = serde_json::to_string_pretty(&Backup {
             format: "starclip".into(),
-            version: 3,
+            version: 4,
             exported_at: now(),
             clips,
             groups,
@@ -2171,7 +2362,7 @@ impl Store {
         let backup: Backup = serde_json::from_str(json)
             .map_err(|_| "无法读取备份文件，请选择星笺导出的 JSON 文件。")?;
         if backup.format != "starclip"
-            || ![1, 2, 3].contains(&backup.version)
+            || ![1, 2, 3, 4].contains(&backup.version)
             || (backup.version == 1 && !backup.images.is_empty())
         {
             return Err("不支持的备份版本。".into());
@@ -2250,6 +2441,22 @@ impl Store {
             {
                 return Err("备份图片类型或元数据无效。".into());
             }
+            if clip.kind == "file" {
+                // File records are validated without touching the disk: the
+                // backup may come from a machine where the paths no longer exist.
+                let entries = clip
+                    .entries
+                    .as_deref()
+                    .ok_or("备份文件记录缺少路径列表。")?;
+                if validate_backup_entries(entries)? != clip.content {
+                    return Err("备份文件记录与路径列表不一致。".into());
+                }
+                if clip.language.is_some() {
+                    return Err("备份文件记录不能同时是代码片段。".into());
+                }
+            } else if clip.entries.is_some() {
+                return Err("备份中非文件记录带有路径列表。".into());
+            }
         }
         let mut prepared = HashMap::new();
         let mut prepared_bytes = 0usize;
@@ -2315,10 +2522,13 @@ impl Store {
         for clip in backup.clips {
             let group_id = clip.group_id.and_then(|id| group_mapping.get(&id).copied());
             let is_image = clip.kind == "image";
+            let is_file = clip.kind == "file";
             let predicate = if is_image {
                 "kind='image'"
+            } else if is_file {
+                "kind='file'"
             } else {
-                "kind<>'image'"
+                "kind NOT IN ('image','file')"
             };
             let existed: Option<i64> = tx
                 .query_row(
@@ -2330,6 +2540,8 @@ impl Store {
                 .map_err(sql_error)?;
             let kind = if is_image {
                 "image"
+            } else if is_file {
+                "file"
             } else if clip.language.is_some() {
                 "code"
             } else {
@@ -2346,6 +2558,25 @@ impl Store {
             let id = existed.unwrap_or_else(|| tx.last_insert_rowid());
             if let Some(image) = prepared.remove(&clip.id) {
                 Self::put_image(&tx, id, &image)?;
+            }
+            if let Some(entries) = clip.entries.as_deref() {
+                // The merged row may already exist, so replace its list instead
+                // of appending duplicates. Entry kinds come from the backup.
+                tx.execute("DELETE FROM clip_files WHERE clip_id=?1", [id])
+                    .map_err(sql_error)?;
+                let mut statement = tx
+                    .prepare("INSERT INTO clip_files(clip_id,position,path,entry_kind) VALUES(?1,?2,?3,?4)")
+                    .map_err(sql_error)?;
+                for (position, entry) in entries.iter().enumerate() {
+                    statement
+                        .execute(params![
+                            id,
+                            position as i64,
+                            entry.path,
+                            entry.entry_kind.as_str()
+                        ])
+                        .map_err(sql_error)?;
+                }
             }
             let mut metadata = read_metadata(&tx, id)?;
             metadata.privacy_manual |=
@@ -2963,7 +3194,7 @@ mod tests {
         let json = source.export().unwrap();
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"],
-            3
+            4
         );
         let mut destination = store();
         destination.import(&json).unwrap();
@@ -3038,7 +3269,7 @@ mod tests {
             .unwrap();
         drop(conn);
         let upgraded = Store::open(&path).unwrap();
-        assert_eq!(upgraded.schema_version().unwrap(), 2);
+        assert_eq!(upgraded.schema_version().unwrap(), 3);
         assert!(upgraded.clip(clip.id).unwrap().is_private);
         assert_eq!(upgraded.clip(clip.id).unwrap().scan_version, 1);
         assert_eq!(fs::read_dir(scratch.0.join("recovery")).unwrap().count(), 1);
@@ -3575,11 +3806,11 @@ mod tests {
             db.telemetry_preferences().unwrap(),
             TelemetryPreferences::default()
         );
-        let enabled = db.set_telemetry_enabled(true).unwrap();
-        assert!(enabled.enabled);
+        let session = db.set_telemetry_mode(TelemetryMode::Session).unwrap();
+        assert_eq!(session.mode, TelemetryMode::Session);
         drop(db);
         let db = Store::open(&path).unwrap();
-        assert_eq!(db.telemetry_preferences().unwrap(), enabled);
+        assert_eq!(db.telemetry_preferences().unwrap(), session);
         let ordinary = r#"{"paused":false,"theme":"dark","layout":"grid","maxHistory":50,"shortcut":"CommandOrControl+Shift+V","retentionDays":1}"#;
         db.conn
             .execute(
@@ -3589,9 +3820,9 @@ mod tests {
             .unwrap();
         db.conn.execute("INSERT INTO clips(content,kind,created_at,updated_at) VALUES('统计偏好原创超期夹具','text',0,0)", []).unwrap();
         db.conn.execute_batch("CREATE TRIGGER forbid_telemetry_prune BEFORE DELETE ON clips BEGIN SELECT RAISE(ABORT, 'telemetry must not prune'); END;").unwrap();
-        let disabled = db.set_telemetry_enabled(false).unwrap();
-        assert!(!disabled.enabled);
-        assert!(disabled.revision > enabled.revision);
+        let disabled = db.set_telemetry_mode(TelemetryMode::Off).unwrap();
+        assert_eq!(disabled.mode, TelemetryMode::Off);
+        assert!(disabled.revision > session.revision);
         let saved: String = db
             .conn
             .query_row(
@@ -3621,8 +3852,12 @@ mod tests {
             2,
             "no session ID or event queue persisted"
         );
+        assert_eq!(
+            json["mode"], "off",
+            "the old boolean switch is never written"
+        );
         db.conn.execute_batch("CREATE TRIGGER fail_telemetry_preferences BEFORE UPDATE ON preferences WHEN NEW.key='telemetry_preferences_v1' BEGIN SELECT RAISE(ABORT, 'fixture write failure'); END;").unwrap();
-        assert!(db.set_telemetry_enabled(true).is_err());
+        assert!(db.set_telemetry_mode(TelemetryMode::Installation).is_err());
         assert_eq!(db.telemetry_preferences().unwrap(), disabled);
     }
 
@@ -3631,17 +3866,22 @@ mod tests {
         let scratch = Scratch::new();
         let path = scratch.0.join("telemetry-default-fixture.sqlite3");
         let db = Store::open(&path).unwrap();
-        assert!(db.telemetry_preferences().unwrap().enabled);
-        let opted_out = db.set_telemetry_enabled(false).unwrap();
+        assert_eq!(
+            db.telemetry_preferences().unwrap().mode,
+            TelemetryMode::Session,
+            "a new installation starts per session, never per installation"
+        );
+        let opted_out = db.set_telemetry_mode(TelemetryMode::Off).unwrap();
         drop(db);
         let db = Store::open(&path).unwrap();
         assert_eq!(db.telemetry_preferences().unwrap(), opted_out);
-        assert!(!db.telemetry_preferences().unwrap().enabled);
+        assert_eq!(db.telemetry_preferences().unwrap().mode, TelemetryMode::Off);
         for json in [
             "broken",
-            r#"{"enabled":true}"#,
-            r#"{"revision":0,"enabled":"true"}"#,
-            r#"{"revision":18446744073709551615,"enabled":true}"#,
+            r#"{"mode":"off"}"#,
+            r#"{"revision":0,"mode":"installation","enabled":true,"extra":1}"#,
+            r#"{"revision":0,"mode":"forever"}"#,
+            r#"{"revision":18446744073709551615,"mode":"off"}"#,
         ] {
             db.conn
                 .execute(
@@ -3654,8 +3894,9 @@ mod tests {
                 "corruption must not act like a missing preference"
             );
         }
-        assert!(
-            !db.set_telemetry_enabled(false).unwrap().enabled,
+        assert_eq!(
+            db.set_telemetry_mode(TelemetryMode::Off).unwrap().mode,
+            TelemetryMode::Off,
             "explicit local choice can repair damaged preferences"
         );
         db.conn.execute_batch("DROP TABLE preferences").unwrap();
@@ -4602,7 +4843,7 @@ mod tests {
         assert_eq!(legacy.title, "旧代码");
         assert!(legacy.image.is_none());
         let old_backup: serde_json::Value = serde_json::from_str(&db.export().unwrap()).unwrap();
-        assert_eq!(old_backup["version"], 3);
+        assert_eq!(old_backup["version"], 4);
         assert!(old_backup.get("images").is_none());
 
         let mut budget_clip = legacy.clone();
@@ -4665,7 +4906,7 @@ mod tests {
         source.add(pixels.digest(), "相同标识的文本", None).unwrap();
         let json = source.export().unwrap();
         let backup: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(backup["version"], 3);
+        assert_eq!(backup["version"], 4);
         assert_eq!(
             STANDARD
                 .decode(backup["images"][0]["png"].as_str().unwrap())
@@ -4914,5 +5155,230 @@ mod tests {
             ..Settings::default()
         };
         assert!(unsupported.validate().is_err());
+    }
+
+    /// A real directory tree with original names: Chinese, spaces, special
+    /// characters, and two same-named files in different folders.
+    fn file_tree() -> Scratch {
+        let scratch = Scratch::new();
+        let root = scratch.0.clone();
+        fs::create_dir_all(root.join("第一 层/子目录 & 符号")).unwrap();
+        fs::create_dir_all(root.join("第二层")).unwrap();
+        fs::write(
+            root.join("第一 层/原创 笔记 #1.txt"),
+            b"original fixture one",
+        )
+        .unwrap();
+        fs::write(
+            root.join("第一 层/子目录 & 符号/同名.txt"),
+            b"original fixture two",
+        )
+        .unwrap();
+        fs::write(root.join("第二层/同名.txt"), b"original fixture three").unwrap();
+        scratch
+    }
+
+    fn entries_of(scratch: &Scratch, relative: &[&str]) -> Vec<FileEntry> {
+        crate::clipboard_files::normalize(
+            relative
+                .iter()
+                .map(|item| scratch.0.join(item).to_string_lossy().into_owned()),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn file_records_keep_order_kinds_and_a_separate_identity_space() {
+        let scratch = file_tree();
+        let entries = entries_of(
+            &scratch,
+            &[
+                "第一 层/原创 笔记 #1.txt",
+                "第一 层/子目录 & 符号",
+                "第二层/同名.txt",
+            ],
+        );
+        assert_eq!(entries[0].entry_kind, FileEntryKind::File);
+        assert_eq!(entries[1].entry_kind, FileEntryKind::Directory);
+        assert_eq!(entries[2].entry_kind, FileEntryKind::File);
+
+        let db = store();
+        let clip = db.add_files(&entries, "", None, false).unwrap();
+        assert_eq!(clip.kind, "file");
+        assert_eq!(clip.entries.as_deref(), Some(entries.as_slice()));
+        assert_eq!(clip.content, crate::clipboard_files::content(&entries));
+
+        // The same joined paths pasted as text are a different record.
+        let text = db.add(&clip.content, "", None).unwrap();
+        assert_ne!(text.id, clip.id);
+        assert_eq!(text.kind, "text");
+
+        // Copying the same list again refreshes one record instead of adding one.
+        let again = db.add_files(&entries, "", None, false).unwrap();
+        assert_eq!(again.id, clip.id);
+        assert_eq!(db.clips().unwrap().len(), 2);
+
+        // The original files are only referenced, never rewritten.
+        let source = scratch.0.join("第一 层/原创 笔记 #1.txt");
+        assert_eq!(fs::read(&source).unwrap(), b"original fixture one");
+
+        // Deleting the record cascades to its path rows.
+        db.delete(clip.id).unwrap();
+        let left: i64 = db
+            .conn
+            .query_row("SELECT COUNT(*) FROM clip_files", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(left, 0);
+        assert_eq!(fs::read(&source).unwrap(), b"original fixture one");
+    }
+
+    #[test]
+    fn file_records_are_filterable_searchable_and_never_ai_eligible() {
+        let scratch = file_tree();
+        let entries = entries_of(
+            &scratch,
+            &["第一 层/子目录 & 符号/同名.txt", "第二层/同名.txt"],
+        );
+        let db = store();
+        let clip = db.add_files(&entries, "", None, false).unwrap();
+
+        let page = db
+            .history_page(&HistoryQuery {
+                filter: "file".into(),
+                ..HistoryQuery::default()
+            })
+            .unwrap();
+        assert_eq!(page.history.total, 1);
+        assert_eq!(page.history.counts.get("file"), Some(&1));
+        assert_eq!(page.clips[0].entries.as_deref(), Some(entries.as_slice()));
+
+        // Search covers both the file name and the folder path.
+        for needle in ["同名", "子目录 & 符号", "第二层"] {
+            let found = db
+                .history_page(&HistoryQuery {
+                    query: needle.into(),
+                    ..HistoryQuery::default()
+                })
+                .unwrap();
+            assert_eq!(found.history.total, 1, "search missed {needle}");
+        }
+
+        // A file list is never offered to text/image-only creation features.
+        let eligible = db
+            .history_page(&HistoryQuery {
+                ai_eligible: true,
+                ..HistoryQuery::default()
+            })
+            .unwrap();
+        assert_eq!(eligible.history.total, 0);
+        assert!(!db.has_pending_ai_history().unwrap());
+        assert!(!db.clip(clip.id).unwrap().is_private);
+
+        // Nor can it be turned into a code snippet.
+        assert!(db
+            .save_code(Some(clip.id), "", "原创代码", "rust", None)
+            .is_err());
+    }
+
+    #[test]
+    fn file_backup_roundtrip_keeps_paths_and_rejects_inconsistent_lists() {
+        let scratch = file_tree();
+        let entries = entries_of(&scratch, &["第一 层/原创 笔记 #1.txt", "第二层/同名.txt"]);
+        let db = store();
+        let clip = db.add_files(&entries, "", None, true).unwrap();
+        let json = db.export().unwrap();
+
+        let mut restored = store();
+        assert_eq!(restored.import(&json).unwrap(), 1);
+        let imported = restored.clip(clip.id).unwrap();
+        assert_eq!(imported.kind, "file");
+        assert_eq!(imported.entries.as_deref(), Some(entries.as_slice()));
+
+        // Re-importing the same backup merges into one record, not two.
+        restored.import(&json).unwrap();
+        assert_eq!(restored.clips().unwrap().len(), 1);
+        let rows: i64 = restored
+            .conn
+            .query_row("SELECT COUNT(*) FROM clip_files", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 2);
+
+        // A list that disagrees with the record content is refused.
+        let mut tampered: serde_json::Value = serde_json::from_str(&json).unwrap();
+        tampered["clips"][0]["content"] = "/original/mismatch".into();
+        assert!(restored.import(&tampered.to_string()).is_err());
+
+        // A relative path in a backup is refused.
+        let mut relative: serde_json::Value = serde_json::from_str(&json).unwrap();
+        relative["clips"][0]["entries"][0]["path"] = "relative/path".into();
+        assert!(restored.import(&relative.to_string()).is_err());
+
+        // A file record without its list is refused.
+        let mut missing: serde_json::Value = serde_json::from_str(&json).unwrap();
+        missing["clips"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("entries");
+        assert!(restored.import(&missing.to_string()).is_err());
+
+        // Paths that no longer exist still restore: nothing is scanned.
+        let mut elsewhere = store();
+        let mut gone: serde_json::Value = serde_json::from_str(&json).unwrap();
+        gone["clips"][0]["entries"][0]["path"] = "/original/gone.txt".into();
+        let second = gone["clips"][0]["entries"][1]["path"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        gone["clips"][0]["content"] =
+            serde_json::Value::String(format!("/original/gone.txt\n{second}"));
+        assert_eq!(elsewhere.import(&gone.to_string()).unwrap(), 1);
+    }
+
+    #[test]
+    fn file_schema_upgrade_keeps_old_rows_and_separates_indexes() {
+        let scratch = Scratch::new();
+        let path = scratch.0.join("starclip.db");
+        let legacy = {
+            let db = Store::open(&path).unwrap();
+            db.add("原创旧记录", "", None).unwrap();
+            db
+        };
+        drop(legacy);
+        // Simulate the previous schema: no file table, older version marker.
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "DROP TABLE clip_files; DROP INDEX clips_file_content; PRAGMA user_version=2;",
+            )
+            .unwrap();
+        }
+        let upgraded = Store::open(&path).unwrap();
+        assert_eq!(upgraded.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(upgraded.clips().unwrap().len(), 1);
+        assert!(upgraded
+            .conn
+            .prepare("SELECT clip_id,position,path,entry_kind FROM clip_files LIMIT 0")
+            .is_ok());
+        // The text index no longer covers file rows, so both can share content.
+        let entries = entries_of(&scratch, &["第一 层/原创 笔记 #1.txt"]);
+        let file = upgraded.add_files(&entries, "", None, false).unwrap();
+        let text = upgraded.add(&file.content, "", None).unwrap();
+        assert_ne!(file.id, text.id);
+        assert!(upgraded.add_files(&entries, "", None, false).is_ok());
+    }
+
+    #[test]
+    fn file_records_require_paths_and_stay_out_of_text_creation() {
+        let db = store();
+        assert!(db.add_files(&[], "", None, false).is_err());
+        let scratch = file_tree();
+        let entries = entries_of(&scratch, &["第二层/同名.txt"]);
+        let clip = db.add_files(&entries, "", None, false).unwrap();
+        // Editing keeps the reference list; only title/group/pin change.
+        db.update(clip.id, "文件标题", None, true).unwrap();
+        let updated = db.clip(clip.id).unwrap();
+        assert_eq!(updated.entries.as_deref(), Some(entries.as_slice()));
+        assert_eq!(updated.title, "文件标题");
+        assert!(updated.pinned);
     }
 }

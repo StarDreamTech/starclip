@@ -1,4 +1,4 @@
-import type { AppState, Clip, CleanupFilter, CleanupPreview, CleanupResult, DataDirectoryMode, DataDirectoryPlan, DataLocation, Group, HistoryQuery, HandwritingAssets, HandwritingOptions, Settings } from './types';
+import type { AppState, Clip, CleanupFilter, CleanupPreview, CleanupResult, DataDirectoryMode, DataDirectoryPlan, DataLocation, Group, HistoryQuery, HandwritingAssets, HandwritingFontProgress, HandwritingOptions, Settings } from './types';
 import { download, languages } from './snippets';
 import { t } from './i18n/index.ts';
 import { analyzeDemoClip, matchesMetadata, pendingClip, protectedClip } from './privacy';
@@ -8,7 +8,7 @@ export const isDesktop = '__TAURI_INTERNALS__' in window;
 // Original 320×180 moon-and-hills fixture, drawn programmatically; no clipboard or external assets.
 const demoImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAC0CAIAAABqhmJGAAAEQklEQVR42u3cX3LTZhTG4W8ZJQVaoBRKueoC+JdASiDACnrb6Z66ieyml1kDkwVg4hJCAjiKHUnvd56Z59pCR+eHbNmT9sNPj4BQzQhAwICAAQGDgAEBAwIGvhrwYyCUgEHAwDQB//wYCCVgEDAgYEDAUCjgJ0AoAYOAAQEDAgYBAwEB33oChBIwZAf8FAjVrt16CoQSMAgYEDCXc3R4YAgCJrXeJaMQMKn11mz4/X//LgiYHuot1fAy3eL1LgN+Rq5z9ZY465N6jwMuvQDt2u1nRPtcb43z/aLe8ldfwJ00XLBeAc8o4DoryKbqFfBcAq72JpCN1CvgWQR89jGMZUXAKQF//YsQ+8oF6hWwOzBuv/EBb0/uVL3bcMa3br/HDVcfTpvJv0O9CDg4YBhar4AFjIDTA76zDbO1IuDy8xEwAhYwTBGwhgWMgLMD3oHZWhnwccN15yNgBJwc8NadHZitiwS8UHY+AkbAAoZJAy7bsIDpJOCaDQuYfgIu2HDb+mUH5mxww5WGswj4OczZ0IA/ZVxiOAKm24Yvl3FW/AKm54AHZZx49xYwJRo+n3Qf770FTMWAu/nwLGA0HPzoS8BoOPjBtYDRcPDXTouAX0CWK6g3dRQCpnrD0XNoW3dfQKh1082fgICpmHE35y5gamXc2VkLeLWjwwNDQMCp9S4ZBQJOrVfDzDbgXb7jVL2mwewI+EINGwICBjYd8I93d4FQAobogH/dBUIJGAQMTBTwn0AoAYOAAQEDAgYBAwKmY0eHB4YgYFLrXTKKSQO+9xKGOvOnDgxkKgJm3YaNQsCkNmwIAgYEDAIGBAwIGFgV8B4QSsAgYGCagO/vARvx8Zct4x6xXb+/B6zv5LelYx5UwLDJekduWMCw4XrHbFjAkH0HfgWs71S94x1UwLDJhkc+ooAhmIBBwICAgYEB//YKCCVgyA74NRBKwCDgufr4xbrLjIBD6/3/p22uNAIOrVfDCNgdGATsMzAIGDgJeB8I1a4/2AdCCRgEDAgYGBbwjQf7QCgBg4CBiQJ+A1fnj/2/RlZqvAImslJtC5jOc62QtIAplGt/Sbcbv7+B06oVu6LneV8sASPa4JgFrFiCexawaAmOeRHwWzomrSliHu/6Cli0BMcsYNESHLOARUtwzG2q9+6IlvW7a3P4II5ouVx3bW5P1RAtF++uDX7Rh2+5IlaWod21tV/3HeuwmqwTXbui10W0jKCN8/+EYiEs4Mo9Wyx6C7jjnq0R5QLOrdrSIOBhbj58Nz7LgYABAfPJ83/+HoE5C5iAUFUtYPrMVdICprdi9SxgxVbhogtYtHpGwKIVs4BRrJhnF7BpilbMuRvYTFO0es5dv2aaihVz7gY20xStnnPXr1Wepgz0nL6Brc5Abbmk+9vA1uVYrS/TVj3aGTUXFXIJGAQMCBgQMAgYEDAgYEDAIGBAwICAQcBAog95oc6u5iG0XAAAAABJRU5ErkJggg==';
 const now = Date.now();
-const samples: Array<Pick<Clip, 'title' | 'content' | 'kind' | 'language' | 'groupId' | 'pinned' | 'image'>> = [
+const samples: Array<Pick<Clip, 'title' | 'content' | 'kind' | 'language' | 'groupId' | 'pinned' | 'image' | 'entries'>> = [
   { title: t('让灵感有迹可循'), content: t('有些灵感像流星，只出现一瞬。\n\n把值得留下的文字、链接与代码，收进自己的小小星系。'), kind: 'text', language: null, groupId: 1, pinned: true },
   { title: t('一个温柔的问候'), content: 'fn main() {\n    let universe = "你好，星笺";\n    println!("{universe} ✦");\n}', kind: 'code', language: 'rust', groupId: 2, pinned: true },
   { title: t('Tauri · 小巧的桌面应用'), content: 'https://v2.tauri.app/', kind: 'link', language: null, groupId: 2, pinned: false },
@@ -18,6 +18,7 @@ const samples: Array<Pick<Clip, 'title' | 'content' | 'kind' | 'language' | 'gro
   { title: t('今晚的待办'), content: t('☑ 留下一个好点子\n☑ 把常用代码收进收藏\n☐ 早点休息，明天再看星星'), kind: 'text', language: null, groupId: null, pinned: false },
   { title: t('MDN Web 文档'), content: 'https://developer.mozilla.org/zh-CN/', kind: 'link', language: null, groupId: 2, pinned: false },
   { title: t('月亮落在山丘上'), content: 'starclip-image:original-demo-moon', kind: 'image', language: null, groupId: null, pinned: false, image: { width: 320, height: 180, bytes: 1147 } },
+  { title: t('本周的设计稿'), content: '/Users/you/Design/月白/封面稿.sketch\n/Users/you/Design/月白/素材', kind: 'file', language: null, groupId: 3, pinned: false, entries: [{ path: '/Users/you/Design/月白/封面稿.sketch', entryKind: 'file' }, { path: '/Users/you/Design/月白/素材', entryKind: 'directory' }] },
 ];
 let demo: AppState = {
   onboardingCompleted: false,
@@ -102,7 +103,7 @@ export const api = {
   },
   async previewCleanup(filter: CleanupFilter): Promise<CleanupPreview> {
     if (isDesktop) return invoke('preview_cleanup', { filter });
-    if (!Number.isSafeInteger(filter.minBytes) || filter.minBytes < 0 || !Number.isSafeInteger(filter.olderThanDays) || filter.olderThanDays < 0 || filter.olderThanDays > 36500 || !['all', 'text', 'link', 'code', 'color', 'image'].includes(filter.kind) || typeof filter.includeGrouped !== 'boolean') throw new Error('清理条件无效，请检查大小和天数。');
+    if (!Number.isSafeInteger(filter.minBytes) || filter.minBytes < 0 || !Number.isSafeInteger(filter.olderThanDays) || filter.olderThanDays < 0 || filter.olderThanDays > 36500 || !['all', 'text', 'link', 'code', 'color', 'image', 'file'].includes(filter.kind) || typeof filter.includeGrouped !== 'boolean') throw new Error('清理条件无效，请检查大小和天数。');
     const cutoff = Date.now() - filter.olderThanDays * 86400000;
     const clips = demo.clips.filter(c => !c.pinned && !c.keepForever && (filter.includeGrouped || c.groupId === null)
       && (filter.minBytes === 0 || contentBytes(c) > filter.minBytes)
@@ -157,11 +158,29 @@ export const api = {
     const response = await fetch('/handwriting-fonts/catalog.json');
     if (!response.ok) throw new Error('暂时无法读取字体列表，请重试。');
     const catalog = await response.json() as Array<Omit<HandwritingAssets['fonts'][number], 'path' | 'downloaded'>>;
-    return { available: true, path: 'builtin', fonts: catalog.map(item => ({ ...item, path: item.id, downloaded: false })), backgrounds: [], error: null };
+    const paperResponse = await fetch('/handwriting-papers/catalog.json');
+    if (!paperResponse.ok) throw new Error('暂时无法读取纸张列表，请重试。');
+    const papers = await paperResponse.json() as Array<Omit<HandwritingAssets['backgrounds'][number], 'path' | 'downloaded'> & { solid: string | null }>;
+    return { available: true, path: 'builtin', fonts: catalog.map(item => ({ ...item, path: item.id, downloaded: false })), backgrounds: papers.map(item => ({ ...item, path: item.solid || `paper:${item.id}`, downloaded: !!item.solid })), error: null };
   },
   async downloadHandwritingFont(id: string): Promise<HandwritingAssets> {
     if (!isDesktop) throw new Error('请在桌面版下载字体并生成月光笺。');
     return handwritingInvoke('download_handwriting_font', { id });
+  },
+  async downloadHandwritingPaper(id: string): Promise<HandwritingAssets> {
+    if (!isDesktop) throw new Error('请在桌面版下载纸张并生成月光笺。');
+    return handwritingInvoke('download_handwriting_paper', { id });
+  },
+  async onHandwritingPaperProgress(callback: (progress: HandwritingFontProgress) => void): Promise<() => void> {
+    if (!isDesktop) return () => {};
+    return (await import('@tauri-apps/api/event')).listen<HandwritingFontProgress>('handwriting-paper-progress', event => callback(event.payload));
+  },
+  /** Native download progress events; resolves to an unsubscribe function. */
+  async onHandwritingFontProgress(callback: (progress: HandwritingFontProgress) => void): Promise<() => void> {
+    if (!isDesktop) return () => {};
+    try {
+      return await (await import('@tauri-apps/api/event')).listen<HandwritingFontProgress>('handwriting-font-progress', event => callback(event.payload));
+    } catch { return () => {}; }
   },
   async renderHandwriting(options: HandwritingOptions): Promise<string> {
     if (!isDesktop) throw new Error('请在桌面版中生成月光笺。');
@@ -171,12 +190,12 @@ export const api = {
     if (isDesktop) return invoke('get_state', { query });
     const counts: Record<string, number> = {}, groupCounts: Record<string, number> = {};
     const inFilter = (clip: Clip, filter = 'all') => filter === 'all' || (filter === 'pinned' && clip.pinned) || (filter === 'kept' && clip.keepForever) || (filter === 'link' ? !!clip.linkHosts?.length || clip.kind === 'link' : filter === clip.kind) || filter === `group-${clip.groupId}`;
-    for (const key of ['all', 'pinned', 'kept', 'text', 'link', 'code', 'color', 'image']) counts[key] = demo.clips.filter(clip => inFilter(clip, key)).length;
+    for (const key of ['all', 'pinned', 'kept', 'text', 'link', 'code', 'color', 'image', 'file']) counts[key] = demo.clips.filter(clip => inFilter(clip, key)).length;
     for (const clip of demo.clips) if (clip.groupId !== null) groupCounts[clip.groupId] = (groupCounts[clip.groupId] ?? 0) + 1;
     const term = (query.query ?? '').trim().toLocaleLowerCase();
     const matches = demo.clips.filter(clip => inFilter(clip, query.filter)
       && matchesMetadata(clip, query.sources ?? [], query.tag ?? '', query.privacy ?? 'all', demoRules.revision)
-      && (!query.aiEligible || (!protectedClip(clip) && !pendingClip(clip, demoRules.revision) && clip.kind !== 'image'))
+      && (!query.aiEligible || (!protectedClip(clip) && !pendingClip(clip, demoRules.revision) && clip.kind !== 'image' && clip.kind !== 'file'))
       && (!term || `${clip.title}\n${clip.kind === 'image' ? '' : clip.content}${query.aiEligible ? `\n${clip.tags?.join(' ') ?? ''}` : ''}`.toLocaleLowerCase().includes(term)))
       .sort((a, b) => b.updatedAt - a.updatedAt || b.id - a.id);
     const pageSize = 50, total = matches.length, page = Math.min(Math.max(1, Math.floor(query.page || 1)), Math.max(1, Math.ceil(total / pageSize)));
@@ -223,6 +242,25 @@ export const api = {
       catch { throw new Error('图片未能复制，请允许剪贴板权限，或使用桌面版。'); }
     } else await navigator.clipboard.writeText(clip.content);
     clip.copyCount++; changed();
+  },
+  async copyClipPaths(id: number): Promise<void> {
+    if (isDesktop) return invoke('copy_clip_paths', { id });
+    const clip = requiredClip(id);
+    if (clip.kind !== 'file') throw new Error('只有文件记录可以复制路径。');
+    const paths = (clip.entries ?? []).map(entry => entry.path);
+    if (!paths.length) throw new Error('这条文件记录没有可复制的路径。');
+    await navigator.clipboard.writeText(paths.join('\n'));
+    clip.copyCount++; changed();
+  },
+  async revealClipFile(path: string): Promise<void> {
+    if (isDesktop) return invoke('reveal_clip_file', { path });
+    throw new Error('浏览器预览无法打开系统文件夹，请使用桌面版。');
+  },
+  async checkClipFiles(id: number): Promise<string[]> {
+    if (isDesktop) return invoke('check_clip_files', { id });
+    // The browser preview has no filesystem access, so nothing is reported missing.
+    if (requiredClip(id).kind !== 'file') throw new Error('只有文件记录可以检查路径。');
+    return [];
   },
   async createGroup(name: string, color: string): Promise<Group> {
     if (isDesktop) return invoke('create_group', { name, color });
@@ -322,6 +360,7 @@ export const api = {
   async saveCode(id: number | null, title: string, content: string, language: string, groupId: number | null): Promise<Clip> {
     if (isDesktop) return invoke('save_code', { id, title, content, language, groupId });
     if (id != null && requiredClip(id).kind === 'image') throw new Error('图片不能带入星绘坊，请选择文字或代码。');
+    if (id != null && requiredClip(id).kind === 'file') throw new Error('文件记录不能带入星绘坊，请选择文字或代码。');
     validateContent(content);
     if (!languages.some(([key]) => key === language)) throw new Error('未知的代码语言');
     const conflict = demo.clips.find((clip) => clip.content === content && clip.id !== id);

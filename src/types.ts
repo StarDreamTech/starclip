@@ -1,9 +1,16 @@
+export type FileEntryKind = 'file' | 'directory' | 'unknown';
+export interface FileEntry {
+  path: string;
+  entryKind: FileEntryKind;
+}
 export interface Clip {
   id: number;
   content: string;
   title: string;
-  kind: 'text' | 'link' | 'code' | 'color' | 'image';
+  kind: 'text' | 'link' | 'code' | 'color' | 'image' | 'file';
   image?: { width: number; height: number; bytes: number } | null;
+  /** Referenced paths only; present for `kind: 'file'`. */
+  entries?: FileEntry[] | null;
   language: string | null;
   pinned: boolean;
   keepForever: boolean;
@@ -77,11 +84,23 @@ export interface HandwritingFont {
   licenseUrl?: string;
   sourceUrl: string;
 }
+export interface HandwritingPaper {
+  id: string;
+  name: string;
+  path: string;
+  downloaded: boolean;
+  bytes: number;
+  previewUrl: string;
+  width: number;
+  height: number;
+  ink: string;
+  padding: number;
+}
 export interface HandwritingAssets {
   available: boolean;
   path: string | null;
   fonts: HandwritingFont[];
-  backgrounds: Array<{ name: string; path: string }>;
+  backgrounds: HandwritingPaper[];
   error: string | null;
 }
 export interface HandwritingOptions {
@@ -91,6 +110,12 @@ export interface HandwritingOptions {
   fontSize: number;
   ink: string;
   padding: number;
+}
+/** Streamed while a desktop font download runs; `total` is the catalog size in bytes. */
+export interface HandwritingFontProgress {
+  id: string;
+  received: number;
+  total: number;
 }
 
 export type DataDirectoryMode = 'move' | 'use';

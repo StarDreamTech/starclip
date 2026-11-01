@@ -25,23 +25,48 @@ pub(super) fn render(
     paper: [u8; 4],
     ink: [u8; 4],
 ) -> Result<RgbaImage> {
+    render_on_paper(
+        bytes,
+        text,
+        font_size,
+        padding,
+        RgbaImage::from_pixel(dimensions.0, dimensions.1, Rgba(paper)),
+        [0; 4],
+        ink,
+    )
+}
+
+pub(super) fn render_on_paper(
+    bytes: &[u8],
+    text: &str,
+    font_size: u32,
+    padding: u32,
+    mut image: RgbaImage,
+    insets: [u32; 4],
+    ink: [u8; 4],
+) -> Result<RgbaImage> {
+    let [left, top, right, bottom] = insets;
+    let width = image.width().saturating_sub(left + right + padding * 2);
+    let height = image.height().saturating_sub(top + bottom + padding * 2);
+    if width < font_size * 2 || height < font_size * 2 {
+        return Err("纸张可书写区域过小，请减小留白或字号。".into());
+    }
     let font = Font::from_bytes(bytes, FontSettings::default())
         .map_err(|_| "字体文件无法解析，请重新下载。")?;
     let face = rustybuzz::Face::from_slice(bytes, 0).ok_or("字体文件无法解析，请重新下载。")?;
     let config = Layout {
         font_size,
         font_spacing: 0.1,
-        x: padding,
-        y: padding,
-        rect_width: dimensions.0 - padding * 2,
-        rect_height: dimensions.1 - padding * 2,
+        x: left + padding,
+        y: top + padding,
+        rect_width: width,
+        rect_height: height,
     };
     let px = font_size as f32 * 96.0 / 72.0;
     let metrics = font
         .horizontal_line_metrics(px)
         .ok_or("字体缺少横排度量。")?;
-    let mut baseline = padding as f32 + metrics.ascent;
-    let mut image = RgbaImage::from_pixel(dimensions.0, dimensions.1, Rgba(paper));
+    let mut baseline = config.y as f32 + metrics.ascent;
     let mut bitmaps = HashMap::new();
     let normalized = text
         .replace("\r\n", "\n")
@@ -55,7 +80,7 @@ pub(super) fn render(
             config.font_spacing,
             config.rect_width as f32,
         ) {
-            if baseline - metrics.ascent >= (padding + config.rect_height) as f32 {
+            if baseline - metrics.ascent >= (config.y + config.rect_height) as f32 {
                 break 'paragraphs;
             }
             draw_line(

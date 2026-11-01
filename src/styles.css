@@ -136,3 +136,30 @@ textarea::-webkit-resizer{background:linear-gradient(135deg,transparent 53%,var(
 }
 
 .privacy-match-reasons{font-size:11px;line-height:1.7;margin:12px 0}.privacy-match-reasons ul{padding-left:18px;margin:8px 0}.privacy-match-reasons li{margin:8px 0}.privacy-match-reasons li strong{font-size:11px;color:var(--text);overflow-wrap:anywhere}.privacy-match-reasons li p{font-size:10px;margin:2px 0;color:var(--muted)}.privacy-match-reasons small{display:block;color:var(--muted);font-size:10px;line-height:1.7}
+
+/* Native file references: cards list names and kinds, details list full paths. */
+.kind-icon.file{color:var(--gold);background:var(--gold-dim)}
+.file-card-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.file-card-list li{display:flex;align-items:center;gap:6px;min-width:0;font-size:10px;color:var(--muted)}
+.file-card-list li svg{color:var(--faint);flex-shrink:0}
+.file-card-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.file-card-kind{flex-shrink:0;font-size:8px;color:var(--faint);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
+.file-card-more{margin-top:6px;font-size:9px;color:var(--faint)}
+.file-card-location{margin-top:8px;font-size:9px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+.list .file-card-list{gap:2px}
+.list .file-card-location{display:none}
+.list .file-card-more{display:none}
+.file-detail{margin:18px 0 22px}
+.file-detail>.field-note{line-height:1.8}
+.file-detail-list{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:240px;overflow-y:auto}
+.file-detail-list li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line-soft);border-radius:8px;background:var(--input);min-width:0}
+.file-detail-list li>svg{color:var(--gold);flex-shrink:0}
+.file-detail-list li.is-missing{border-color:color-mix(in srgb,var(--danger) 45%,var(--line-soft))}
+.file-detail-text{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.file-detail-text strong{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-detail-text span{font-size:9px;color:var(--faint);overflow-wrap:anywhere;line-height:1.5}
+.file-detail-text em{font-size:8px;font-style:normal;color:var(--faint)}
+.file-detail-text em:not(.file-entry-kind){color:var(--danger)}
+.file-reveal{font-size:9px;padding:6px 9px;flex-shrink:0}
+.file-detail-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.file-detail-actions .button{font-size:10px;padding:8px 12px}

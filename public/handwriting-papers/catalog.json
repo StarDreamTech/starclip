@@ -1,0 +1,191 @@
+[
+  {
+    "file": "grid.jpeg",
+    "width": 818,
+    "height": 1180,
+    "bytes": 84777,
+    "sha256": "d6f8cd62eac02d6a6a4376ef5a6ded5cdc3e009bc2754afdc11879deba9124d0",
+    "id": "grid",
+    "name": "方格纸",
+    "url": "https://raw.githubusercontent.com/cpython666/HandwritingGenerator/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/grid.jpeg",
+    "sourceUrl": "https://github.com/cpython666/HandwritingGenerator/blob/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/grid.jpeg",
+    "previewUrl": "/handwriting-papers/grid.png",
+    "insets": [
+      24,
+      24,
+      24,
+      24
+    ],
+    "ink": "#24324a",
+    "padding": 12,
+    "solid": null
+  },
+  {
+    "file": "letter.png",
+    "width": 724,
+    "height": 1024,
+    "bytes": 316251,
+    "sha256": "b85a1f1afee6da23aa9f2299a03dacc6e5625748aa64d37dff8e5cb866efe99b",
+    "id": "letter",
+    "name": "横线信纸",
+    "url": "https://raw.githubusercontent.com/cpython666/HandwritingGenerator/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/letter.png",
+    "sourceUrl": "https://github.com/cpython666/HandwritingGenerator/blob/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/letter.png",
+    "previewUrl": "/handwriting-papers/letter.png",
+    "insets": [
+      60,
+      110,
+      60,
+      90
+    ],
+    "ink": "#24324a",
+    "padding": 12,
+    "solid": null
+  },
+  {
+    "file": "my.jpg",
+    "width": 1440,
+    "height": 1920,
+    "bytes": 138571,
+    "sha256": "ce5b6627c0ce84bb9ba3486ce2c6b58000031f75158a8491dcf076bc7cc2bff7",
+    "id": "college",
+    "name": "校园信纸",
+    "url": "https://raw.githubusercontent.com/cpython666/HandwritingGenerator/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/my.jpg",
+    "sourceUrl": "https://github.com/cpython666/HandwritingGenerator/blob/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/my.jpg",
+    "previewUrl": "/handwriting-papers/college.png",
+    "insets": [
+      120,
+      250,
+      100,
+      170
+    ],
+    "ink": "#24324a",
+    "padding": 12,
+    "solid": null
+  },
+  {
+    "file": "村庄信笺纸.jpg",
+    "width": 1300,
+    "height": 1390,
+    "bytes": 159654,
+    "sha256": "727ba0e2f0c1a85e7b327227e008a47040fc7824526c01e78362101cdd83b438",
+    "id": "village",
+    "name": "村庄信笺纸",
+    "url": "https://raw.githubusercontent.com/cpython666/HandwritingGenerator/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%E6%9D%91%E5%BA%84%E4%BF%A1%E7%AC%BA%E7%BA%B8.jpg",
+    "sourceUrl": "https://github.com/cpython666/HandwritingGenerator/blob/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%E6%9D%91%E5%BA%84%E4%BF%A1%E7%AC%BA%E7%BA%B8.jpg",
+    "previewUrl": "/handwriting-papers/village.png",
+    "insets": [
+      65,
+      80,
+      65,
+      350
+    ],
+    "ink": "#24324a",
+    "padding": 12,
+    "solid": null
+  },
+  {
+    "file": "树信笺纸.jpg",
+    "width": 1300,
+    "height": 1390,
+    "bytes": 148975,
+    "sha256": "a0e0e9aa131adbf4a787a523d38ea4bc266c7c5767a5084077cfa70ffb17432a",
+    "id": "tree",
+    "name": "树信笺纸",
+    "url": "https://raw.githubusercontent.com/cpython666/HandwritingGenerator/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%E6%A0%91%E4%BF%A1%E7%AC%BA%E7%BA%B8.jpg",
+    "sourceUrl": "https://github.com/cpython666/HandwritingGenerator/blob/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%E6%A0%91%E4%BF%A1%E7%AC%BA%E7%BA%B8.jpg",
+    "previewUrl": "/handwriting-papers/tree.png",
+    "insets": [
+      65,
+      80,
+      65,
+      350
+    ],
+    "ink": "#24324a",
+    "padding": 12,
+    "solid": null
+  },
+  {
+    "file": "#000000-1000x1000.png",
+    "width": 1000,
+    "height": 1000,
+    "bytes": 3978,
+    "sha256": "8bdc7cb7258ccc694d7afb5cd3129ce06b219dab7bd8dc457e651a2fdabbc0ef",
+    "id": "black-large",
+    "name": "透明方纸 · 1000",
+    "url": "https://raw.githubusercontent.com/cpython666/HandwritingGenerator/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%23000000-1000x1000.png",
+    "sourceUrl": "https://github.com/cpython666/HandwritingGenerator/blob/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%23000000-1000x1000.png",
+    "previewUrl": "/handwriting-papers/black-large.png",
+    "insets": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ink": "#24324a",
+    "padding": 83,
+    "solid": "solid:#00000000:1000:1000"
+  },
+  {
+    "file": "#000000-200x200.png",
+    "width": 200,
+    "height": 200,
+    "bytes": 255,
+    "sha256": "baff052b2c9b51eb9e6038936150e6330306f481128777f84aa0ec52681a7c7c",
+    "id": "black-small",
+    "name": "透明方纸 · 200",
+    "url": "https://raw.githubusercontent.com/cpython666/HandwritingGenerator/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%23000000-200x200.png",
+    "sourceUrl": "https://github.com/cpython666/HandwritingGenerator/blob/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%23000000-200x200.png",
+    "previewUrl": "/handwriting-papers/black-small.png",
+    "insets": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ink": "#24324a",
+    "padding": 16,
+    "solid": "solid:#00000000:200:200"
+  },
+  {
+    "file": "#000000-500x500.png",
+    "width": 500,
+    "height": 500,
+    "bytes": 1069,
+    "sha256": "55c0f430df1fa04e8b2515d538c5d734714cd8d38a28071b9a0957f7698d9f42",
+    "id": "black-medium",
+    "name": "透明方纸 · 500",
+    "url": "https://raw.githubusercontent.com/cpython666/HandwritingGenerator/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%23000000-500x500.png",
+    "sourceUrl": "https://github.com/cpython666/HandwritingGenerator/blob/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%23000000-500x500.png",
+    "previewUrl": "/handwriting-papers/black-medium.png",
+    "insets": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ink": "#24324a",
+    "padding": 41,
+    "solid": "solid:#00000000:500:500"
+  },
+  {
+    "file": "#ff55ff-500x500.png",
+    "width": 500,
+    "height": 500,
+    "bytes": 2112,
+    "sha256": "b2604dd3560397566cb48803287e47ce03f9da7f11ba832e99e2a176b97e65b7",
+    "id": "pink-medium",
+    "name": "半透明粉色方纸 · 500",
+    "url": "https://raw.githubusercontent.com/cpython666/HandwritingGenerator/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%23ff55ff-500x500.png",
+    "sourceUrl": "https://github.com/cpython666/HandwritingGenerator/blob/d7036998501e9de3dbe57af4aaa1b7d289547ec8/bgs/%23ff55ff-500x500.png",
+    "previewUrl": "/handwriting-papers/pink-medium.png",
+    "insets": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ink": "#24324a",
+    "padding": 41,
+    "solid": "solid:#ff55ffa8:500:500"
+  }
+]

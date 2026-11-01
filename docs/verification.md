@@ -684,6 +684,114 @@
 - 浏览器演示实际切换：在「使用习惯 → 界面语言」选择 English 并保存后，主窗、设置、教程、星绘坊、月光笺、星尘整理、分享和星伴设置均切换；`document.title` 变为 `Starclip — Catch every spark`，`html[lang]` 为 `en-US`。逐页检查主要界面文案；可见中文仅剩用户示例数据（分组名、片段标题 / 正文）、「简体中文」语言自称、固定分享文案和 AI 配置示例，未发现遗漏的界面标签。
 - 未验证：打包后的 macOS / Windows 应用中的托盘菜单、原生窗口标题和英文界面实际切换；原生错误弹窗正文的英文覆盖；Windows 平台。以上为待实机核对的边界，不把浏览器检查表述为原生验收。
 
+## 文件剪贴与统计三档模式（2026-10-30，本地完成、未部署未原生验收）
+
+本轮按用户任务书完成两项功能：**A. 文件剪贴板识别、路径展示与再次复制**；**B. 使用统计的跨启动安装识别、运行活跃统计及隐私控制**。以下证据全部来自本机源码、单元测试与构建，**没有**部署 Worker、没有核对 GA 报表、没有在真实剪贴板上做原生验收、没有提交、没有发布。
+
+### 完成状态
+
+| 功能 | 完成状态 | 验证方式 | 未验证范围 |
+| --- | --- | --- | --- |
+| 原生文件列表读取（macOS `NSPasteboard` 文件 URL） | 已实现 | `clipboard_files` 单元测试覆盖归一化 / 去重 / 类型判定；`cargo check --features desktop` 与 desktop 特性测试通过 | 未在 Finder 真实复制文件后跑原生应用；远程 URL、`file://` 与 `isFileURL` 的边界只在代码层保证 |
+| 原生文件列表读写与定位（Windows `CF_HDROP` / `DROPFILES` / `ShellExecuteW`） | 有待修缺陷 | 本机仅构建 macOS；`cfg(windows)` 代码未被类型检查，不能称 Windows 编译通过；2026-10-31 复核发现导入位置与原生操作问题，见下文 | Windows 目标构建及全部原生行为 |
+| 文件记录写入与再次复制 | 已实现 | Rust `file_records_*` 测试；`tests/file-clip.test.ts` 覆盖演示层与 `App.vue` 交互 | 未做「复制文件后在别的应用粘贴」的原生往返验证 |
+| 捕获优先级与上限（文件优先于图片 / 文本、100 项 / 256 KiB 整批拒绝） | 已实现 | `enforces_item_and_byte_limits_instead_of_truncating`、`file_lists_have_their_own_identity_space` | 超大真实文件列表、权限不足目录、网络卷与已卸载卷 |
+| SQLite `clip_files` 子表、文件独立去重空间、schema 3 迁移 | 已实现 | `file_schema_upgrade_keeps_old_rows_and_separates_indexes` 等 5 项测试，含中文 / 空格 / 特殊字符 / 同名不同目录 | 大库（万条以上）迁移耗时与中断恢复 |
+| 备份 v4 导出与导入校验 | 已实现 | `file_backup_roundtrip_keeps_paths_and_rejects_inconsistent_lists` | 跨机器导入后路径失效的真实恢复点演练 |
+| 前端文件分类、卡片、详情逐项路径、搜索、检查路径 | 已实现 | `tests/file-clip.test.ts`（含挂载真实 `App.vue` setup）、`npm run build` | 原生窗口中的实际排版、长路径换行与深色主题下的可读性 |
+| 文件记录排除 AI、星绘坊、统计与日志 | 已实现 | `file_records_are_filterable_searchable_and_never_ai_eligible`、`file_records_require_paths_and_stay_out_of_text_creation`、`saveCode` 拒绝用例 | 无（属白名单式实现，但仍依赖后续改动不破坏） |
+| 统计三档模式 `off` / `session` / `installation` 与旧开关迁移 | 已实现 | `legacy_boolean_preference_maps_off_and_session_without_inventing_installation`、store 侧 mode 语义测试、`tests/telemetry-settings.test.ts` 14 项 | 旧真实用户偏好文件的升级（只用构造数据验证） |
+| `usage-identity.json` 独立身份（原子写 / `0600` / 拒绝符号链接 / 失败停止发送） | 已实现 | `installation_identity_persists_across_restarts_and_never_leaks_into_state`、`identity_failures_stop_installation_sending_*` | 真实只读目录、磁盘满、跨文件系统重命名的原生表现 |
+| `app_running` 心跳（启动 + 每小时、睡眠最多补一次、不写缓存） | 已实现 | 心跳相关 5 项测试 | 真实休眠 / 唤醒、长时间运行的调度漂移 |
+| v3 协议与 Worker v1 / v2 / v3 兼容 | 已实现 | `tests/telemetry-relay.test.ts` 14 项（含 v3 client_id、`identity_mode`、未知字段拒绝、mock fetch） | **Worker 未部署**，真实 Cloudflare 运行时与 GA4 入库未验证 |
+| 设置界面三档选择、身份错误、重置标识 | 已实现 | `tests/telemetry-settings.test.ts`（含「打开主开关只回到 session」用例） | 原生设置页的实机点击与英文界面截图 |
+| 文档与知识库 | 已更新 | `docs/telemetry.md`、`docs/privacy-ai.md`、`docs/product.md`、`README.md`、`.agents/skills/starclip/` | — |
+
+### 本地检查结果
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm test` | 194 项通过，0 失败 |
+| `npm run build` | 通过（`vue-tsc --noEmit` + `vite build`） |
+| `cargo test --no-default-features` | 131 通过，0 失败，3 项默认忽略 |
+| `cargo test --features desktop --lib` | 147 通过，0 失败，3 项默认忽略 |
+| `cargo check --features desktop` | 通过，无 error / warning |
+| `cargo fmt --check` | 通过（本轮新增代码已格式化） |
+| `npm run tauri -- build --no-bundle` | 通过，release 可执行文件 `src-tauri/target/release/starclip`，15 MB |
+
+`--features desktop --lib` 首次运行时 `capability_tests::generated_runtime_acl_enforces_window_boundaries` 失败，原因是运行时 ACL 测试里的命令清单仍写着已改名的 `set_telemetry_enabled`；同步为 `set_telemetry_mode` / `reset_telemetry_identity` 并补上三个文件命令后通过。这是测试清单滞后，不是权限放宽。
+
+### 迁移与回滚
+
+- **数据库**：`user_version` 2 → 3，事务内建 `clip_files`、重建三组部分唯一索引（文本 / 图片 / 文件各自的去重空间）。旧记录保留，旧索引谓词放宽不影响既有数据；迁移失败整体撤回。
+- **备份**：导出格式 v3 → v4，导入接受 v1 / v2 / v3 / v4。文件记录必须有 `entries` 且与 `content` 一致，否则整份拒绝；不按旧文件名扫盘补路径。
+- **统计偏好**：`{"enabled":bool}` → `{"mode":"off|session|installation"}`，读取时兼容旧布尔并立即以新模式写回。旧版本读不到 `enabled` 字段会判定偏好损坏并**停止统计**，这是安全方向，不会误发。
+- **客户端回滚**：降级到 0.2.3 时，schema 3 的数据库会被「未来版本拒绝写入」拦下，需要先用完整恢复点回到旧目录；这一点必须在发版说明里写清。
+- **Worker 回滚**：新 Worker 同时接受 v1 / v2 / v3，旧客户端不受影响。若单独回滚 Worker 到只认 v1 / v2 的版本，新客户端请求会被 400 拒绝，表现为静默失败并按退避重试，不会崩溃也不会上报错误内容。
+
+### 部署顺序与云端待办
+
+1. 先部署兼容 v1 / v2 / v3 的 `telemetry-relay/worker.mjs`（`npx wrangler@4 deploy`），确认 v1 / v2 老客户端仍返回 204。
+2. 再发布新客户端；旧客户端继续走 v1 / v2，无需同步升级。
+3. 云端待办（本轮**均未执行**）：核对 Cloudflare 的日志 / traces / 问题开关仍为关闭、`ENABLE_APPLICATION_INSIGHTS` 仍为 `false`；用真实 v3 批次确认 204；在 GA4 核对 `app_running` 事件与 `count` 汇总；决定是否把 `identity_mode` 注册为事件级自定义维度（注册前无法在报表里区分两种模式）。
+
+### 统计口径
+
+功能使用次数 = `count` 自定义指标求和（排除 `app_running`）；运行活跃安装数 = `app_running` 的活跃用户数；周 / 月活跃安装数 = 同一口径换 7 / 28 天窗口；启动次数 = `app_started` 的 `count` 求和。因为 `session` 与 `installation` 的 `client_id` 语义不同，安装级口径只在全部数据都来自 `installation` 模式时才成立。完整步骤与偏差见 [统计口径与 GA4 探索配置](telemetry.md#统计口径与-ga4-探索配置)。
+
+### 本轮明确未做
+
+- 没有提交、没有推送、没有打 tag、没有部署 Worker、没有修改线上 GA、没有发版、没有替换本机正式安装（仍为 0.2.2）。
+- 没有在 macOS 原生应用里实际复制文件、粘贴文件或打开 Finder 定位；没有 Windows 实机。
+- 没有在 GA4 里核对任何本轮新增的事件或参数。
+
+## WorkBuddy 改动复核与本地预览（2026-10-31）
+
+在未提交工作区上重新执行：`npm test` **194 项通过**；Rust `--no-default-features --lib` **131 项通过、3 项忽略**；desktop `--lib` **147 项通过、3 项忽略**；`npm run build`、`cargo fmt -- --check` 与 macOS release 构建通过。这些结果不覆盖 Windows 目标编译、原生文件复制粘贴或新增 GA4 报表。未调用真实统计接收端或读取用户剪贴板。
+
+源码复核发现以下待修项；本轮保留 WorkBuddy 业务代码，不将测试通过写为功能全部可发布：
+
+| 级别 | 问题与触发条件 | 代码与修复方向 |
+| --- | --- | --- |
+| P1 | Windows 文件模块使用不存在的导入位置，目标构建会被阻断；macOS 不会编译 `cfg(windows)` 代码 | `clipboard_files.rs` 的 `CF_HDROP` 应来自 `Win32::System::Ole`，`GlobalFree` 应来自 `Win32::Foundation`；按实际 API 补 features 并执行 Windows 目标构建 |
+| P1 | Windows 点击“在文件夹中显示”实际使用 `ShellExecuteW("open", 文件本身, "/select,")`，可打开文档甚至启动可执行文件 | `clipboard_files.rs::platform::reveal` 应使用 `SHOpenFolderAndSelectItems` 等定位 API，而非把文件当执行目标；[Microsoft 说明](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew) |
+| P1 | Windows 写入沿用 `OpenClipboard(NULL)` 后清空 / 设置数据，缺少有效剪贴板 owner HWND；按 API 契约会导致写入失败且此前内容已经清空 | `clipboard_files.rs::Clipboard::open` / `write`；[Microsoft OpenClipboard 说明](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-openclipboard)；应单独处理读写 owner，并做真实往返验证 |
+| P2 | “复制文件”没有先检查路径，删除 / 移动后的文件仍可显示复制成功；手动检查把所有元数据错误统一称“路径已失效”，无法区分权限问题 | `desktop.rs::copy_clip`、`clipboard_files.rs::missing`；复制前统一检查并返回逐项不存在 / 无法确认信息，失败不计复制成功 |
+| P2 | 关闭统计会连续调用两次 `set_mode(Off)`，第二次清掉第一次删除身份失败的错误；切到 session 时错误也被界面 installation 条件隐藏 | `desktop.rs::set_telemetry_mode`、`telemetry.rs::set_mode`、`TelemetrySettings.vue`；保留撤销时停止发送的语义，删除失败状态持续可见并可重试 |
+| P2 | 基础 session 模式也产生 `app_running`；报表用 GA4“活跃用户”替代上报过事件的去重安装，且尚未按 `identity_mode=installation` 过滤，无法得到约定口径 | `telemetry.rs::arm_heartbeat` / `tick` 与 `docs/telemetry.md` 报表步骤；心跳限 installation，使用经过验证的总用户去重指标和模式过滤，不能伪造参与时长来填充“活跃用户”；[GA 用户指标定义](https://support.google.com/analytics/answer/12253918) |
+| P2 | 原生文件读取先按完整 count / 单路径长度分配，再在 normalize 检查 100 项 / 256 KiB，超大输入仍可先消耗大量内存 | `clipboard_files.rs::platform::read` 两平台；应在收集 / 分配前检查项数及累计预算，不静默漏掉读取失败的项 |
+| P2 | Windows 剪贴板短暂被占用也被作为不可重试文件错误消费当前序号，该次复制可能永久漏记 | `desktop.rs::ReadError::is_invalid` 将所有 Files 错误标无效；区分内容无效与暂时读取失败，后者保留下一轮重试 |
+
+新增 `npm run build:preview:mac`，入口为 `scripts/build-preview.mjs`：使用 **Starclip Preview** / `com.starclip.preview`、独立默认数据目录、本地 ad-hoc 签名，编译时移除线上统计地址、更新源与签名 / 公证凭据，输出 `.app` / DMG 至忽略的 `artifacts/preview-local.noindex/<构建时间>/`。构建产物中的 app 移入 `.noindex`，不在普通 build 目录留下第二份可搜索预览 app。命令不启动、不安装、不推送、不打 tag、不上传 GitHub Release、不部署 Worker，也不触发 Homebrew。保持源码版本 0.2.3，仅以应用身份区分未发布工作区预览。
+
+最终预览输出在忽略目录 `artifacts/preview-local.noindex/2026-10-30T16-13-52-141Z/`（UTC，上海时间为 2026-10-31），app 文件合计 **15,669,740 B**，DMG **7,577,797 B（7.58 MB）**，DMG SHA-256 为 `84afb0e7f27bfbdf55fd5a4a0572226c6ceaac1a271ea1bd2f96c55fe0265126`。`Info.plist` 核对名称、独立标识与版本，`codesign --verify --deep --strict`、`hdiutil verify` 通过；配置无 updater endpoint / 无更新归档，构建时统计地址为空。证据为同目录的 `verification.json`、`preview-info.json` 和 `preview-config.json`。最终脚本使用移动而非复制 app；前一轮构建快照也仅在忽略的 `.noindex` 目录中。
+
+本轮不启动预览，因此不宣称最新界面或文件复制已原生验收；统计接收端为空，预览中也不能确认统计请求 / GA 入库。正式安装未被替换；只读 `/Applications/Starclip.app/Contents/Info.plist` 的版本文字为 **0.2.3**，不能由此推断其二进制来源或包含本次工作区功能。远端只读核对：GitHub latest 仍为 2026-10-29 发布的 `v0.2.3`；Tap Cask 仍为 `0.2.3`、SHA `18457b1b5f5878dbdcc51ebcc9db90ecf9cc14263537a4d72525c24d7045a072`，本轮未变更。
+
+## 月光笺纸张与紧凑布局（2026-10-31，未发布工作区）
+
+原手写仓库 `cpython666/HandwritingGenerator` 固定 commit `d7036998501e9de3dbe57af4aaa1b7d289547ec8` 的 `bgs/` 全部 9 项已接回，加原暖白 / 纯白共 11 项。安装包仅增加目录、来源说明、上游 LICENSE 和缩略图；五张图案原图显式下载后，精确字节数 / SHA-256 / 原尺寸校验并缓存在受管 `papers/`。四张均匀画布实测是三张全透明、一张 alpha=168 的粉色，本机按原尺寸 / RGBA 生成。原图标识与透明度保留，书写区是星笺新设默认值，不是原工具的用户参数。
+
+前端布局为左正文 / 紧凑设置、右完整纸张预览及导出；标题与模式压为一行，字体和纸张各一个 36 px 控件。<=800 px 纵向排列，设置变化仍复用已有防过期预览机制。图案纸只有安装成功才切换，失败保留原纸。下载缓存计入占用、完整迁移和恢复点，普通剪贴 JSON 排除。
+
+验证证据：
+
+- `npm test`：196 通过；`npm run build` 通过；`cargo fmt --check` 通过。
+- `cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib`：132 通过、4 忽略；桌面特性 lib：148 通过、4 忽略，包含运行时窗口 ACL。扩展的迁移 / 恢复测试核对纸张缓存保存和占用。
+- 显式运行 ignored 测试 `handwriting::tests::all_original_papers_render_offline_from_verified_fixtures`：1 通过。使用公共固定版本原纸与马善政公开字体、原创固定文字，逐项安装核验并离线生成 9 张 PNG，断言原尺寸、保留角点 RGBA、字形确实写入。无真实剪贴板访问。
+- Ego 浏览器单一临时空间验收目录缩略图、紧凑控件和 1240×820 / 860×620 对齐；650×720 模态自身无横向溢出且堆叠。小视口下底层应用保留原有最小宽度，不宣称整个应用已适配手机。预览容器另注入上述离线 PNG 做完整纸张缩放检查，这是布局夹具，不是浏览器执行原生渲染，也不证明新纸逐项原生 GUI 下载 / 导出。
+- macOS arm64 本地预览重新打包通过：`artifacts/preview-local.noindex/2026-10-30T17-30-14-979Z/`（UTC，上海 2026-10-31），独立身份 `com.starclip.preview`、版本 0.2.3，app 合计 16,098,556 B，DMG 7,739,846 B（7.74 MB / 7.38 MiB），SHA-256 `1c023a0182604152011fd2f458d98493c588bff7ccb66ccb2b5835598a3750f7`。`codesign --verify --deep --strict` 与 `hdiutil verify` 通过，证据 `verification.json`。没有启动、安装、发布或更新 Brew / 线上版本。
+- 截图及固定公共夹具保存在忽略目录 `artifacts/paper-source.noindex/`。临时浏览器空间已关闭。新纸张原生 GUI、Windows 目标构建 / 实机未验收，上一节 WorkBuddy 文件 / 统计审查问题仍待处理。
+
+## 优化审阅（2026-11-01）
+
+在现有未提交工作区上做源码审阅，未改业务实现，上一轮文件 / 统计待修项仍存在。补充确认：
+
+- **文件引用跨系统备份：待修。** `store.rs::validate_backup_entries` 使用当前系统的 `Path::is_absolute`，校验失败发生在写事务之前。重新执行 `cargo build --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib` 后，用该核心库和临时空库导入原创固定 v4 样例：一条普通文字加一条 `C:\OriginalFixture\draft.txt` 文件引用，macOS 返回「备份文件路径无效。」，0 条写入；只把两处一致的路径换成 POSIX 绝对路径后导入 2 条。证据与复现源码为忽略的 `artifacts/review-20261101.noindex/backup-import-check.txt` / `backup-import-check.rs`。未访问真实剪贴板或用户数据库，未做 Windows 实测。
+- **历史刷新开销：实现已核对，性能待测。** `store.rs::history_page` 每次重新计算全库数量及 JSON 标签 / 来源选项，文本搜索经 `starclip_contains`；`desktop.rs::get_state` 同步持有 store 锁。复制成功既由原生命令发 `clips-changed`，又由 `App.vue::copy` 显式刷新，前端请求版本号只丢弃迟到结果。大规模原创数据下的延迟、锁等待和刷新合并收益未测量，尚不能宣称已复现卡顿或给出性能降幅；缓存 / 索引等方案待定。
+
+本轮核心库构建与上述固定备份断言通过；未重跑前端 / Rust 全量测试、平台打包或原生 GUI 验收，既有套件结果仍仅对应各自记录。产品迁移边界与知识库已按该限制修正。
+
 ## 尚未验证或未覆盖
 
 - Windows 安装程序运行、托盘与剪贴板的实机体验；没有操作远程 Windows 电脑。

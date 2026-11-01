@@ -221,6 +221,7 @@ export const backendEn: Record<string, string> = {
   "未知的代码语言": "Unknown code language",
   "分组引用无效": "Invalid constellation reference",
   "图片不能带入星绘坊，请选择文字或代码。": "Images cannot open in Stardraw. Choose text or code.",
+  "文件记录不能带入星绘坊，请选择文字或代码。": "File records cannot open in Stardraw. Choose text or code.",
   "相同内容已存在，请编辑已有记录": "The same content already exists. Edit the existing clip.",
   "内容不能为空": "Content cannot be empty",
 

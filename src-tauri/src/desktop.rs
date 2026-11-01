@@ -96,34 +96,46 @@ fn get_telemetry_state(context: AppContext<'_>) -> Result<TelemetryState> {
     Ok(lock(&context.telemetry)?.state())
 }
 #[tauri::command]
-fn set_telemetry_enabled(
+fn set_telemetry_mode(
     app: AppHandle,
     context: AppContext<'_>,
-    enabled: bool,
+    mode: String,
 ) -> Result<TelemetryState> {
+    let mode = telemetry::TelemetryMode::parse(&mode).ok_or("不支持的统计模式。")?;
     // Keep the storage → store → telemetry order. No network under these locks.
     let storage = lock(&context.storage)?;
     let store = lock(&context.store)?;
     let mut telemetry = lock(&context.telemetry)?;
-    if !enabled {
-        telemetry.set_enabled(false);
+    if mode != telemetry::TelemetryMode::Off {
+        telemetry.validate_configured()?;
+    }
+    // Stop first so nothing from the previous mode can leave while saving.
+    if mode == telemetry::TelemetryMode::Off {
+        telemetry.set_mode(telemetry::TelemetryMode::Off);
         telemetry_changed(&app, &telemetry.state());
-    } else {
-        telemetry.validate_enable()?;
     }
     let saved = storage
         .writable()
-        .and_then(|()| store.set_telemetry_enabled(enabled));
+        .and_then(|()| store.set_telemetry_mode(mode));
     if let Err(error) = saved {
-        return Err(if enabled {
-            error
-        } else {
+        return Err(if mode == telemetry::TelemetryMode::Off {
             "本次运行已停止统计，但关闭偏好未保存；请重试，重启后可能恢复原设置。".into()
+        } else {
+            error
         });
     }
-    if enabled {
-        telemetry.set_enabled(true);
-    }
+    telemetry.set_mode(mode);
+    let state = telemetry.state();
+    telemetry_changed(&app, &state);
+    Ok(state)
+}
+/// Replaces the local installation identity; only meaningful per-installation.
+#[tauri::command]
+fn reset_telemetry_identity(app: AppHandle, context: AppContext<'_>) -> Result<TelemetryState> {
+    let storage = lock(&context.storage)?;
+    let mut telemetry = lock(&context.telemetry)?;
+    storage.writable()?;
+    telemetry.reset_identity()?;
     let state = telemetry.state();
     telemetry_changed(&app, &state);
     Ok(state)
@@ -165,8 +177,10 @@ fn flush_telemetry_with_context(app: &AppHandle, context: &Context) -> Result<Te
     Ok(lock(&context.telemetry)?.state())
 }
 fn schedule_telemetry_flush(app: &AppHandle, context: &Arc<Context>) {
+    // The existing minute timer also arms the hourly `app_running` heartbeat;
+    // no extra thread or timer is created for it.
     if lock(&context.telemetry).is_ok_and(|mut telemetry| {
-        telemetry.checkpoint();
+        telemetry.tick();
         telemetry.ready()
     }) {
         let app = app.clone();
@@ -966,6 +980,7 @@ async fn get_clip_image(context: AppContext<'_>, id: i64, thumbnail: bool) -> Re
 }
 enum ClipboardWrite {
     Text(String),
+    Files(Vec<String>),
     Image((u32, u32, Vec<u8>)),
 }
 fn write_and_suppress(
@@ -980,6 +995,10 @@ fn write_and_suppress(
 fn write_clipboard(context: &Context, content: ClipboardWrite) -> Result<()> {
     let key = match &content {
         ClipboardWrite::Text(text) => CaptureKey::Text(text.clone()),
+        ClipboardWrite::Files(paths) => {
+            let entries = crate::clipboard_files::normalize(paths.iter().cloned())?;
+            CaptureKey::Files(crate::clipboard_files::content(&entries))
+        }
         ClipboardWrite::Image((width, height, rgba)) => {
             CaptureKey::Image(images::fingerprint_rgba(*width, *height, rgba)?)
         }
@@ -995,6 +1014,9 @@ fn write_clipboard(context: &Context, content: ClipboardWrite) -> Result<()> {
             .unwrap()
             .set_text(text)
             .map_err(|e| format!("复制失败：{e}")),
+        // File references are written natively, never as text, and copying a
+        // reference again never restores a cut/move semantic.
+        ClipboardWrite::Files(paths) => crate::clipboard_files::write(&paths),
         ClipboardWrite::Image((width, height, rgba)) => clipboard
             .as_mut()
             .unwrap()
@@ -1095,9 +1117,19 @@ async fn copy_clip(app: AppHandle, context: AppContext<'_>, id: i64) -> Result<(
             };
             (clip, png)
         };
-        let content = match png {
-            Some(png) => ClipboardWrite::Image(images::decode_png(&png)?),
-            None => ClipboardWrite::Text(clip.content),
+        let content = if clip.kind == "file" {
+            // Copying again writes native references, never the joined paths as
+            // text, and never restores a cut/move semantic.
+            let entries = clip
+                .entries
+                .clone()
+                .ok_or("文件记录缺少路径，请重新复制原文件。")?;
+            ClipboardWrite::Files(entries.into_iter().map(|entry| entry.path).collect())
+        } else {
+            match png {
+                Some(png) => ClipboardWrite::Image(images::decode_png(&png)?),
+                None => ClipboardWrite::Text(clip.content),
+            }
         };
         write_clipboard(&context, content)?;
         lock(&context.store)?.mark_copied(id)?;
@@ -1107,6 +1139,60 @@ async fn copy_clip(app: AppHandle, context: AppContext<'_>, id: i64) -> Result<(
     })
     .await
     .map_err(|_| "复制任务失败，请重试。".to_string())?
+}
+/// Copies the referenced paths as plain text, one absolute path per line.
+#[tauri::command]
+async fn copy_clip_paths(app: AppHandle, context: AppContext<'_>, id: i64) -> Result<()> {
+    let context = context.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _write = write_guard(&context)?;
+        let clip = lock(&context.store)?.clip(id)?;
+        if clip.kind != "file" {
+            return Err("只有文件记录可以复制路径。".into());
+        }
+        let entries = clip.entries.ok_or("文件记录缺少路径，请重新复制原文件。")?;
+        let text = entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        write_clipboard(&context, ClipboardWrite::Text(text))?;
+        lock(&context.store)?.mark_copied(id)?;
+        *lock(&context.clipboard_error)? = None;
+        changed(&app);
+        Ok(())
+    })
+    .await
+    .map_err(|_| "复制路径失败，请重试。".to_string())?
+}
+/// Reveals one referenced item in the system file manager. The path is passed
+/// to the platform API directly; no shell command string is ever assembled.
+#[tauri::command]
+async fn reveal_clip_file(context: AppContext<'_>, path: String) -> Result<()> {
+    let context = context.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _write = write_guard(&context)?;
+        crate::clipboard_files::reveal(&path)
+    })
+    .await
+    .map_err(|_| "打开文件夹失败，请重试。".to_string())?
+}
+/// Checks which referenced paths disappeared. Only an explicit user action
+/// calls this; capture and listing never touch the disk.
+#[tauri::command]
+async fn check_clip_files(context: AppContext<'_>, id: i64) -> Result<Vec<String>> {
+    let context = context.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let clip = lock(&context.store)?.clip(id)?;
+        if clip.kind != "file" {
+            return Err("只有文件记录可以检查路径。".into());
+        }
+        let entries = clip.entries.unwrap_or_default();
+        let paths: Vec<String> = entries.into_iter().map(|entry| entry.path).collect();
+        Ok(crate::clipboard_files::missing(&paths))
+    })
+    .await
+    .map_err(|_| "路径检查失败，请重试。".to_string())?
 }
 #[tauri::command]
 fn create_group(
@@ -1729,6 +1815,13 @@ async fn handwriting_assets(
         .await
         .map_err(|_| "无法读取手写字体。".to_string())
 }
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FontDownloadProgress<'a> {
+    id: &'a str,
+    received: u64,
+    total: u64,
+}
 #[tauri::command]
 async fn download_handwriting_font(
     app: AppHandle,
@@ -1750,7 +1843,17 @@ async fn download_handwriting_font(
             return Ok(installed);
         }
         // Download without holding the data write gate; clipboard capture stays responsive.
-        let bytes = crate::handwriting::download_font_bytes(&id)?;
+        let bytes = crate::handwriting::download_font_bytes_with(&id, |received, total| {
+            let _ = app.emit_to(
+                "main",
+                "handwriting-font-progress",
+                FontDownloadProgress {
+                    id: &id,
+                    received,
+                    total,
+                },
+            );
+        })?;
         let storage = write_guard(&context)?;
         if storage.current != directory {
             return Err("数据目录已变化，请重新下载字体。".into());
@@ -1762,6 +1865,45 @@ async fn download_handwriting_font(
     .await
     .map_err(|_| "字体下载任务失败，请重试。".to_string())?
 }
+#[tauri::command]
+async fn download_handwriting_paper(
+    app: AppHandle,
+    context: AppContext<'_>,
+    id: String,
+) -> Result<crate::handwriting::HandwritingAssets> {
+    let context = context.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let directory = write_guard(&context)?.current.clone();
+        let installed = crate::handwriting::assets(&directory);
+        let paper = installed
+            .backgrounds
+            .iter()
+            .find(|paper| paper.id == id)
+            .ok_or("请选择纸张列表中的纸张。")?;
+        if paper.downloaded {
+            return Ok(installed);
+        }
+        let bytes = crate::handwriting::download_paper_bytes_with(&id, |received, total| {
+            let _ = app.emit_to(
+                "main",
+                "handwriting-paper-progress",
+                FontDownloadProgress {
+                    id: &id,
+                    received,
+                    total,
+                },
+            );
+        })?;
+        let storage = write_guard(&context)?;
+        if storage.current != directory {
+            return Err("数据目录已变化，请重新下载纸张。".into());
+        }
+        crate::handwriting::install_paper(&directory, &id, bytes)
+    })
+    .await
+    .map_err(|_| "纸张下载任务失败，请重试。".to_string())?
+}
+
 #[tauri::command]
 async fn render_handwriting(
     context: AppContext<'_>,
@@ -2314,25 +2456,55 @@ fn clipboard_sequence() -> Option<u64> {
 }
 enum ClipboardContent {
     Empty,
+    /// Native file references. Kept apart from `Text` because copying files in
+    /// Finder/Explorer also publishes their names as text.
+    Files(Vec<String>),
     Text(String),
     Image(ImageData<'static>),
 }
-fn read_clipboard(
-    clipboard: &mut Clipboard,
-) -> std::result::Result<ClipboardContent, arboard::Error> {
+enum ReadError {
+    Clipboard(arboard::Error),
+    Files(String),
+}
+impl std::fmt::Display for ReadError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Clipboard(error) => write!(formatter, "{error}"),
+            Self::Files(error) => formatter.write_str(error),
+        }
+    }
+}
+impl ReadError {
+    /// Unreadable items are skipped until the clipboard changes again, so an
+    /// oversized image or file list is not retried on every poll.
+    fn is_invalid(&self) -> bool {
+        match self {
+            Self::Clipboard(arboard::Error::ConversionFailure) => true,
+            Self::Clipboard(_) => false,
+            Self::Files(_) => true,
+        }
+    }
+}
+fn read_clipboard(clipboard: &mut Clipboard) -> std::result::Result<ClipboardContent, ReadError> {
+    // A native file list outranks images and text.
+    match crate::clipboard_files::read() {
+        Ok(Some(paths)) if !paths.is_empty() => return Ok(ClipboardContent::Files(paths)),
+        Ok(_) => {}
+        Err(error) => return Err(ReadError::Files(error)),
+    }
     let image_error = match clipboard.get_image() {
         Ok(image) => return Ok(ClipboardContent::Image(image)),
         Err(arboard::Error::ContentNotAvailable) => None,
         Err(arboard::Error::ConversionFailure) => Some(arboard::Error::ConversionFailure),
-        Err(error) => return Err(error),
+        Err(error) => return Err(ReadError::Clipboard(error)),
     };
     match clipboard.get_text() {
         Ok(text) => Ok(ClipboardContent::Text(text)),
         Err(arboard::Error::ContentNotAvailable) => match image_error {
-            Some(error) => Err(error),
+            Some(error) => Err(ReadError::Clipboard(error)),
             None => Ok(ClipboardContent::Empty),
         },
-        Err(error) => Err(error),
+        Err(error) => Err(ReadError::Clipboard(error)),
     }
 }
 
@@ -2467,7 +2639,7 @@ fn monitor(app: AppHandle, context: Arc<Context>) {
                 let content = match read_clipboard(reader.clipboard.as_mut().unwrap()) {
                     Ok(content) => content,
                     Err(error) => {
-                        if matches!(error, arboard::Error::ConversionFailure) {
+                        if error.is_invalid() {
                             reader.capture.skip_invalid(sequence);
                         }
                         return Err(format!("剪贴板读取失败：{error}"));
@@ -2477,7 +2649,21 @@ fn monitor(app: AppHandle, context: Arc<Context>) {
                 if sequence.is_some() && sequence != clipboard_sequence() {
                     return Ok(None);
                 }
+                let mut pending_files = None;
                 let key = match &content {
+                    ClipboardContent::Files(paths) => {
+                        match crate::clipboard_files::normalize(paths.iter().cloned()) {
+                            Ok(entries) => {
+                                let identity = crate::clipboard_files::content(&entries);
+                                pending_files = Some(entries);
+                                Some(CaptureKey::Files(identity))
+                            }
+                            Err(error) => {
+                                reader.capture.skip_invalid(sequence);
+                                return Err(error);
+                            }
+                        }
+                    }
                     ClipboardContent::Image(image) => {
                         let dimensions = u32::try_from(image.width)
                             .ok()
@@ -2507,6 +2693,12 @@ fn monitor(app: AppHandle, context: Arc<Context>) {
                 let capture = reader.capture.needs_capture(&key);
                 if capture {
                     match content {
+                        ClipboardContent::Files(_) => {
+                            let entries = pending_files
+                                .take()
+                                .ok_or_else(|| "文件列表读取失败。".to_string())?;
+                            lock(&context.store)?.add_files(&entries, "", None, false)?;
+                        }
                         ClipboardContent::Image(image) => {
                             let prepared = match images::prepare_rgba(
                                 image.width as u32,
@@ -2620,6 +2812,7 @@ pub fn run() {
             let context = Arc::new(Context {
                 telemetry: Mutex::new(
                     Telemetry::new(store.telemetry_preferences())
+                        .with_identity(default.join(telemetry::IDENTITY_FILE))
                         .with_cache(default.join("usage-counts.json")),
                 ),
                 storage: Mutex::new(storage),
@@ -2762,7 +2955,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_telemetry_state,
-            set_telemetry_enabled,
+            set_telemetry_mode,
+            reset_telemetry_identity,
             record_usage_event,
             flush_telemetry,
             clear_telemetry_queue,
@@ -2789,6 +2983,9 @@ pub fn run() {
             save_code,
             delete_clip,
             copy_clip,
+            copy_clip_paths,
+            reveal_clip_file,
+            check_clip_files,
             copy_product_share_text,
             copy_product_share_image,
             save_product_share_image,
@@ -2827,6 +3024,7 @@ pub fn run() {
             get_main_window_close_request,
             handwriting_assets,
             download_handwriting_font,
+            download_handwriting_paper,
             render_handwriting,
             get_data_location,
             choose_data_directory,

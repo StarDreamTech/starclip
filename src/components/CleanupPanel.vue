@@ -26,7 +26,7 @@ const stale = ref('');
 const previewRegion = ref<HTMLElement>();
 const resultRegion = ref<HTMLElement>();
 const busy = computed(() => operation.value !== null);
-const kindNames = computed<Record<CleanupFilter['kind'], string>>(() => ({ all: t('全部类型'), text: t('文本'), link: t('链接'), code: t('代码'), color: t('色彩'), image: t('图片') }));
+const kindNames = computed<Record<CleanupFilter['kind'], string>>(() => ({ all: t('全部类型'), text: t('文本'), link: t('链接'), code: t('代码'), color: t('色彩'), image: t('图片'), file: t('文件') }));
 const dateLabel = (date: Date) => formatDate(date, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 const sizeBytes = computed(() => Math.floor(Number(size.value) * (sizeUnit.value === 'MiB' ? 1048576 : 1024)));
 const days = computed(() => Number(age.value === 'custom' ? customDays.value : age.value));
