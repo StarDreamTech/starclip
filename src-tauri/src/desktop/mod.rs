@@ -1008,48 +1008,6 @@ async fn get_clip_image(context: AppContext<'_>, id: i64, thumbnail: bool) -> Re
     .await
     .map_err(|_| "图片读取任务失败。".to_string())?
 }
-enum ClipboardWrite {
-    Text(String),
-    Image((u32, u32, Vec<u8>)),
-}
-fn write_and_suppress(
-    capture: &mut CaptureState,
-    key: CaptureKey,
-    write: impl FnOnce() -> Result<()>,
-) -> Result<()> {
-    write()?;
-    capture.copied(key);
-    Ok(())
-}
-fn write_clipboard(context: &Context, content: ClipboardWrite) -> Result<()> {
-    let key = match &content {
-        ClipboardWrite::Text(text) => CaptureKey::Text(text.clone()),
-        ClipboardWrite::Image((width, height, rgba)) => {
-            CaptureKey::Image(images::fingerprint_rgba(*width, *height, rgba)?)
-        }
-    };
-    let mut reader = lock(&context.reader)?;
-    if reader.clipboard.is_none() {
-        reader.clipboard = Some(Clipboard::new().map_err(|e| format!("无法访问剪贴板：{e}"))?);
-    }
-    let Reader { clipboard, capture } = &mut *reader;
-    write_and_suppress(capture, key, || match content {
-        ClipboardWrite::Text(text) => clipboard
-            .as_mut()
-            .unwrap()
-            .set_text(text)
-            .map_err(|e| format!("复制失败：{e}")),
-        ClipboardWrite::Image((width, height, rgba)) => clipboard
-            .as_mut()
-            .unwrap()
-            .set_image(ImageData {
-                width: width as usize,
-                height: height as usize,
-                bytes: rgba.into(),
-            })
-            .map_err(|e| format!("图片复制失败：{e}")),
-    })
-}
 fn product_share_png(app: &AppHandle, image: &share::ShareImage) -> Result<Vec<u8>> {
     let asset = app
         .asset_resolver()
@@ -1125,11 +1083,17 @@ async fn save_product_share_image(
     .map_err(|_| "产品介绍图保存失败，请重试。".to_string())?
 }
 #[tauri::command]
-async fn copy_clip(app: AppHandle, context: AppContext<'_>, id: i64) -> Result<()> {
+async fn copy_clip(
+    app: AppHandle,
+    context: AppContext<'_>,
+    id: i64,
+    plain: Option<bool>,
+) -> Result<()> {
     let context = context.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _write = write_guard(&context)?;
-        let (clip, png) = {
+        let plain = plain.unwrap_or(false);
+        let (clip, png, html) = {
             let store = lock(&context.store)?;
             let clip = store.clip(id)?;
             let png = if clip.kind == "image" {
@@ -1137,11 +1101,24 @@ async fn copy_clip(app: AppHandle, context: AppContext<'_>, id: i64) -> Result<(
             } else {
                 None
             };
-            (clip, png)
+            let html = if clip.rich && !plain {
+                store.clip_html(id)?
+            } else {
+                None
+            };
+            (clip, png, html)
         };
-        let content = match png {
-            Some(png) => ClipboardWrite::Image(images::decode_png(&png)?),
-            None => ClipboardWrite::Text(clip.content),
+        let content = match (png, html) {
+            (Some(png), _) => ClipboardWrite::Image(images::decode_png(&png)?),
+            (None, Some(html)) => ClipboardWrite::Html(html, clip.content),
+            (None, None) if clip.kind == "file" && !plain => {
+                let paths: Vec<String> = clip.content.lines().map(str::to_owned).collect();
+                if !paths.iter().all(|path| std::path::Path::new(path).exists()) {
+                    return Err("部分文件已移动或删除，可选择「复制为纯文本」只复制路径。".into());
+                }
+                ClipboardWrite::Files(paths)
+            }
+            (None, None) => ClipboardWrite::Text(clip.content),
         };
         write_clipboard(&context, content)?;
         lock(&context.store)?.mark_copied(id)?;
@@ -1170,83 +1147,6 @@ fn delete_group(app: AppHandle, context: AppContext<'_>, id: i64) -> Result<()> 
     lock(&context.store)?.delete_group(id)?;
     changed(&app);
     Ok(())
-}
-// Custom loopback protocol, not HTTP: remote web pages cannot supply valid
-// frames or the random connection credential. No contents are logged.
-// Single worker and bounded frames/timeouts keep this a small local bridge. A
-// hostile same-account process can still deny service; this is not a network API.
-fn start_ai_broker(
-    context: &Arc<Context>,
-    mut emit_pet: impl FnMut(&ai_access::PetSnapshot) -> Result<()> + Send + 'static,
-) {
-    use std::net::TcpListener;
-    let Ok(listener) = TcpListener::bind(("127.0.0.1", 0)) else {
-        return;
-    };
-    let Ok(address) = listener.local_addr() else {
-        return;
-    };
-    if listener.set_nonblocking(true).is_err() {
-        return;
-    }
-    if let Ok(mut ai) = context.ai.lock() {
-        ai.port = Some(address.port());
-    } else {
-        return;
-    }
-    let weak = Arc::downgrade(context);
-    thread::spawn(move || {
-        while weak.strong_count() > 0 {
-            match listener.accept() {
-                Ok((mut stream, address)) => {
-                    if !address.ip().is_loopback() {
-                        continue;
-                    }
-                    // macOS inherits the listener's nonblocking flag. Frames
-                    // need bounded blocking reads while later packets arrive.
-                    if stream.set_nonblocking(false).is_err() {
-                        continue;
-                    }
-                    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-                    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
-                    let request = ai_access::read_frame(
-                        &mut std::io::BufReader::new(&mut stream),
-                        ai_access::MAX_REQUEST,
-                    )
-                    .ok()
-                    .flatten()
-                    .and_then(|bytes| serde_json::from_slice::<ai_access::Request>(&bytes).ok());
-                    let handled = (|| -> Result<()> {
-                        let context = weak.upgrade().ok_or(ai_access::DENIED)?;
-                        // The same lock order as mutations. Busy/frozen storage fails
-                        // closed; guards live through socket write, so revoke/privacy
-                        // changes cannot interleave between filtering and emission.
-                        let storage = context.storage.try_lock().map_err(|_| ai_access::DENIED)?;
-                        storage.writable().map_err(|_| ai_access::DENIED)?;
-                        let store = lock(&context.store)?;
-                        let mut ai = lock(&context.ai)?;
-                        let response = ai.respond_with_pet(
-                            &store,
-                            request.ok_or(ai_access::DENIED)?,
-                            &mut emit_pet,
-                        );
-                        ai_access::write_frame(&mut stream, &response)
-                            .map_err(|_| ai_access::DENIED.to_string())
-                    })();
-                    if handled.is_err() {
-                        let _ = ai_access::write_frame(
-                            &mut stream,
-                            &serde_json::json!({"error": ai_access::DENIED}),
-                        );
-                    }
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(50))
-                }
-                Err(_) => break,
-            }
-        }
-    });
 }
 
 #[tauri::command]
@@ -1734,11 +1634,27 @@ fn get_main_window_close_request(app: AppHandle) -> Result<Option<u64>> {
     app.state::<MainWindowSession>().pending_request()
 }
 
+/// 收起主窗后把焦点交还给上一个应用。macOS 在星伴仍可见时不会自动让出激活状态，
+/// 需要显式 deactivate；Windows 隐藏窗口时系统会激活下一个窗口。
+fn return_focus_to_previous_app(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.run_on_main_thread(|| {
+            if let Some(mtm) = objc2::MainThreadMarker::new() {
+                objc2_app_kit::NSApplication::sharedApplication(mtm).deactivate();
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
 #[tauri::command]
 async fn hide_window(
     app: AppHandle,
     release: Option<bool>,
     request_id: Option<u64>,
+    return_focus: Option<bool>,
 ) -> Result<MainWindowCloseResult> {
     let request = match request_id {
         Some(request) => request,
@@ -1759,6 +1675,9 @@ async fn hide_window(
             return Ok(outcome(false));
         };
         window.hide().map_err(|error| error.to_string())?;
+        if return_focus.unwrap_or(false) {
+            return_focus_to_previous_app(&app);
+        }
         if !release.unwrap_or(false) || app.state::<Updates>().ensure_idle().is_err() {
             return Ok(outcome(true));
         }
@@ -2342,57 +2261,6 @@ async fn restore_recovery_point(
     .map_err(|_| "恢复任务异常，请检查当前目录状态。".to_string())?
 }
 
-fn set_clipboard_error(app: &AppHandle, context: &Context, error: Option<String>) {
-    if let Ok(mut current) = context.clipboard_error.lock() {
-        if *current != error {
-            *current = error;
-            changed(app);
-        }
-    }
-}
-// Native change tokens avoid repeatedly decoding unchanged images in the background.
-fn clipboard_sequence() -> Option<u64> {
-    #[cfg(target_os = "macos")]
-    {
-        return objc2::rc::autoreleasepool(|_| {
-            Some(objc2_app_kit::NSPasteboard::generalPasteboard().changeCount() as u64)
-        });
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let sequence =
-            unsafe { windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber() };
-        return (sequence != 0).then_some(sequence as u64);
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        None
-    }
-}
-enum ClipboardContent {
-    Empty,
-    Text(String),
-    Image(ImageData<'static>),
-}
-fn read_clipboard(
-    clipboard: &mut Clipboard,
-) -> std::result::Result<ClipboardContent, arboard::Error> {
-    let image_error = match clipboard.get_image() {
-        Ok(image) => return Ok(ClipboardContent::Image(image)),
-        Err(arboard::Error::ContentNotAvailable) => None,
-        Err(arboard::Error::ConversionFailure) => Some(arboard::Error::ConversionFailure),
-        Err(error) => return Err(error),
-    };
-    match clipboard.get_text() {
-        Ok(text) => Ok(ClipboardContent::Text(text)),
-        Err(arboard::Error::ContentNotAvailable) => match image_error {
-            Some(error) => Err(error),
-            None => Ok(ClipboardContent::Empty),
-        },
-        Err(error) => Err(error),
-    }
-}
-
 fn refresh_tray(app: &AppHandle, context: &Context, settings: &Settings) {
     let english = native_is_english(context);
     if let Some(items) = context.tray_items.get() {
@@ -2466,138 +2334,6 @@ fn schedule_auto_update_check(app: &AppHandle, context: &Arc<Context>) {
         // Re-check the persisted switch and throttle when the task actually
         // starts. Closing the main WebView neither cancels nor triggers checks.
         let _ = check_update_with_context(app, context, true).await;
-    });
-}
-
-fn monitor(app: AppHandle, context: Arc<Context>) {
-    thread::spawn(move || {
-        let mut maintenance_at = Instant::now() + Duration::from_secs(60);
-        let mut update_check_at = Instant::now() + Duration::from_secs(20);
-        let mut telemetry_at = Instant::now() + Duration::from_secs(60);
-        loop {
-            thread::sleep(Duration::from_millis(700));
-            if Instant::now() >= telemetry_at {
-                telemetry_at = Instant::now() + Duration::from_secs(60);
-                schedule_telemetry_flush(&app, &context);
-            }
-            if Instant::now() >= update_check_at {
-                update_check_at = Instant::now() + Duration::from_secs(60);
-                schedule_auto_update_check(&app, &context);
-            }
-            // Every mutation takes this gate before reader/store locks. A completed
-            // migration leaves it paused until restart, including scheduled cleanup.
-            let Ok(storage) = lock(&context.storage) else {
-                continue;
-            };
-            if storage.restart_pending() {
-                continue;
-            }
-            if Instant::now() >= maintenance_at {
-                maintenance_at = Instant::now() + Duration::from_secs(60);
-                let removed = lock(&context.store).and_then(|store| {
-                    if store.settings()?.retention_days == 0 {
-                        return Ok(0);
-                    }
-                    store.prune_history()
-                });
-                match removed {
-                    Ok(count) if count > 0 => changed(&app),
-                    Err(error) => set_clipboard_error(&app, &context, Some(error)),
-                    _ => {}
-                }
-            }
-            let result: Result<Option<bool>> = (|| {
-                // The storage gate serializes mutations. Read-only UI queries remain available
-                // while clipboard pixels are decoded and compressed outside the store lock.
-                let mut reader = lock(&context.reader)?;
-                if lock(&context.store)?.settings()?.paused {
-                    return Ok(None);
-                }
-                let sequence = clipboard_sequence();
-                if !reader.capture.should_read(sequence) {
-                    return Ok(None);
-                }
-                if reader.clipboard.is_none() {
-                    reader.clipboard =
-                        Some(Clipboard::new().map_err(|e| format!("无法访问剪贴板：{e}"))?);
-                }
-                let content = match read_clipboard(reader.clipboard.as_mut().unwrap()) {
-                    Ok(content) => content,
-                    Err(error) => {
-                        if matches!(error, arboard::Error::ConversionFailure) {
-                            reader.capture.skip_invalid(sequence);
-                        }
-                        return Err(format!("剪贴板读取失败：{error}"));
-                    }
-                };
-                // A copy during the read may mix formats from two owners. Retry next poll.
-                if sequence.is_some() && sequence != clipboard_sequence() {
-                    return Ok(None);
-                }
-                let key = match &content {
-                    ClipboardContent::Image(image) => {
-                        let dimensions = u32::try_from(image.width)
-                            .ok()
-                            .zip(u32::try_from(image.height).ok());
-                        let digest = dimensions
-                            .ok_or_else(|| "图片尺寸超出支持范围。".to_string())
-                            .and_then(|(width, height)| {
-                                images::fingerprint_rgba(width, height, &image.bytes)
-                            });
-                        match digest {
-                            Ok(digest) => Some(CaptureKey::Image(digest)),
-                            Err(error) => {
-                                reader.capture.skip_invalid(sequence);
-                                return Err(error);
-                            }
-                        }
-                    }
-                    ClipboardContent::Text(text) if !text.trim().is_empty() => {
-                        if text.len() > crate::store::MAX_CONTENT_BYTES {
-                            reader.capture.skip_invalid(sequence);
-                            return Err("单条文字超过 256 KiB，未记录。".into());
-                        }
-                        Some(CaptureKey::Text(text.clone()))
-                    }
-                    _ => None,
-                };
-                let capture = reader.capture.needs_capture(&key);
-                if capture {
-                    match content {
-                        ClipboardContent::Image(image) => {
-                            let prepared = match images::prepare_rgba(
-                                image.width as u32,
-                                image.height as u32,
-                                &image.bytes,
-                            ) {
-                                Ok(image) => image,
-                                Err(error) => {
-                                    reader.capture.skip_invalid(sequence);
-                                    return Err(error);
-                                }
-                            };
-                            lock(&context.store)?.capture_image(&prepared)?;
-                        }
-                        ClipboardContent::Text(text) => {
-                            lock(&context.store)?.capture_text(&text)?;
-                        }
-                        ClipboardContent::Empty => {}
-                    }
-                }
-                reader.capture.accept(sequence, key);
-                Ok(Some(capture))
-            })();
-            match result {
-                Ok(Some(captured)) => {
-                    set_clipboard_error(&app, &context, None);
-                    if captured {
-                        changed(&app);
-                    }
-                }
-                Ok(None) => {}
-                Err(error) => set_clipboard_error(&app, &context, Some(error)),
-            }
-        }
     });
 }
 
@@ -2936,506 +2672,10 @@ pub fn run() {
         });
 }
 
+mod ai_broker;
+mod clipboard;
+use ai_broker::*;
+use clipboard::*;
+
 #[cfg(test)]
-mod tests {
-    use super::{project_link, write_and_suppress};
-    use crate::capture::{CaptureKey, CaptureState};
-
-    #[test]
-    fn startup_native_operations_release_storage_and_rollback_after_update_freeze() {
-        use super::*;
-        use std::cell::{Cell, RefCell};
-
-        for freeze_during_apply in [false, true] {
-            let mut random = [0u8; 16];
-            getrandom::fill(&mut random).unwrap();
-            let path = std::env::temp_dir().join(format!(
-                "starclip-startup-lock-test-{:x}",
-                u128::from_le_bytes(random)
-            ));
-            fs::create_dir_all(&path).unwrap();
-            let storage = Storage::open(&path, &path).unwrap();
-            let store = storage.open_store().unwrap();
-            let previous = store.window_startup_preferences().unwrap();
-            let context = Context {
-                telemetry: Mutex::new(Telemetry::new(Ok(Default::default()))),
-                storage: Mutex::new(storage),
-                store: Mutex::new(store),
-                ai: Mutex::new(AiAccess::default()),
-                reader: Mutex::new(Reader {
-                    clipboard: None,
-                    capture: CaptureState::default(),
-                }),
-                clipboard_error: Mutex::new(None),
-                shortcut_error: Mutex::new(None),
-                window_error: Mutex::new(None),
-                cleanup: Mutex::new(None),
-                starpet_operation: Mutex::new(()),
-                startup_operation: Mutex::new(()),
-                tray_items: OnceLock::new(),
-                native_language: Mutex::new("zh-CN".into()),
-            };
-            let auto_launch = Cell::new(false);
-            let tray_visible = Cell::new(true);
-            let operations = RefCell::new(Vec::new());
-            let result = apply_startup_preferences(
-                &context,
-                StartupPreferencePatch {
-                    auto_launch: Some(true),
-                    start_hidden: Some(true),
-                    show_tray_icon: Some(false),
-                },
-                || {
-                    assert!(
-                        context.storage.try_lock().is_ok(),
-                        "native read holds storage"
-                    );
-                    Ok(auto_launch.get())
-                },
-                |enabled| {
-                    // A synchronous native callback must be able to acquire
-                    // storage, both during application and during rollback.
-                    assert!(
-                        context.storage.try_lock().is_ok(),
-                        "login operation holds storage"
-                    );
-                    auto_launch.set(enabled);
-                    operations.borrow_mut().push(("login", enabled));
-                    Ok(())
-                },
-                |visible| {
-                    let mut storage = context
-                        .storage
-                        .try_lock()
-                        .expect("tray operation holds storage");
-                    tray_visible.set(visible);
-                    operations.borrow_mut().push(("tray", visible));
-                    if freeze_during_apply && !visible {
-                        storage.freeze_for_update().unwrap();
-                    }
-                    Ok(())
-                },
-            );
-            let saved = context
-                .store
-                .lock()
-                .unwrap()
-                .window_startup_preferences()
-                .unwrap();
-            if freeze_during_apply {
-                assert!(result
-                    .err()
-                    .expect("freeze must reject persistence")
-                    .contains("正在安装更新"));
-                assert_eq!(
-                    saved, previous,
-                    "failed save must retain the original preferences"
-                );
-                assert!(!auto_launch.get());
-                assert!(tray_visible.get());
-                assert_eq!(
-                    *operations.borrow(),
-                    [
-                        ("login", true),
-                        ("tray", false),
-                        ("login", false),
-                        ("tray", true)
-                    ]
-                );
-                assert!(context.storage.lock().unwrap().writable().is_err());
-            } else {
-                let result = result.unwrap();
-                assert!(result.auto_launch && result.start_hidden && !result.show_tray_icon);
-                assert!(saved.start_hidden && !saved.show_tray_icon);
-                assert!(auto_launch.get());
-                assert!(!tray_visible.get());
-                assert_eq!(*operations.borrow(), [("login", true), ("tray", false)]);
-            }
-            assert!(context.startup_operation.try_lock().is_ok());
-            drop(context);
-            fs::remove_dir_all(path).unwrap();
-        }
-    }
-
-    #[test]
-    fn settings_interactions_notify_only_after_validation_without_double_rewards_or_enabling_pet() {
-        use super::{
-            ai_access, apply_starpet_interaction, AiAccess, CreateConnection, GrowthChange, Store,
-        };
-        use serde_json::json;
-        use std::{
-            fs,
-            path::Path,
-            time::{SystemTime, UNIX_EPOCH},
-        };
-
-        let path = std::env::temp_dir().join(format!(
-            "starclip-action-sync-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir(&path).unwrap();
-        let store = Store::open(&path.join("fixed-fixture.sqlite3")).unwrap();
-        let mut preferences = store.starpet_preferences().unwrap();
-        preferences.enabled = true;
-        preferences.mood = "reading".into();
-        store.save_starpet_preferences(&preferences).unwrap();
-        store
-            .change_starpet_growth(GrowthChange::Enabled(true))
-            .unwrap();
-        let mut ai = AiAccess::default();
-        ai.port = Some(12345);
-        ai.enable(true).unwrap();
-        let config = ai
-            .create(
-                &store,
-                CreateConnection {
-                    name: "原创动作同步测试".into(),
-                    clip_ids: vec![],
-                    fields: vec![],
-                    max_results: 5,
-                    expires_hours: 1,
-                    allow_pet_control: true,
-                },
-                Path::new("/fixed-fixture/starclip"),
-            )
-            .unwrap();
-        let token = config["config"]["mcp"]["mcpServers"]["starclip"]["env"]["STARCLIP_AI_TOKEN"]
-            .as_str()
-            .unwrap()
-            .to_owned();
-        assert_eq!(
-            ai.respond(
-                &store,
-                ai_access::Request {
-                    token,
-                    action: "pet_signal".into(),
-                    arguments: json!({"status":"working","message":"原创临时状态"})
-                }
-            )["result"]["accepted"],
-            true
-        );
-        let before = store.starpet_growth().unwrap();
-        let signal_revision = ai.pet_snapshot().revision;
-        for action in ["twirl", "not-an-action"] {
-            assert!(apply_starpet_interaction(&store, &mut ai, action, true).is_err());
-            assert_eq!(store.starpet_growth().unwrap(), before);
-            assert!(
-                ai.pet_snapshot().signal.is_some(),
-                "rejected action must not clear the Agent signal"
-            );
-        }
-        let (greeted, event) = apply_starpet_interaction(&store, &mut ai, "greet", true).unwrap();
-        let event = event.unwrap();
-        assert_eq!(greeted.xp, 10);
-        assert_eq!(event.action, "greet");
-        assert!(event.animate);
-        assert!(event.signal_revision > signal_revision);
-        assert!(ai.pet_snapshot().signal.is_none());
-        let (repeated, again) = apply_starpet_interaction(&store, &mut ai, "greet", true).unwrap();
-        assert_eq!(repeated.xp, greeted.xp);
-        assert_eq!(
-            again.unwrap().action,
-            "greet",
-            "identical actions still produce a fresh playback event"
-        );
-        let (_, touch) = apply_starpet_interaction(&store, &mut ai, "greet", false).unwrap();
-        assert!(!touch.unwrap().animate);
-        assert_eq!(
-            store.starpet_preferences().unwrap(),
-            preferences,
-            "interactions do not change the saved mood or appearance"
-        );
-        preferences.enabled = false;
-        store.save_starpet_preferences(&preferences).unwrap();
-        store
-            .change_starpet_growth(GrowthChange::Enabled(false))
-            .unwrap();
-        let (paused, absent) =
-            apply_starpet_interaction(&store, &mut ai, "highfive", true).unwrap();
-        assert!(absent.is_none());
-        assert_eq!(paused.xp, greeted.xp);
-        assert_eq!(store.starpet_preferences().unwrap(), preferences);
-        drop(store);
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn reopening_invalidates_delayed_main_window_release_requests() {
-        let session = super::MainWindowSession::default();
-        assert_eq!(session.pending_request().unwrap(), None);
-        let close = session.next_request(true).unwrap();
-        assert!(session.is_current(close).unwrap());
-        assert_eq!(session.pending_request().unwrap(), Some(close));
-
-        // A Dock / tray / shortcut reopen invalidates an old frontend reply
-        // before it queues a native show, even when the worker is still busy.
-        let reopen = session.next_request(false).unwrap();
-        assert!(!session.is_current(close).unwrap());
-        assert!(!session.is_current(reopen).unwrap());
-        assert_eq!(session.pending_request().unwrap(), None);
-
-        let next_close = session.next_request(true).unwrap();
-        assert!(!session.is_current(reopen).unwrap());
-        assert!(session.is_current(next_close).unwrap());
-        // A late completion cannot clear a newer pending close.
-        session.finish_request(close).unwrap();
-        assert_eq!(session.pending_request().unwrap(), Some(next_close));
-        session.finish_request(next_close).unwrap();
-        assert_eq!(session.pending_request().unwrap(), None);
-    }
-
-    #[test]
-    fn ai_broker_checks_privacy_revoke_freeze_and_concurrent_changes() {
-        use super::*;
-        use serde_json::json;
-        let mut random = [0u8; 16];
-        getrandom::fill(&mut random).unwrap();
-        let path = std::env::temp_dir().join(format!(
-            "starclip-broker-test-{:x}",
-            u128::from_le_bytes(random)
-        ));
-        fs::create_dir_all(&path).unwrap();
-        let storage = Storage::open(&path, &path).unwrap();
-        let store = storage.open_store().unwrap();
-        let clip = store
-            .add("原创星图 https://linux.do/fixed", "原创测试", None)
-            .unwrap();
-        store.set_clip_tags(clip.id, &["星图".into()]).unwrap();
-        let context = Arc::new(Context {
-            telemetry: Mutex::new(Telemetry::new(Ok(Default::default()))),
-            storage: Mutex::new(storage),
-            store: Mutex::new(store),
-            ai: Mutex::new(AiAccess::default()),
-            reader: Mutex::new(Reader {
-                clipboard: None,
-                capture: CaptureState::default(),
-            }),
-            clipboard_error: Mutex::new(None),
-            shortcut_error: Mutex::new(None),
-            window_error: Mutex::new(None),
-            cleanup: Mutex::new(None),
-            starpet_operation: Mutex::new(()),
-            startup_operation: Mutex::new(()),
-            tray_items: OnceLock::new(),
-            native_language: Mutex::new("zh-CN".into()),
-        });
-        let (pet_events, received_pet_events) = std::sync::mpsc::channel();
-        start_ai_broker(&context, move |snapshot| {
-            pet_events.send(snapshot.clone()).map_err(|e| e.to_string())
-        });
-        let port = context.ai.lock().unwrap().port.unwrap();
-        let store = context.store.lock().unwrap();
-        let mut ai = context.ai.lock().unwrap();
-        ai.enable(true).unwrap();
-        let config = ai
-            .create(
-                &store,
-                CreateConnection {
-                    name: "原创测试".into(),
-                    clip_ids: vec![clip.id],
-                    fields: vec![
-                        "title".into(),
-                        "content".into(),
-                        "tags".into(),
-                        "sources".into(),
-                    ],
-                    max_results: 5,
-                    expires_hours: 1,
-                    allow_pet_control: false,
-                },
-                Path::new("/fixture/starclip"),
-            )
-            .unwrap();
-        let token = config["config"]["mcp"]["mcpServers"]["starclip"]["env"]["STARCLIP_AI_TOKEN"]
-            .as_str()
-            .unwrap()
-            .to_owned();
-        let id = config["connectionId"].as_str().unwrap().to_owned();
-        drop(ai);
-        drop(store);
-        // TCP frames can arrive in separate packets. A partial authorized
-        // request must wait for its newline, not be treated as a denial.
-        let mut fragmented = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
-        fragmented.set_nodelay(true).unwrap();
-        fragmented
-            .set_read_timeout(Some(Duration::from_millis(150)))
-            .unwrap();
-        let frame = serde_json::to_vec(&json!({
-            "token": token,
-            "action": "search",
-            "arguments": {}
-        }))
-        .unwrap();
-        let split = frame.len() / 2;
-        fragmented.write_all(&frame[..split]).unwrap();
-        let early = fragmented.peek(&mut [0u8; 1]).unwrap_err();
-        assert!(matches!(
-            early.kind(),
-            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-        ));
-        fragmented
-            .set_read_timeout(Some(Duration::from_secs(3)))
-            .unwrap();
-        fragmented.write_all(&frame[split..]).unwrap();
-        fragmented.write_all(b"\n").unwrap();
-        let reply = ai_access::read_frame(
-            &mut std::io::BufReader::new(fragmented),
-            ai_access::MAX_RESPONSE,
-        )
-        .unwrap()
-        .unwrap();
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&reply).unwrap()["result"]["total"],
-            1
-        );
-        assert_eq!(
-            ai_access::client(port, &token, "search", json!({})).unwrap()["total"],
-            1
-        );
-        // The request cannot emit data while a privacy mutation owns the store.
-        let store = context.store.lock().unwrap();
-        let worker_token = token.clone();
-        let worker = thread::spawn(move || {
-            ai_access::client(port, &worker_token, "get", json!({"id": clip.id}))
-        });
-        store.set_clip_privacy(clip.id, true, false).unwrap();
-        drop(store);
-        assert_eq!(worker.join().unwrap().unwrap_err(), ai_access::DENIED);
-        assert_eq!(
-            ai_access::client(port, &token, "search", json!({})).unwrap()["total"],
-            0
-        );
-        for action in ["list_sources", "list_tags"] {
-            assert_eq!(
-                ai_access::client(port, &token, action, json!({})).unwrap()["returned"],
-                0
-            );
-        }
-        context.storage.lock().unwrap().freeze_for_update().unwrap();
-        assert!(ai_access::client(port, &token, "status", json!({})).is_err());
-        context.storage.lock().unwrap().cancel_update_freeze();
-        context.ai.lock().unwrap().revoke(&id);
-        for action in ai_access::TOOLS {
-            let args = if action == "get" {
-                json!({"id": clip.id})
-            } else {
-                json!({})
-            };
-            assert!(ai_access::client(port, &token, action, args).is_err());
-        }
-        // Exercise the real loopback-to-pet callback with synthetic data only.
-        // This creates no native window and never opens a system clipboard.
-        let pet_config = {
-            let store = context.store.lock().unwrap();
-            let mut preferences = store.starpet_preferences().unwrap();
-            preferences.enabled = true;
-            store.save_starpet_preferences(&preferences).unwrap();
-            context
-                .ai
-                .lock()
-                .unwrap()
-                .create(
-                    &store,
-                    CreateConnection {
-                        name: "原创 Agent 测试".into(),
-                        clip_ids: vec![],
-                        fields: vec![],
-                        max_results: 5,
-                        expires_hours: 1,
-                        allow_pet_control: true,
-                    },
-                    Path::new("/fixture/starclip"),
-                )
-                .unwrap()
-        };
-        let pet_token = pet_config["config"]["mcp"]["mcpServers"]["starclip"]["env"]
-            ["STARCLIP_AI_TOKEN"]
-            .as_str()
-            .unwrap();
-        assert!(ai_access::client(port, pet_token, "search", json!({})).is_err());
-        assert_eq!(
-            ai_access::client(
-                port,
-                pet_token,
-                "pet_signal",
-                json!({"status":"working","action":"greet","message":"原创测试进度"})
-            )
-            .unwrap()["accepted"],
-            true
-        );
-        let signal = received_pet_events
-            .recv_timeout(Duration::from_secs(1))
-            .unwrap();
-        assert_eq!(
-            signal.signal.unwrap().message.as_deref(),
-            Some("原创测试进度")
-        );
-        assert_eq!(
-            ai_access::client(port, pet_token, "pet_clear", json!({})).unwrap()["cleared"],
-            true
-        );
-        assert!(received_pet_events
-            .recv_timeout(Duration::from_secs(1))
-            .unwrap()
-            .signal
-            .is_none());
-        context.ai.lock().unwrap().enable(false).unwrap();
-        assert!(ai_access::client(port, &token, "status", json!({})).is_err());
-        drop(context);
-        let _ = fs::remove_dir_all(path);
-    }
-
-    #[test]
-    fn shared_clipboard_writer_suppresses_only_successful_own_writes() {
-        let mut capture = CaptureState::default();
-        capture.accept(
-            Some(1),
-            Some(CaptureKey::Text("fixed previous text".into())),
-        );
-        let text = CaptureKey::Text("fixed product copy".into());
-        write_and_suppress(&mut capture, text.clone(), || Ok(())).unwrap();
-        assert!(capture.should_read(Some(2)));
-        assert!(!capture.needs_capture(&Some(text.clone())));
-        let image = CaptureKey::Image("fixed image digest".into());
-        assert!(write_and_suppress(
-            &mut capture,
-            image.clone(),
-            || Err("fixture failure".into())
-        )
-        .is_err());
-        assert!(!capture.needs_capture(&Some(text)));
-        assert!(capture.needs_capture(&Some(image.clone())));
-        write_and_suppress(&mut capture, image.clone(), || Ok(())).unwrap();
-        assert!(!capture.needs_capture(&Some(image)));
-        assert!(capture.needs_capture(&Some(CaptureKey::Text("later external text".into()))));
-    }
-
-    #[test]
-    fn project_links_only_accept_fixed_targets_without_opening_a_browser() {
-        assert_eq!(
-            project_link("repository").unwrap(),
-            "https://github.com/cpython666/starclip"
-        );
-        assert_eq!(
-            project_link("issues").unwrap(),
-            "https://github.com/cpython666/starclip/issues/new"
-        );
-        for target in [
-            "",
-            "Repository",
-            " issues",
-            "repository/../../",
-            "https://github.com/cpython666/starclip",
-            "https://example.com",
-            "file:///tmp/test",
-            "javascript:alert(1)",
-            "issues;open example.com",
-        ] {
-            assert!(project_link(target).is_err(), "must reject {target:?}");
-        }
-    }
-}
+mod tests;

@@ -49,6 +49,7 @@ async function mount(options: { delayedRead?: boolean; delayedCloseListener?: bo
   const read = deferred<AppState>(), listening = deferred<() => void>();
   const closeQuery = deferred<number | null>();
   const calls: { release: boolean; requestId?: number }[] = [];
+  const focusCalls: boolean[] = [], copiedIds: number[] = [];
   let closeRequest: ((requestId: number) => void) | undefined;
   const stopped = { change: 0, close: 0, growth: 0, quit: 0 };
   const stopClose = () => { stopped.close++; };
@@ -57,7 +58,8 @@ async function mount(options: { delayedRead?: boolean; delayedCloseListener?: bo
     async setNativeLanguage() {},
     async privacyRules() { return { revision: 1, rules: [] }; },
     async onChange() { return () => { stopped.change++; }; },
-    async hideWindow(release: boolean, requestId?: number) { calls.push({ release, requestId }); return { requestId: requestId ?? 100, pending: !release }; },
+    async hideWindow(release: boolean, requestId?: number, returnFocus = false) { calls.push({ release, requestId }); focusCalls.push(returnFocus); return { requestId: requestId ?? 100, pending: !release }; },
+    async copyClip(id: number) { copiedIds.push(id); },
     async getWindowCloseRequest() { return options.delayedCloseQuery ? closeQuery.promise : options.initialCloseRequest ?? null; },
     async onWindowCloseRequested(callback: (requestId: number) => void) { closeRequest = callback; return options.delayedCloseListener ? listening.promise : stopClose; },
     async setTheme(theme: string) { return { ...state.settings, theme }; },
@@ -92,7 +94,7 @@ async function mount(options: { delayedRead?: boolean; delayedCloseListener?: bo
   let unmounted = false;
   const unmount = () => { if (!unmounted) { unmounted = true; app.unmount(); } };
   return {
-    vm, mock, calls, stopped, windowEvents, themeEvents, unmount,
+    vm, mock, calls, focusCalls, copiedIds, stopped, windowEvents, themeEvents, unmount,
     finishRead: () => read.resolve(structuredClone(state)), finishListener: () => listening.resolve(stopClose),
     finishCloseQuery: (requestId: number | null) => closeQuery.resolve(requestId),
     async close(requestId: number) { assert(closeRequest, 'native close handler registered'); closeRequest(requestId); await flush(); },
@@ -593,4 +595,20 @@ test('direct share tab blocks navigation and window release until sharing is ful
     await f.close(403);
     assert.deepEqual(calls.at(-1), { release: true, requestId: 403 }, 'help no longer depends on an unmounted share panel');
   } finally { f.cleanup(); }
+});
+
+test('quick copy hides the window and returns focus unless the preference is off', async () => {
+  const fixture = await mount(); const { vm, calls, focusCalls, copiedIds } = fixture;
+  try {
+    const clip = { id: 7, content: '原创快选样例', title: '', kind: 'text', language: null, pinned: false, keepForever: false, groupId: null, createdAt: 1, updatedAt: 1, copyCount: 0 };
+    await vm.copy(clip); await flush();
+    assert.deepEqual(copiedIds, [7]); assert.equal(calls.length, 0, 'a plain button copy keeps the window open');
+    vm.query = '原创';
+    await vm.copy(clip, true); await flush();
+    assert.deepEqual(copiedIds, [7, 7]); assert.deepEqual(focusCalls.at(-1), true); assert.equal(vm.query, '', 'search resets for the next summon');
+    const before = calls.length;
+    vm.state.settings.hideAfterCopy = false;
+    await vm.copy(clip, true); await flush();
+    assert.equal(calls.length, before, 'turning the preference off keeps the window open');
+  } finally { fixture.cleanup(); }
 });

@@ -1,14 +1,14 @@
 # 数据与隐私边界
 
-实施依据：`src-tauri/src/` 下的 `store.rs`、`privacy.rs`、`ai_access.rs`、`ai_transport.rs`、`capture.rs`、`images.rs`、`storage.rs`、`desktop.rs` 及 `src/api.ts`。面向用户的完整说明见 [产品范围](../../../../docs/product.md)、[星尘整理](../../../../docs/cleanup.md)；变更时同步这些说明。
+实施依据：`src-tauri/src/` 下的 `store/`、`privacy.rs`、`ai_access.rs`、`ai_transport.rs`、`capture.rs`、`images.rs`、`storage.rs`、`desktop/` 及 `src/api.ts`。面向用户的完整说明见 [产品范围](../../../../docs/product.md)、[星尘整理](../../../../docs/cleanup.md)；变更时同步这些说明。
 
 ## 采集与默认值
 
 - 新安装为空、暂停记录、网格布局；`maxHistory = 0`、`retentionDays = 0` 表示不限条数与天数，窗口置顶和星伴默认关闭。升级保留已有暂停状态、布局、主题、上限与快捷键，不以新默认覆盖旧偏好。
 - 2026-10-27 按用户要求修改：开启/恢复采集后首次轮询读取当前剪贴内容（通常约 700 ms 内），仍按原有去重、隐私和保留规则处理；首次安装默认暂停。`CaptureState` 不再跳过初始基线，读失败可重试、空内容不录入、自复制仍抑制。macOS/Windows 使用变更序号，其他平台内容比较；无效图片消费当前序号。见 `capture.rs` 四个固定数据测试，未读取真实剪贴板验收。
-- 暂停选择有独立的 Store 管理版本 `pauseRevision`，旧数据默认 0；保存普通设置时在同一事务比较 `expectedPauseRevision`，旧草稿不覆盖较新的暂停状态，含暂停 → 恢复 → 暂停的 ABA 变化。版本只随实际 `paused` 变化递增，不接受客户端伪造；前端刷新只同步暂停字段与版本，保留其他未保存草稿，版本不计入 dirty。显式恢复须基于当前版本，开启后的原有采集语义不变。依据 `store.rs::save_settings_with_pause_guard`、`App.vue` 与相关回归；未读取真实剪贴板验收。
+- 暂停选择有独立的 Store 管理版本 `pauseRevision`，旧数据默认 0；保存普通设置时在同一事务比较 `expectedPauseRevision`，旧草稿不覆盖较新的暂停状态，含暂停 → 恢复 → 暂停的 ABA 变化。版本只随实际 `paused` 变化递增，不接受客户端伪造；前端刷新只同步暂停字段与版本，保留其他未保存草稿，版本不计入 dirty。显式恢复须基于当前版本，开启后的原有采集语义不变。依据 `store::save_settings_with_pause_guard`、`App.vue` 与相关回归；未读取真实剪贴板验收。
 - 关闭主窗先隐藏，0.2.3 在前端确认没有草稿 / 任务、原生存储与更新允许时销毁 WebView；安全条件稍后满足会继续处理，重开作废旧请求。后台进程和已开启的记录继续，与菜单栏 / 托盘图标是否显示无关；退出才结束。复制放回系统剪贴板，不注入键盘或自动粘贴。
-- 0.2.3 提供登录自启动（默认关）、启动收起主窗（默认关）、菜单栏 / 托盘图标显隐（默认开），独立即时保存，不改 `paused` / `pauseRevision`、不提交其他草稿或触发保留清理。自启动读取系统注册状态，仅显式启用时注册；数据恢复 / 迁移不重建登录项，系统后台权限仍可能限制启动。后两项保存在 `window_startup_v1`，随 SQLite 完整快照 / 迁移保留，普通历史 JSON 不含。启动收起不创建主窗口；快捷键或窗口偏好异常回退显示主窗，星伴仍按原开关运行。设置内退出先保护未保存草稿，原生退出也受更新安装阶段约束。依据：`startup.rs`、`desktop.rs`、`store.rs::WindowStartupPreferences`、`StartupSettings.vue`；macOS 独立空库已原生核对并撤销测试登录项；未改变正式安装，Windows 原生启动设置已通过，两平台真实注销重登仍待验证，见 `docs/verification.md`。
+- 0.2.3 提供登录自启动（默认关）、启动收起主窗（默认关）、菜单栏 / 托盘图标显隐（默认开），独立即时保存，不改 `paused` / `pauseRevision`、不提交其他草稿或触发保留清理。自启动读取系统注册状态，仅显式启用时注册；数据恢复 / 迁移不重建登录项，系统后台权限仍可能限制启动。后两项保存在 `window_startup_v1`，随 SQLite 完整快照 / 迁移保留，普通历史 JSON 不含。启动收起不创建主窗口；快捷键或窗口偏好异常回退显示主窗，星伴仍按原开关运行。设置内退出先保护未保存草稿，原生退出也受更新安装阶段约束。依据：`startup.rs`、`desktop/`、`store::WindowStartupPreferences`、`StartupSettings.vue`；macOS 独立空库已原生核对并撤销测试登录项；未改变正式安装，Windows 原生启动设置已通过，两平台真实注销重登仍待验证，见 `docs/verification.md`。
 - 0.2.3 使用 SQLite 每页 50 条的历史查询；主列表仅保留当前页，搜索 / 分类 / 分组 / 标签 / 来源 / 隐私筛选覆盖全库，全局数量与筛选选项独立聚合。AI 授权选择独立分页、跨页选择仍受原有记录数和隐私权限约束，分页不扩张外部 AI 权限，也不等于全程序几十 MiB 的内存保证。
 - 数据仍是单个磁盘 SQLite，原图 / 缩略图存为 BLOB，没有按月或按大小分库。日常分页不读全库正文；全局域名 / 标签 / 分组、清理候选 ID 与重扫待更新元数据仍可能随数据增长。批量导出 / 图片解码还有临时峰值，不能承诺所有操作恒定内存。
 - 浏览器是原创样例的内存演示，不监听、不持久保存、不执行桌面定时清理，也不伪装真实目录操作、手写渲染或原生浮窗；启动设置只说明桌面限定，不注册登录项、修改托盘或退出应用。
@@ -22,7 +22,7 @@
 - 手动星尘整理以 AND 组合条件，始终保护星标与永久保留，默认排除分组。永久保留也禁止单条删除，必须先解除。
 - 既有 `clear_history`（清空历史）命令只保护星标与永久保留，分组不是该命令的保护条件；不能将它与自动清理或星尘整理的筛选规则混用。
 - 预览不写入；确认只处理该令牌的候选。候选变化/令牌失效整批拒绝，新记录不加入旧预览。内容字节不等于物理释放空间；删除提交后整理数据库失败应报告「已删除 + 整理警告」，不能宣称回滚。
-- 清理预览逐条读正文，仅留候选 ID / SHA-256 和最多 100 条展示信息；关闭、改筛选、卸载与迟到响应按 token 取消，不能让旧取消清除新计划。删除事务逐条重读原校验字段并保护星标 / 永久保留，不接受客户端自报候选。隐私重扫同样逐条读取正文，但仍暂存待更新元数据；依据 `store.rs`、`desktop.rs::cancel_cleanup` 与 `CleanupPanel.vue`。
+- 清理预览逐条读正文，仅留候选 ID / SHA-256 和最多 100 条展示信息；关闭、改筛选、卸载与迟到响应按 token 取消，不能让旧取消清除新计划。删除事务逐条重读原校验字段并保护星标 / 永久保留，不接受客户端自报候选。隐私重扫同样逐条读取正文，但仍暂存待更新元数据；依据 `store/`、`desktop::cancel_cleanup` 与 `CleanupPanel.vue`。
 
 ## 产品分享
 
@@ -58,7 +58,7 @@
 
 - 单份 JSON 限 20 MiB、10,000 条片段、1,000 组及累计 2.56 亿图片像素；浏览器明确拒绝含图导入/导出，不丢图后声称备份成功。
 - 导入规则以新 ID、停用状态追加到规则列表，用户可查看后自行启用，不覆盖活动规则；同策略重复导入去重，超过总 100 条整份拒绝。追加会递增 revision，已有未重扫记录暂不可供 AI 读取。
-- Windows / macOS 桌面共用 `store.rs::export/import` 的 v3 导出与 v1 / v2 / v3 导入，与系统无关；跨系统记录互导是格式层面支持，尚未双机实测。普通历史 JSON 不含成长，成长另用 `starpet_growth.rs` / `starpet-growth.ts` 的 `starclip-starpet` v1 存档。记录格式兼容不等于完整环境兼容；路径、快捷键和手写可执行组件须单独处理，详见产品迁移边界。
+- Windows / macOS 桌面共用 `store::export/import` 的 v3 导出与 v1 / v2 / v3 导入，与系统无关；跨系统记录互导是格式层面支持，尚未双机实测。普通历史 JSON 不含成长，成长另用 `starpet_growth.rs` / `starpet-growth.ts` 的 `starclip-starpet` v1 存档。记录格式兼容不等于完整环境兼容；路径、快捷键和手写可执行组件须单独处理，详见产品迁移边界。
 - 2026-10-27 修复受管手写路径的跨平台表示：`select_app` / `selection_data` 共用 `portable_renderer_path` 写正斜杠，`renderer_path` 兼容旧 Windows 分隔符并先校验组件；拒绝上级目录、盘符/ADS与尾点空格等越界写法，保留原生外部绝对路径含义。两个固定样例覆盖编码边界、旧配置迁移及有正确摘要的旧恢复点读取/恢复；不代表跨系统可执行文件兼容。外部完整恢复点导入入口、双机验收仍待完成，`prepare_recovery` 只按 ID 从本机默认 `recovery/` 读取。
 - 目录操作最终确认成功后冻结写入并请求重启；重启前不再写旧库，失败可重试。选择或取消不改位置，未保存草稿不会自动提交；失效定位不能静默创建空库掩盖问题。
 - 数据及备份均为本机明文、未加密。位置以偏好中显示的实际目录为准，默认目录不保证是当前目录。受管占用不是整个目录占用，不含系统 WebView 缓存或无关文件。
@@ -66,7 +66,7 @@
 
 ## 数据结构与升级
 
-- `store.rs::open_with_recovery` 先只读检查 `user_version`。当前结构版本为 2；高于支持版本时不打开写连接，不新建替代库。旧库在任何结构写入和启动清理前生成恢复点；新增 `clip_privacy`、既有内容扫描 / 随机身份、列 / 索引变更、版本和启动保留清理同事务提交，失败回滚并报告快照位置。
+- `store::open_with_recovery` 先只读检查 `user_version`。当前结构版本为 2；高于支持版本时不打开写连接，不新建替代库。旧库在任何结构写入和启动清理前生成恢复点；新增 `clip_privacy`、既有内容扫描 / 随机身份、列 / 索引变更、版本和启动保留清理同事务提交，失败回滚并报告快照位置。
 - 完整快照中受管文件禁止符号链接；清单上限 2 MiB、托管文件上限 10000。恢复前和复制后均验证摘要；损坏恢复点列表保留错误项，不影响其它点。恢复点不能直接选作可写数据目录。目录外 renderer 不复制，保留告警。
 - 下载与安装分离：官方插件 `download()` 验证包签名和绑定版本后，已验证 bytes 仅存在本次会话并进入 `ready`；此时不安装 / 不冻结，可以稍后。确认安装只能取同版本 ready 包一次，重新检查 / 失败清缓存；退出后需重新下载。确认后生成 `before-update` 恢复点并备份旧应用，任何备份失败阻止安装；插件 `install()` 再次验签。安装冻结期间采集与所有写操作被后端拦截，保留原暂停偏好；正常退出也受安装阶段保护。`restart_app` 先释放目录锁；macOS 自 `22480ca` 使用 `request_restart()` 返回并经正常退出清理单实例状态，再由 Tauri 拉起新进程，避免直接重启跳过清理导致新实例被截获。完整原生证据见 [macOS 更新验收](../../../../docs/verification.md#macos-应用内更新完整链路)。
 - 检查更新的失败提示由 `updater.rs::check_error_message` 按插件错误枚举生成中文并标识 GitHub，不拼接英文原始错误。当前插件2.14.0的 `ReleaseNotFound` 丢失具体非成功HTTP状态，不能推断为断网或404；提示链接访问失败或更新文件未发布的可能。见2026-10-27验证记录和固定错误分类测试。
@@ -85,7 +85,7 @@
 
 ## 星迹统计（本地活动计数）
 
-- 未发布、源码已实现：`src-tauri/src/clip_stats.rs` 管理 `clip_activity`（15 分钟时段 × kind × new/repeat/reuse 的次数与大小），`store.rs::capture_text` / `capture_image` 只供 `desktop.rs` 采集循环调用，与写入同事务计数；`mark_copied` 计 reuse。`add` / `add_protected` / `add_image` / 导入 / 保存代码不计数。
+- 未发布、源码已实现：`src-tauri/src/clip_stats.rs` 管理 `clip_activity`（15 分钟时段 × kind × new/repeat/reuse 的次数与大小），`store::capture_text` / `capture_image` 只供 `desktop/` 采集循环调用，与写入同事务计数；`mark_copied` 计 reuse。`add` / `add_protected` / `add_image` / 导入 / 保存代码不计数。
 - 原因：历史去重只更新 `updated_at`、清理会删行，每日次数不能从 `clips` 倒推。表用 `CREATE TABLE IF NOT EXISTS` 在 `from_connection` 两条路径补建，不提升 `SCHEMA_VERSION`，旧版可打开。
 - 不存正文 / 标题 / 域名 / 记录 ID；保留 400 天；不进 JSON 备份与可选统计；随目录迁移和恢复点。`get_clip_stats(days ≤ 366, utcOffsetMinutes 为 15 的倍数)` 与 `clear_clip_stats` 仅主窗。常见域名排除隐私记录（`PRIVATE_PREDICATE` 与历史筛选共用）。
 - 界面 `src/components/ClipStatsPanel.vue`、`src/clip-stats.ts`（浏览器演示为固定原创数据）；用户说明见 [星迹统计](../../../docs/clip-insights.md)。原生桌面验收待做。
@@ -110,3 +110,9 @@
 2026-10-29 补充完成两个独立验收：GA4 私有探索「星笺功能使用次数（验收）」核对 2026-10-01 至 2026-10-28 的 9 种固定事件，事件数 14、`Usage count` 合计 22；其中 `studio_opened` 为 3 条 / 9 次，`font_downloaded` 为 2 条 / 4 次，明确区分事件条目与计数总和。完整固定表格见 [统计说明](../../../../docs/telemetry.md)，证据为忽略的 `artifacts/acceptance.noindex/ga4-standard-count-evidence.json`，不复制账号、属性编号或完整探索网址入 Git。该固定日期范围已核对，不代表长期持续观察已完成。
 
 独立 `com.starclip.acceptance20261029` 使用新空库、全程暂停；以 `sandbox-exec` 仅限制该进程网络出站，首次离线缓存 `app_started=1` / `studio_opened=1`，86 字节且无身份 / 设备信息。正常退出后再次断网启动，分钟 checkpoint 后核对恢复为 2 / 1；再次正常退出并移除出站限制后启动，自动发送后缓存被删除、界面无待发事件且无成功 / 错误 toast。这只确认 macOS 进程级断网、正常退出 / 重启恢复与恢复联网后的静默补报，不扩大为系统 Wi-Fi 切换、所有网络条件或 Windows 原生断网。验收包在字体展示文案修改前构建，统计代码未更改，不作为最新字体的原生验证。长期持续观察、Windows 原生断网仍未完成，软件未发布，发布须用户明确确认。
+
+## 复制上下文、富文本与搜索索引（2026-10-31，未发布）
+
+- 隐私元数据新增 `appTags`、`originUrl`、`originSources`、`originHosts`，重扫保留；敏感标记写入 `privacyReasons`（「复制来源标记为敏感内容」），只加不减，解除仍需本机复核。来源页面只存协议 + 域名 + 路径，AI 的 `sources` 字段仍只给正文链接。依据：`privacy.rs`、`store/clips.rs::apply_capture`。
+- `clip_rich(clip_id, html)` 随记录级联删除，单条 ≤256 KiB；最新一次复制决定是否保留格式。JSON 备份不导出 HTML，完整数据目录迁移 / 快照保留。文件记录只存路径，不读取文件内容。
+- `clips_fts` 为 contentless trigram 索引，不保存第二份正文；开启 FTS5 secure-delete 使删除立即移除词元。trigram 为 Unicode 大小写不敏感，结果仍由原包含判断确认。3 万条合成数据粗测：少量命中的关键词候选查询约 100 ms → 0.3 ms；几乎全部命中的宽泛关键词因仍需统计总数会略慢，未做真实历史测量。

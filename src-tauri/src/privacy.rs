@@ -112,8 +112,91 @@ pub struct Metadata {
     pub rule_tags: Vec<String>,
     pub link_sources: Vec<String>,
     pub link_hosts: Vec<String>,
+    /// 复制时前台 / 剪贴板所有者应用名，作为标签展示；重新扫描保留。
+    pub app_tags: Vec<String>,
+    /// 浏览器随复制提供的来源页面，只保留协议、域名与路径。
+    pub origin_url: String,
+    pub origin_sources: Vec<String>,
+    pub origin_hosts: Vec<String>,
 }
+
+/// 采集时由系统剪贴板附带的上下文，与正文分开记录。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CaptureContext {
+    /// 复制方通过系统约定标记了敏感 / 临时内容（如密码管理器）。
+    pub concealed: bool,
+    pub app: Option<String>,
+    pub origin_url: Option<String>,
+}
+pub const CONCEALED_REASON: &str = "复制来源标记为敏感内容";
+pub const MAX_APP_TAGS: usize = 8;
+
+/// 规范来源应用名：去空白、去控制字符、截到 40 字，不能作为标签时返回 None。
+pub fn normalize_app_name(name: &str) -> Option<String> {
+    let name: String = name
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect::<String>()
+        .trim()
+        .chars()
+        .take(40)
+        .collect();
+    let name = name.trim().to_owned();
+    (!name.is_empty()).then_some(name)
+}
+
+/// 只接受 http(s) 页面地址，去掉账号、查询与片段，避免把会话参数写入历史。
+pub fn sanitize_origin_url(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw.len() > 2048 {
+        return None;
+    }
+    let mut url = Url::parse(raw).ok()?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return None;
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+    let value = url.to_string();
+    (value.len() <= 1024).then_some(value)
+}
+
+fn origin_facets(origin: &str) -> (Vec<String>, Vec<String>) {
+    match Url::parse(origin)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+    {
+        Some(host) => {
+            let host = host.trim_end_matches('.').to_ascii_lowercase();
+            let sources = source(&host)
+                .map(|s| vec![s.to_owned()])
+                .unwrap_or_default();
+            (sources, vec![host])
+        }
+        None => (vec![], vec![]),
+    }
+}
+
 impl Metadata {
+    /// 合并本次复制的上下文。隐私标记只加不减，解除仍需本机复核。
+    pub fn apply_capture(&mut self, context: &CaptureContext) {
+        if context.concealed {
+            self.privacy_reasons = union(&self.privacy_reasons, &[CONCEALED_REASON.into()]);
+        }
+        if let Some(app) = context.app.as_deref().and_then(normalize_app_name) {
+            if !self.app_tags.contains(&app) && self.app_tags.len() < MAX_APP_TAGS {
+                self.app_tags.push(app);
+            }
+        }
+        if let Some(origin) = context.origin_url.as_deref().and_then(sanitize_origin_url) {
+            let (sources, hosts) = origin_facets(&origin);
+            self.origin_url = origin;
+            self.origin_sources = sources;
+            self.origin_hosts = hosts;
+        }
+    }
     pub fn normalize_image_policy(&mut self, kind: &str) {
         if kind == "image" {
             // This legacy marker described a missing capability, not a secret
@@ -135,7 +218,7 @@ impl Metadata {
         self.privacy_manual || !self.privacy_reasons.is_empty()
     }
     pub fn tags(&self) -> Vec<String> {
-        union(&self.manual_tags, &self.rule_tags)
+        union(&union(&self.manual_tags, &self.rule_tags), &self.app_tags)
     }
     pub fn scanned(
         &self,
@@ -145,7 +228,7 @@ impl Metadata {
         rules: &PrivacyRules,
         reviewed: bool,
     ) -> Self {
-        let scan = scan(content, title, kind, rules);
+        let scan = scan_with_origin(content, title, kind, &self.origin_hosts, rules);
         let mut next = Self {
             record_identity: self.record_identity.clone(),
             privacy_manual: self.privacy_manual,
@@ -166,6 +249,10 @@ impl Metadata {
             rule_tags: scan.tags,
             link_sources: scan.sources,
             link_hosts: scan.hosts,
+            app_tags: self.app_tags.clone(),
+            origin_url: self.origin_url.clone(),
+            origin_sources: self.origin_sources.clone(),
+            origin_hosts: self.origin_hosts.clone(),
         };
         next.normalize_image_policy(kind);
         next
@@ -326,6 +413,17 @@ fn mnemonic_reason(text: &str) -> Option<&'static str> {
 }
 
 pub fn scan(content: &str, title: &str, kind: &str, rules: &PrivacyRules) -> Scan {
+    scan_with_origin(content, title, kind, &[], rules)
+}
+
+/// `origin_hosts` 来自浏览器提供的来源页面，只参与域名规则匹配，不计入正文链接。
+pub fn scan_with_origin(
+    content: &str,
+    title: &str,
+    kind: &str,
+    origin_hosts: &[String],
+    rules: &PrivacyRules,
+) -> Scan {
     // Image content is an internal fingerprint, not recognized image text.
     let content = if kind == "image" { "" } else { content };
     let mut result = Scan {
@@ -463,9 +561,13 @@ pub fn scan(content: &str, title: &str, kind: &str, rules: &PrivacyRules) -> Sca
     for rule in rules.rules.iter().filter(|r| r.enabled) {
         let matched = match rule.condition.as_str() {
             "keyword" => lower.contains(&rule.value.trim().to_lowercase()),
-            "domain" => normalize_rule_host(&rule.value)
-                .ok()
-                .is_some_and(|domain| result.hosts.iter().any(|host| host == &domain)),
+            "domain" => normalize_rule_host(&rule.value).ok().is_some_and(|domain| {
+                result
+                    .hosts
+                    .iter()
+                    .chain(origin_hosts)
+                    .any(|host| host == &domain)
+            }),
             _ => false,
         };
         if matched {
@@ -487,6 +589,40 @@ pub fn scan(content: &str, title: &str, kind: &str, rules: &PrivacyRules) -> Sca
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn capture_context_sanitizes_origin_and_app_names() {
+        assert_eq!(
+            sanitize_origin_url("https://a:b@Example.COM/path/页?token=1#x").as_deref(),
+            Some("https://example.com/path/%E9%A1%B5")
+        );
+        assert_eq!(sanitize_origin_url("file:///Users/fixture"), None);
+        assert_eq!(sanitize_origin_url("javascript:alert(1)"), None);
+        assert_eq!(
+            normalize_app_name(" \u{7}原创应用 ").as_deref(),
+            Some("原创应用")
+        );
+        assert_eq!(normalize_app_name("   "), None);
+        assert_eq!(
+            normalize_app_name(&"长".repeat(60))
+                .unwrap()
+                .chars()
+                .count(),
+            40
+        );
+        let mut metadata = Metadata::default();
+        for index in 0..20 {
+            metadata.apply_capture(&CaptureContext {
+                app: Some(format!("原创应用{index}")),
+                ..CaptureContext::default()
+            });
+        }
+        assert_eq!(metadata.app_tags.len(), MAX_APP_TAGS);
+        let rescanned = metadata.scanned("原创正文", "", "text", &PrivacyRules::default(), true);
+        assert_eq!(
+            rescanned.app_tags, metadata.app_tags,
+            "rescans keep app tags"
+        );
+    }
     #[test]
     fn domains_parse_multiple_urls_and_reject_lookalikes() {
         let scan = scan("HTTP://MP.WEIXIN.QQ.COM./s/a https://linux.do/t/1 https://x.com/u https://t.co/a https://www.bilibili.com/video/a https://b23.tv/b https://x.com.evil.test https://linux.do@evil.test/", "", "text", &PrivacyRules::default());

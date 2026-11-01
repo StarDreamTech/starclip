@@ -54,29 +54,29 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
 
 | 修改主题 | 优先查阅的测试 |
 | --- | --- |
-| 主题、颜色、偏好兼容 | `tests/theme.test.ts`、`tests/color.test.ts`、`tests/api-import.test.ts`、`store.rs` 内测试 |
+| 主题、颜色、偏好兼容 | `tests/theme.test.ts`、`tests/color.test.ts`、`tests/api-import.test.ts`、`store/` 内测试 |
 | 界面语言、文案回退 | `tests/i18n.test.ts`；改文案或数据名称后同时核对 `src/i18n/en*.ts` 与 `hasTranslation` 覆盖测试 |
-| 自定义配色与本地贴纸 | `tests/appearance.test.ts`、`tests/appearance-panel.test.ts`，Rust `appearance.rs` / `store.rs` / ACL；原生使用原创 PNG、隔离应用标识 |
+| 自定义配色与本地贴纸 | `tests/appearance.test.ts`、`tests/appearance-panel.test.ts`，Rust `appearance.rs` / `store/` / ACL；原生使用原创 PNG、隔离应用标识 |
 | 导出反馈、监听释放 | `tests/backup-export.test.ts` |
-| 清理、图片、备份、迁移 | `tests/cleanup.test.ts`、`tests/settings-release.test.ts` 的预览释放 / 迟到响应、`tests/image-clip.test.ts`、`tests/api-import.test.ts`，Rust `store.rs` / `images.rs` / `storage.rs` / `capture.rs` |
+| 清理、图片、备份、迁移 | `tests/cleanup.test.ts`、`tests/settings-release.test.ts` 的预览释放 / 迟到响应、`tests/image-clip.test.ts`、`tests/api-import.test.ts`，Rust `store/` / `images.rs` / `storage.rs` / `capture.rs` |
 | 卡片排版、手写异步结果 | `tests/code-card.test.ts`、`tests/snippets.test.ts`、`tests/handwriting-preview.test.ts`、`tests/handwriting-fonts.test.ts`、Rust `handwriting.rs` |
-| 隐私、来源、标签与历史扫描 | `tests/privacy.test.ts`、`tests/privacy-panels.test.ts`、v3 备份夹具；Rust `privacy.rs` / `store.rs` / `storage.rs`，使用原创或公开 BIP-39 测试向量 |
+| 隐私、来源、标签与历史扫描 | `tests/privacy.test.ts`、`tests/privacy-panels.test.ts`、v3 备份夹具；Rust `privacy.rs` / `store/` / `storage.rs`，使用原创或公开 BIP-39 测试向量 |
 | AI 授权与官方接口 | `tests/ai-api.test.ts`、`tests/privacy-panels.test.ts`；Rust `ai_access.rs`、`ai_bridge.rs`、`src-tauri/tests/ai_stdio.rs`，检查真实主程序 CLI / MCP stdio 与权限一致性 |
-| 产品分享 | `tests/product-share-api.test.ts`、`tests/product-share-panel.test.ts`，Rust `share.rs` / `desktop.rs` / ACL；资产元数据必须与 `public/share/*.png` 一致 |
-| 更新、恢复、版本发布 | `tests/update*.test.ts`、`tests/release.test.ts`，Rust `updater.rs` / `storage.rs` / `store.rs` / ACL |
-| 可选使用统计与接收端 | `tests/telemetry-settings.test.ts`、`tests/telemetry-relay.test.ts`，Rust `telemetry.rs` / `store.rs`；真实 sender 检查默认忽略，显式运行步骤及原生 / GA 验收边界见 `docs/telemetry.md` |
-| 星伴表情、大小与互动 | `tests/starpet*.test.ts`、`src-tauri/src/lib.rs` / `store.rs` / `desktop.rs` |
-| 主窗安全释放、重建与草稿保护 | `tests/window-release.test.ts` / `tests/settings-release.test.ts` 运行真实 App / 子页 setup 与 IPC，`desktop.rs` 请求编号回归；原生核实 WebContent 退出及草稿保留 |
+| 产品分享 | `tests/product-share-api.test.ts`、`tests/product-share-panel.test.ts`，Rust `share.rs` / `desktop/` / ACL；资产元数据必须与 `public/share/*.png` 一致 |
+| 更新、恢复、版本发布 | `tests/update*.test.ts`、`tests/release.test.ts`，Rust `updater.rs` / `storage.rs` / `store/` / ACL |
+| 可选使用统计与接收端 | `tests/telemetry-settings.test.ts`、`tests/telemetry-relay.test.ts`，Rust `telemetry.rs` / `store/`；真实 sender 检查默认忽略，显式运行步骤及原生 / GA 验收边界见 `docs/telemetry.md` |
+| 星伴表情、大小与互动 | `tests/starpet*.test.ts`、`src-tauri/src/lib.rs` / `store/` / `desktop/` |
+| 主窗安全释放、重建与草稿保护 | `tests/window-release.test.ts` / `tests/settings-release.test.ts` 运行真实 App / 子页 setup 与 IPC，`desktop/` 请求编号回归；原生核实 WebContent 退出及草稿保留 |
 
 互动菜单回归集中在 `tests/starpet-desktop-menu.test.ts`：真实 Vue 组件的内存渲染、外部点击 / 焦点 / 显隐、触发器切换、延迟动作、监听释放，以及原生失焦事件的窗口范围。该测试不访问系统剪贴板，也不等于跨应用原生点击实测。
 
-更新回归覆盖默认开启、独立保存、24 小时间隔（含失败 / 重启 / 时钟回退）、关闭排队检查、稳定版本过滤、ready 包保护，以及真实 Vue 提示的延迟响应、忽略单版本与忙碌释放；参见 `tests/update-api.test.ts`、`tests/update-settings.test.ts`、`store.rs` / `updater.rs`。图片隐私回归使用原创图片与显式注入的旧 JSON 原因，验证读取不改数据库、旧备份导入、手动与真实规则保留、图片仍不可授予 AI，详情展示匹配依据不泄漏原文。
+更新回归覆盖默认开启、独立保存、24 小时间隔（含失败 / 重启 / 时钟回退）、关闭排队检查、稳定版本过滤、ready 包保护，以及真实 Vue 提示的延迟响应、忽略单版本与忙碌释放；参见 `tests/update-api.test.ts`、`tests/update-settings.test.ts`、`store/` / `updater.rs`。图片隐私回归使用原创图片与显式注入的旧 JSON 原因，验证读取不改数据库、旧备份导入、手动与真实规则保留、图片仍不可授予 AI，详情展示匹配依据不泄漏原文。
 
 隐私面板回归验证规则保存失败保留草稿、预览后显式扫描，AI 面板验证排除隐私 / 待扫 / 图片、明确 ID 与字段、重复提交、失败和数据变化使预览失效。`api.ts` 新增运行时导入时，同步更新以 data URL 转译加载该文件的既有测试映射；浏览器内存模拟不能替代 Rust 检测或原生授权验收。
 
 当前手写内置化修改已通过自动检查与隔离渲染：覆盖字体下载校验与失败不启用、离线渲染、首次不下载、静态预览及过期结果隔离。目录已扩到 23 款字体与字重，清单检查保证固定版本来源、大小上限、唯一 ID、作者与标签、小预览及按来源分别提供的许可 / 提供说明；全部真实字体已用隔离目录验证 SHA-256、中文字符覆盖及离线 CPU 渲染。`storage.rs` 使用合成字体字节验证 `current/fonts` 的占用、迁移、快照与恢复，并拒绝根目录 / 子路径符号链接；普通测试不需要真实 TTF 或个人数据。原有两款已有隔离原生下载 / 预览 / 导出证据；2026-10-29 追加原「手写体」代表项在线流程与外部「站酷快乐体」下载后断网重启 / 本地预览 / PNG 导出，23 项仍未逐款操作原生 GUI。不要为凑数运行真实应用或读取剪贴板。
 
-暂停偏好回归见 `store.rs::save_settings_with_pause_guard`、`tests/api-import.test.ts` 与设置相关组件检查：`pauseRevision` 旧数据默认 0，Store 在事务内比较期望版本并只在 `paused` 实际变化时递增，拒绝旧草稿覆盖较新暂停选择，含 ABA 变化；前端刷新只同步暂停字段与版本，保留其他草稿，版本不计入 dirty。当前源码自动检查已通过，不能据此声称使用真实剪贴板完成原生采集验收。
+暂停偏好回归见 `store::save_settings_with_pause_guard`、`tests/api-import.test.ts` 与设置相关组件检查：`pauseRevision` 旧数据默认 0，Store 在事务内比较期望版本并只在 `paused` 实际变化时递增，拒绝旧草稿覆盖较新暂停选择，含 ABA 变化；前端刷新只同步暂停字段与版本，保留其他草稿，版本不计入 dirty。当前源码自动检查已通过，不能据此声称使用真实剪贴板完成原生采集验收。
 
 ## 已踩过的坑
 

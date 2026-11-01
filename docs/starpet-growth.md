@@ -88,7 +88,7 @@
 - 重置也须明确确认，只清空成长与装扮、暂停成长，不清空剪贴历史或改变表情 / 颜色 / 大小。导入、重置失败时保留原成长记录。
 - 当前剪贴历史 JSON 备份不含偏好，因此不含成长；需要单独导出成长存档。完整目录迁移包含 SQLite，但新增成长记录随迁移的原生流程仍需单独验收。
 
-实现入口：`src/starpet-growth-catalog.json` 为前后端共用目录，`src/starpet-growth.ts` 提供类型、进度计算、存档校验与浏览器演示，`src/starpet-growth-api.ts` 连接命令 / 事件，`StarPetGrowth.vue` 管理设置页交互；Rust `starpet_growth.rs` 处理成长规则，`store.rs` 事务存储，`desktop.rs` 负责命令、业务成功后的记奖与窗口广播。
+实现入口：`src/starpet-growth-catalog.json` 为前后端共用目录，`src/starpet-growth.ts` 提供类型、进度计算、存档校验与浏览器演示，`src/starpet-growth-api.ts` 连接命令 / 事件，`StarPetGrowth.vue` 管理设置页交互；Rust `starpet_growth.rs` 处理成长规则，`store/` 事务存储，`desktop/` 负责命令、业务成功后的记奖与窗口广播。
 
 ## 验证与后续
 

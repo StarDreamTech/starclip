@@ -47,7 +47,7 @@ struct Locator {
     path: PathBuf,
 }
 
-// A single mutex around this object is also the write gate in desktop.rs.
+// A single mutex around this object is also the write gate in desktop/.
 // Both directories remain locked between a successful switch and process restart.
 pub struct Storage {
     pub current: PathBuf,

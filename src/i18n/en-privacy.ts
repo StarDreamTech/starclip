@@ -17,4 +17,8 @@ export const enPrivacy: Record<string, string> = {
   '链接超过单次扫描上限，尚不能完成判断。': 'There are too many links for one scan; classification is incomplete.',
   '部分链接无法解析，尚不能完成判断。': 'Some links could not be parsed; classification is incomplete.',
   '已保留的隐私依据；可在本机复核后尝试解除。': 'A retained privacy reason; review locally before attempting to remove protection.',
+  '复制来源标记为敏感内容': 'Marked sensitive by the copying app',
+  '复制它的应用（如密码管理器）通过系统约定声明这是敏感或临时内容。': 'The app that copied it (such as a password manager) declared it sensitive or temporary through the system convention.',
+  '复制自：': 'Copied from: ',
+  '来源页面：': 'Source page: ',
 };

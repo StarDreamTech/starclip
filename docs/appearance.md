@@ -28,4 +28,4 @@
 
 桌面版重启读取已保存的外观。完整恢复点与数据目录迁移包含偏好及贴纸；普通剪贴历史 JSON 不包含这些设置。浏览器仅为内存演示，刷新后还原，不伪装持久保存。
 
-实现入口：`src/appearance.ts`、`src/appearance-api.ts`、`src/components/AppearanceSettings.vue`、`src/components/StickerScene.vue`、`src/App.vue`、`src-tauri/src/appearance.rs` 与 `store.rs`。检查与实机边界见 [验证记录](verification.md)。
+实现入口：`src/appearance.ts`、`src/appearance-api.ts`、`src/components/AppearanceSettings.vue`、`src/components/StickerScene.vue`、`src/App.vue`、`src-tauri/src/appearance.rs` 与 `store/`。检查与实机边界见 [验证记录](verification.md)。

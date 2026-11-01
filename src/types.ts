@@ -2,7 +2,7 @@ export interface Clip {
   id: number;
   content: string;
   title: string;
-  kind: 'text' | 'link' | 'code' | 'color' | 'image';
+  kind: 'text' | 'link' | 'code' | 'color' | 'image' | 'file';
   image?: { width: number; height: number; bytes: number } | null;
   language: string | null;
   pinned: boolean;
@@ -19,6 +19,12 @@ export interface Clip {
   manualTags?: string[];
   linkSources?: string[];
   linkHosts?: string[];
+  /** 复制时记录的来源应用，也会出现在 tags 中。 */
+  appTags?: string[];
+  /** 浏览器提供的来源页面，已去掉查询与片段。 */
+  originUrl?: string;
+  /** 复制时附带了 HTML 格式。 */
+  rich?: boolean;
 }
 export interface Group { id: number; name: string; color: string }
 export type UILanguage = 'system' | 'zh-CN' | 'en-US';
@@ -33,6 +39,8 @@ export interface Settings {
   maxHistory: number;
   retentionDays: number;
   alwaysOnTop: boolean;
+  /** 复制后收起主窗口；旧偏好缺省视为开启。 */
+  hideAfterCopy?: boolean;
   shortcut: string;
 }
 export interface HistoryQuery {

@@ -39,7 +39,7 @@ test('totals, kind shares and helpers', () => {
   assert.deepEqual([value.captures, value.new, value.repeat, value.reuse, value.activeDays], [10, 8, 2, 3, 3]);
   assert.equal(value.busiest?.day, 90);
   const rows = kindRows(fixture(30));
-  assert.deepEqual(rows.map(row => row.kind), ['text', 'link', 'code', 'color', 'image']);
+  assert.deepEqual(rows.map(row => row.kind), ['text', 'link', 'code', 'color', 'image', 'file']);
   assert.equal(rows.find(row => row.kind === 'code')!.captures, 5);
   assert.equal(rows.find(row => row.kind === 'color')!.share, 0);
   assert.ok(Math.abs(rows.reduce((sum, row) => sum + row.share, 0) - 1) < 1e-9);

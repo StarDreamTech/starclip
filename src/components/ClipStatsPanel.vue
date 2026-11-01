@@ -19,7 +19,7 @@ const canRelease = computed(() => !clearing.value && !confirmClear.value);
 defineExpose({ canRelease });
 watch(clearing, value => emit('busy', value), { flush: 'sync' });
 
-const kindNames: Record<StatKind, string> = { text: '文本', link: '链接', code: '代码', color: '色彩', image: '图片' };
+const kindNames: Record<StatKind, string> = { text: '文本', link: '链接', code: '代码', color: '色彩', image: '图片', file: '文件' };
 const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 const formatDay = (day: number) => formatDate(dayDate(day), { month: 'numeric', day: 'numeric', timeZone: 'UTC' });
 const summary = computed(() => stats.value ? totals(stats.value) : null);

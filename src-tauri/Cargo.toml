@@ -18,7 +18,7 @@ required-features = ["desktop"]
 
 [features]
 default = ["desktop"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:arboard", "dep:tauri-plugin-global-shortcut", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-dialog", "dep:objc2", "dep:objc2-app-kit", "dep:windows-sys", "dep:tauri-plugin-updater", "dep:tauri-plugin-autostart", "dep:plist", "dep:windows-registry", "dep:sys-locale"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:arboard", "dep:tauri-plugin-global-shortcut", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-dialog", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:windows-sys", "dep:tauri-plugin-updater", "dep:tauri-plugin-autostart", "dep:plist", "dep:windows-registry", "dep:sys-locale"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [], optional = true }
@@ -49,11 +49,12 @@ sys-locale = { version = "0.3", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", optional = true }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPasteboard"], optional = true }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSWorkspace"], optional = true }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSArray"], optional = true }
 plist = { version = "1", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.61", default-features = false, features = ["Win32_System_DataExchange", "Win32_System_Console"], optional = true }
+windows-sys = { version = "0.61", default-features = false, features = ["Win32_Foundation", "Win32_System_DataExchange", "Win32_System_Console", "Win32_System_Memory", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"], optional = true }
 windows-registry = { version = "0.6", optional = true }
 
 [profile.dev]

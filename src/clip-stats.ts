@@ -1,6 +1,6 @@
 // 星迹统计：本机剪贴活动计数。只有次数、大小与本地时间分布，没有正文或记录 ID。
 export const clipStatsDesktopAvailable = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-export const statKinds = ['text', 'link', 'code', 'color', 'image'] as const;
+export const statKinds = ['text', 'link', 'code', 'color', 'image', 'file'] as const;
 export type StatKind = typeof statKinds[number];
 export const statRanges = [7, 30, 90, 365] as const;
 export type KindActivity = { new: number; repeat: number; reuse: number; size: number };
@@ -18,7 +18,7 @@ export type ClipStats = {
 export type StatBar = { key: number; label: string; firstDay: number; lastDay: number; captures: number; reuse: number; byKind: Record<StatKind, number> };
 
 const DAY_MS = 86_400_000;
-const emptyKinds = (): Record<StatKind, number> => ({ text: 0, link: 0, code: 0, color: 0, image: 0 });
+const emptyKinds = (): Record<StatKind, number> => ({ text: 0, link: 0, code: 0, color: 0, image: 0, file: 0 });
 const captures = (day: Pick<DailyActivity, 'new' | 'repeat'>) => day.new + day.repeat;
 
 /** Offset the native side uses to group buckets into this computer's local days. */
@@ -101,12 +101,12 @@ export function demoClipStats(days: number, utcOffsetMinutes = 0, now = Date.now
   const firstDay = lastDay - days + 1;
   const daily: DailyActivity[] = [];
   const hours = Array<number>(24).fill(0), weekdays = Array<number>(7).fill(0);
-  const kinds: Record<StatKind, KindActivity> = { text: { new: 0, repeat: 0, reuse: 0, size: 0 }, link: { new: 0, repeat: 0, reuse: 0, size: 0 }, code: { new: 0, repeat: 0, reuse: 0, size: 0 }, color: { new: 0, repeat: 0, reuse: 0, size: 0 }, image: { new: 0, repeat: 0, reuse: 0, size: 0 } };
+  const kinds: Record<StatKind, KindActivity> = { text: { new: 0, repeat: 0, reuse: 0, size: 0 }, link: { new: 0, repeat: 0, reuse: 0, size: 0 }, code: { new: 0, repeat: 0, reuse: 0, size: 0 }, color: { new: 0, repeat: 0, reuse: 0, size: 0 }, image: { new: 0, repeat: 0, reuse: 0, size: 0 }, file: { new: 0, repeat: 0, reuse: 0, size: 0 } };
   if (!demoCleared) for (let day = Math.max(firstDay, lastDay - 59); day <= lastDay; day++) {
     const weekday = (day + 4) % 7;
     const weekend = weekday === 0 || weekday === 6;
     const base = weekend ? 4 : 14 + (day % 5) * 3;
-    const split: Record<StatKind, number> = { text: Math.round(base * 0.45), link: Math.round(base * 0.25), code: Math.round(base * 0.18), color: day % 3 === 0 ? 1 : 0, image: Math.round(base * 0.1) };
+    const split: Record<StatKind, number> = { text: Math.round(base * 0.45), link: Math.round(base * 0.25), code: Math.round(base * 0.18), color: day % 3 === 0 ? 1 : 0, image: Math.round(base * 0.1), file: day % 4 === 0 ? 1 : 0 };
     const entry: DailyActivity = { day, captures: {}, new: 0, repeat: 0, reuse: Math.round(base / 3) };
     for (const kind of statKinds) {
       const count = split[kind];

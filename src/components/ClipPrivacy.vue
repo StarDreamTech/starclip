@@ -3,13 +3,14 @@ import { errorText, t } from '../i18n';
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { Clip } from '../types'
 import { api } from '../api'
-import { normalizeTags, pendingClip, privacyReasonExplanation, protectedClip, sourceNames } from '../privacy'
+import { normalizeTags, originHost, pendingClip, privacyReasonExplanation, protectedClip, sourceNames } from '../privacy'
 const props = defineProps<{ clip: Clip; revision: number; disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean]; changed: [] }>()
 const tags = ref(''), busy = ref(false), reviewed = ref(false), error = ref(''), status = ref('')
 const sourcesLabel = computed(() => (props.clip.linkSources ?? []).map(source => t(sourceNames[source] ?? source)).join(t('、')) || t('其他网站'))
 const manualTags = computed(() => props.clip.manualTags ?? props.clip.tags ?? [])
-const automaticTags = computed(() => (props.clip.tags ?? []).filter(tag => !manualTags.value.includes(tag)))
+const appTags = computed(() => props.clip.appTags ?? [])
+const automaticTags = computed(() => (props.clip.tags ?? []).filter(tag => !manualTags.value.includes(tag) && !appTags.value.includes(tag)))
 const isPrivate = computed(() => protectedClip(props.clip))
 let disposed = false
 watch(() => [props.clip.id, props.clip.tags], () => { tags.value = manualTags.value.join(t('，')); reviewed.value = false }, { immediate: true })
@@ -29,6 +30,8 @@ onBeforeUnmount(() => { disposed = true; emit('busy', false) })
   <fieldset class="clip-privacy" :disabled="busy || disabled">
     <h3>{{ t('标签、来源与隐私') }}</h3>
     <p v-if="clip.linkHosts?.length">{{ t('来源：') }}{{ sourcesLabel }}<br /><small>{{ clip.linkHosts.join(' · ') }}</small></p>
+    <p v-if="appTags.length" class="clip-origin">{{ t('复制自：') }}{{ appTags.join(t('、')) }}</p>
+    <p v-if="clip.originUrl" class="clip-origin">{{ t('来源页面：') }}<small :title="clip.originUrl">{{ originHost(clip) || clip.originUrl }}</small><br /><small class="clip-origin-url">{{ clip.originUrl }}</small></p>
     <label class="privacy-tags-label">{{ t('普通标签') }}<input @keydown.enter.prevent v-model="tags" :aria-label="t('普通标签')" :placeholder="t('用逗号分隔，例如 工作，设计')" maxlength="1340" /></label>
     <div class="privacy-buttons"><button type="button" class="button subtle" :disabled="JSON.stringify(normalizeTags(tags)) === JSON.stringify(manualTags)" @click="saveTags">{{ t('保存标签') }}</button></div>
     <p v-if="automaticTags.length" class="field-note">{{ t('自动标签：') }}{{ automaticTags.join('、') }}{{ t('（修改规则后重扫可更新）') }}</p>

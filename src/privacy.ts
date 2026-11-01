@@ -22,10 +22,14 @@ export function privacyReasonExplanation(reason: string): string {
     '内容超过扫描上限': '内容超过本地扫描上限，尚不能完成判断。',
     '链接数量超过扫描上限': '链接超过单次扫描上限，尚不能完成判断。',
     '链接解析未完成': '部分链接无法解析，尚不能完成判断。',
+    '复制来源标记为敏感内容': '复制它的应用（如密码管理器）通过系统约定声明这是敏感或临时内容。',
   } as Record<string, string>)[reason] ?? '已保留的隐私依据；可在本机复核后尝试解除。';
 }
+export function originHost(clip: Clip): string {
+  try { return clip.originUrl ? new URL(clip.originUrl).hostname.toLowerCase() : '' } catch { return '' }
+}
 export function matchesMetadata(clip: Clip, sources: string[], tag: string, privacy: string, revision: number): boolean {
-  return (!sources.length || sources.some(source => source.startsWith('host:') ? clip.linkHosts?.includes(source.slice(5)) : clip.linkSources?.includes(source)))
+  return (!sources.length || sources.some(source => source.startsWith('host:') ? clip.linkHosts?.includes(source.slice(5)) || originHost(clip) === source.slice(5) : clip.linkSources?.includes(source)))
     && (!tag || !!clip.tags?.includes(tag))
     && (privacy === 'all' || (privacy === 'private' ? protectedClip(clip) : privacy === 'pending' ? pendingClip(clip, revision) : !protectedClip(clip) && !pendingClip(clip, revision)));
 }

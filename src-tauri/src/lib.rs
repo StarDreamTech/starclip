@@ -4,10 +4,13 @@ pub mod appearance;
 pub mod capture;
 pub mod clip_stats;
 #[cfg(feature = "desktop")]
+mod clipboard_source;
+#[cfg(feature = "desktop")]
 mod desktop;
 pub mod handwriting;
 pub mod images;
 pub mod privacy;
+pub mod search_index;
 pub mod share;
 pub mod starpet_growth;
 #[cfg(feature = "desktop")]

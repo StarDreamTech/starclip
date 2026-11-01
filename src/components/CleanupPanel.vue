@@ -8,7 +8,7 @@ import UiSelect from './UiSelect.vue';
 
 const sizeUnits = [{ value: 'KiB', label: 'KiB' }, { value: 'MiB', label: 'MiB' }] as const;
 const ageChoices = computed(() => [{ value: '0', label: t('不限时间') }, ...[7, 30, 90].map(value => ({ value: String(value), label: t('{count} 天前', { count: value }) })), { value: 'custom', label: t('自定义天数') }]);
-const kindChoices = computed(() => [{ value: 'all', label: t('全部类型') }, { value: 'text', label: t('文本') }, { value: 'link', label: t('链接') }, { value: 'code', label: t('代码') }, { value: 'color', label: t('色彩') }, { value: 'image', label: t('图片') }] as const);
+const kindChoices = computed(() => [{ value: 'all', label: t('全部类型') }, { value: 'text', label: t('文本') }, { value: 'link', label: t('链接') }, { value: 'code', label: t('代码') }, { value: 'color', label: t('色彩') }, { value: 'image', label: t('图片') }, { value: 'file', label: t('文件') }] as const);
 const emit = defineEmits<{ busy: [value: boolean]; changed: [] }>();
 const size = ref<string | number>('0');
 const sizeUnit = ref<'KiB' | 'MiB'>('KiB');
@@ -26,7 +26,7 @@ const stale = ref('');
 const previewRegion = ref<HTMLElement>();
 const resultRegion = ref<HTMLElement>();
 const busy = computed(() => operation.value !== null);
-const kindNames = computed<Record<CleanupFilter['kind'], string>>(() => ({ all: t('全部类型'), text: t('文本'), link: t('链接'), code: t('代码'), color: t('色彩'), image: t('图片') }));
+const kindNames = computed<Record<CleanupFilter['kind'], string>>(() => ({ all: t('全部类型'), text: t('文本'), link: t('链接'), code: t('代码'), color: t('色彩'), image: t('图片'), file: t('文件') }));
 const dateLabel = (date: Date) => formatDate(date, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 const sizeBytes = computed(() => Math.floor(Number(size.value) * (sizeUnit.value === 'MiB' ? 1048576 : 1024)));
 const days = computed(() => Number(age.value === 'custom' ? customDays.value : age.value));

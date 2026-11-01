@@ -16,7 +16,7 @@ pub const RETENTION_DAYS: i64 = 400;
 pub const MAX_RANGE_DAYS: u32 = 366;
 pub const TOP_HOSTS: usize = 8;
 const MAX_OFFSET_MINUTES: i32 = 14 * 60;
-pub const KINDS: [&str; 5] = ["text", "link", "code", "color", "image"];
+pub const KINDS: [&str; 6] = ["text", "link", "code", "color", "image", "file"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {

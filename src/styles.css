@@ -136,3 +136,6 @@ textarea::-webkit-resizer{background:linear-gradient(135deg,transparent 53%,var(
 }
 
 .privacy-match-reasons{font-size:11px;line-height:1.7;margin:12px 0}.privacy-match-reasons ul{padding-left:18px;margin:8px 0}.privacy-match-reasons li{margin:8px 0}.privacy-match-reasons li strong{font-size:11px;color:var(--text);overflow-wrap:anywhere}.privacy-match-reasons li p{font-size:10px;margin:2px 0;color:var(--muted)}.privacy-match-reasons small{display:block;color:var(--muted);font-size:10px;line-height:1.7}
+.clip-origin-url{color:var(--faint);font-size:10px;user-select:text;-webkit-user-select:text}
+.quick-key{margin-left:auto;margin-right:6px;font:600 10px/1 "SFMono-Regular",Consolas,monospace;color:var(--gold);border:1px solid color-mix(in srgb,var(--gold) 45%,transparent);border-radius:5px;padding:3px 5px;background:var(--input)}
+.file-preview{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px;font-size:11px;color:var(--muted)}.file-preview li{display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.file-preview .file-more{color:var(--faint)}
