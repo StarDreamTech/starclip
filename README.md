@@ -198,7 +198,7 @@ npm run tauri icon public/starclip.svg
 npm run tauri dev
 ```
 
-浏览器交互预览：`npm run dev`。桌面打包：`npm run tauri build`。
+一键本地预览桌面应用（自动安装依赖后启动）：`npm run app`。浏览器交互预览：`npm run dev`。桌面打包：`npm run tauri build`。
 
 ```sh
 npm test

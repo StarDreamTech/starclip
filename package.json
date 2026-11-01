@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 1420",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "tauri": "tauri",
+    "app": "npm install && npm run tauri dev",
     "version:check": "node scripts/version.mjs check",
     "version:bump": "node scripts/version.mjs bump"
   },
