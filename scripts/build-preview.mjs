@@ -40,3 +40,6 @@ writeFileSync(join(output, 'preview-info.json'), JSON.stringify({
   updaterEndpoints: [], signing: 'local ad-hoc', published: false,
 }, null, 2) + '\n');
 console.log(`\n本地预览应用：${app}\n本地预览安装包：${dmg}`);
+// Last line on its own so it can be copied straight into a terminal.
+const openCommand = `open "${app.replace(/(["\\$`])/g, '\\$1')}"`;
+console.log(`\n一键打开（复制下一行到终端）：\n${openCommand}`);
