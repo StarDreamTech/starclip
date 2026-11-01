@@ -1,4 +1,4 @@
-import type { AppState, Clip, CleanupFilter, CleanupPreview, CleanupResult, DataDirectoryMode, DataDirectoryPlan, DataLocation, Group, HistoryQuery, HandwritingAssets, HandwritingOptions, Settings } from './types';
+import type { AppState, Clip, CleanupFilter, CleanupPreview, CleanupResult, DataDirectoryMode, DataDirectoryPlan, DataLocation, Group, HistoryQuery, HandwritingAssets, HandwritingFontProgress, HandwritingOptions, Settings } from './types';
 import { download, languages } from './snippets';
 import { t } from './i18n/index.ts';
 import { analyzeDemoClip, matchesMetadata, pendingClip, protectedClip } from './privacy';
@@ -162,6 +162,13 @@ export const api = {
   async downloadHandwritingFont(id: string): Promise<HandwritingAssets> {
     if (!isDesktop) throw new Error('请在桌面版下载字体并生成月光笺。');
     return handwritingInvoke('download_handwriting_font', { id });
+  },
+  /** Native download progress events; resolves to an unsubscribe function. */
+  async onHandwritingFontProgress(callback: (progress: HandwritingFontProgress) => void): Promise<() => void> {
+    if (!isDesktop) return () => {};
+    try {
+      return await (await import('@tauri-apps/api/event')).listen<HandwritingFontProgress>('handwriting-font-progress', event => callback(event.payload));
+    } catch { return () => {}; }
   },
   async renderHandwriting(options: HandwritingOptions): Promise<string> {
     if (!isDesktop) throw new Error('请在桌面版中生成月光笺。');

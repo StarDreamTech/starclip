@@ -1705,6 +1705,13 @@ async fn handwriting_assets(
         .await
         .map_err(|_| "无法读取手写字体。".to_string())
 }
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FontDownloadProgress<'a> {
+    id: &'a str,
+    received: u64,
+    total: u64,
+}
 #[tauri::command]
 async fn download_handwriting_font(
     app: AppHandle,
@@ -1726,7 +1733,17 @@ async fn download_handwriting_font(
             return Ok(installed);
         }
         // Download without holding the data write gate; clipboard capture stays responsive.
-        let bytes = crate::handwriting::download_font_bytes(&id)?;
+        let bytes = crate::handwriting::download_font_bytes_with(&id, |received, total| {
+            let _ = app.emit_to(
+                "main",
+                "handwriting-font-progress",
+                FontDownloadProgress {
+                    id: &id,
+                    received,
+                    total,
+                },
+            );
+        })?;
         let storage = write_guard(&context)?;
         if storage.current != directory {
             return Err("数据目录已变化，请重新下载字体。".into());
