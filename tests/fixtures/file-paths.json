@@ -1,0 +1,21 @@
+[
+  {"path":"/original-fixture/原创笔记.txt","valid":true},
+  {"path":"C:\\Original Fixture\\note.txt","valid":true},
+  {"path":"C:/Original/Folder/note.txt","valid":true},
+  {"path":"\\\\original-server\\original-share\\note.txt","valid":true},
+  {"path":"\\\\original-server/original-share\\note.txt","valid":true},
+  {"path":"\\\\?\\C:\\Original Fixture\\note.txt","valid":true},
+  {"path":"\\\\?\\UNC\\original-server\\original-share\\note.txt","valid":true},
+  {"path":"\\\\?\\unc\\original-server/original-share\\note.txt","valid":true},
+  {"path":"relative/note.txt","valid":false},
+  {"path":"C:relative.txt","valid":false},
+  {"path":"https://example.test/note.txt","valid":false},
+  {"path":"\\original-server\\share","valid":false},
+  {"path":"\\\\original-server","valid":false},
+  {"path":"\\\\original-server\\","valid":false},
+  {"path":"\\\\.\\PhysicalDrive0","valid":false},
+  {"path":"\\\\?\\GLOBALROOT\\Device\\HarddiskVolume1\\note.txt","valid":false},
+  {"path":"\\\\?\\C:relative.txt","valid":false},
+  {"path":"/original-fixture/line\nbreak.txt","valid":false},
+  {"path":"/original-fixture/nul\u0000byte.txt","valid":false}
+]

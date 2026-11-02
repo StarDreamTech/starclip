@@ -78,6 +78,17 @@ impl Store {
     }
 
     pub fn set_telemetry_enabled(&self, enabled: bool) -> Result<TelemetryPreferences> {
+        self.set_telemetry_mode(if enabled {
+            crate::telemetry::TelemetryMode::Session
+        } else {
+            crate::telemetry::TelemetryMode::Off
+        })
+    }
+
+    pub fn set_telemetry_mode(
+        &self,
+        mode: crate::telemetry::TelemetryMode,
+    ) -> Result<TelemetryPreferences> {
         // Only an explicit local choice can replace damaged preferences. This
         // never touches ordinary settings or retention.
         let mut preferences = TelemetryPreferences {
@@ -85,7 +96,7 @@ impl Store {
                 .telemetry_preferences()
                 .map(|value| value.revision)
                 .unwrap_or(0),
-            enabled,
+            mode,
         };
         preferences.revision = preferences
             .revision

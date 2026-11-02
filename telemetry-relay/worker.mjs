@@ -2,7 +2,7 @@
 export const EVENT_NAMES = Object.freeze([
   'app_started', 'studio_opened', 'card_exported', 'backup_exported',
   'backup_imported', 'update_check_completed', 'font_downloaded',
-  'update_download_completed', 'update_install_started', 'app_active',
+  'update_download_completed', 'update_install_started', 'app_active', 'app_running',
 ]);
 const V2_EVENT_NAMES = EVENT_NAMES.slice(0, 9);
 const MAX_BODY_BYTES = 4096;
@@ -40,15 +40,38 @@ function validDay(day, now = Date.now()) {
     && time >= Date.UTC(2026, 0, 1) && time <= now + 86_400_000;
 }
 
-export function validPayload(value) {
+// Disjoint, exact shapes distinguish the two historical protocols both named v3.
+// Database schema and telemetry protocol numbers are independent.
+function identity(value) {
   const fields = ['version', 'sessionId', 'appVersion', 'platform', 'events'];
-  // v3 adds a random install ID (persisted only while statistics are on) and its UTC creation day.
-  const v3 = value?.version === 3 && exactKeys(value, [...fields, 'device', 'installId', 'firstSeenDay'])
-    && typeof value.installId === 'string' && /^[a-f0-9]{32}$/.test(value.installId)
-    && value.installId !== value.sessionId && validDay(value.firstSeenDay);
-  const allowed = value?.version === 3 ? EVENT_NAMES : V2_EVENT_NAMES;
-  return ((value?.version === 1 && exactKeys(value, fields))
-      || ((value?.version === 2 && exactKeys(value, [...fields, 'device'])) || v3) && validDevice(value.device, value.platform))
+  const id = candidate => typeof candidate === 'string' && /^[a-f0-9]{32}$/.test(candidate) && candidate !== value.sessionId;
+  if (value?.version === 1 && exactKeys(value, fields)) return { mode: 'session', allowed: V2_EVENT_NAMES };
+  if (!validDevice(value?.device, value?.platform)) return null;
+  if (value.version === 2 && exactKeys(value, [...fields, 'device'])) return { mode: 'session', allowed: V2_EVENT_NAMES };
+  if (value.version === 3) {
+    if (exactKeys(value, [...fields, 'device', 'installId', 'firstSeenDay']) && id(value.installId) && validDay(value.firstSeenDay)) {
+      return { mode: 'installation', id: value.installId, day: value.firstSeenDay, legacyEngagement: true, allowed: EVENT_NAMES.filter(name => name !== 'app_running') };
+    }
+    const installed = Object.hasOwn(value, 'installationId');
+    if (exactKeys(value, [...fields, 'device', ...(installed ? ['installationId'] : [])]) && (!installed || id(value.installationId))) {
+      return { mode: installed ? 'installation' : 'session', id: value.installationId, allowed: EVENT_NAMES.filter(name => name !== 'app_active') };
+    }
+  }
+  if (value.version === 4) {
+    const installed = value.identityMode === 'installation';
+    const dated = Object.hasOwn(value, 'firstSeenDay');
+    if (!['session', 'installation'].includes(value.identityMode)
+        || !exactKeys(value, [...fields, 'device', 'identityMode', ...(installed ? ['installId', ...(dated ? ['firstSeenDay'] : [])] : [])])
+        || (installed && (!id(value.installId) || (dated && !validDay(value.firstSeenDay))))) return null;
+    return { mode: value.identityMode, id: value.installId, day: value.firstSeenDay,
+      allowed: installed ? EVENT_NAMES : V2_EVENT_NAMES };
+  }
+  return null;
+}
+
+export function validPayload(value) {
+  const shape = identity(value);
+  return !!shape
     && typeof value.sessionId === 'string' && /^[a-f0-9]{32}$/.test(value.sessionId)
     && typeof value.appVersion === 'string' && value.appVersion.length <= 64
     && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(value.appVersion)
@@ -56,7 +79,8 @@ export function validPayload(value) {
     && Array.isArray(value.events) && value.events.length >= 1 && value.events.length <= EVENT_NAMES.length
     && new Set(value.events.map(event => event?.name)).size === value.events.length
     && value.events.every(event => exactKeys(event, ['name', 'count'])
-      && allowed.includes(event.name) && Number.isInteger(event.count) && event.count >= 1 && event.count <= 100);
+      && shape.allowed.includes(event.name) && Number.isInteger(event.count) && event.count >= 1 && event.count <= 100
+      && !(value.version === 4 && event.name === 'app_running' && event.count !== 1));
 }
 
 function deviceProperties(payload) {
@@ -130,17 +154,16 @@ function gaClientId(hex) {
 }
 
 function googleBody(payload) {
-  // v1/v2: per-run random ID only. v3: the install ID, so GA can count users, DAU and retention.
-  const v3 = payload.version === 3;
-  const session = v3 ? {
-    // GA needs a numeric session_id and engagement time > 0 to count active users.
-    // This is a fixed marker, not measured engagement; do not read GA engagement time.
+  const user = identity(payload);
+  const session = payload.version >= 3 ? {
     session_id: String(Number.parseInt(payload.sessionId.slice(0, 8), 16) + 1),
-    engagement_time_msec: 1,
+    // Preserve the historical main-v3 mapping; new v4 never invents engagement.
+    ...(user.legacyEngagement ? { engagement_time_msec: 1 } : {}),
+    ...(payload.version === 4 || !user.legacyEngagement ? { identity_mode: user.mode } : {}),
   } : {};
   return {
-    client_id: gaClientId(v3 ? payload.installId : payload.sessionId),
-    ...(v3 ? { user_properties: { first_seen_day: { value: payload.firstSeenDay } } } : {}),
+    client_id: gaClientId(user.id ?? payload.sessionId),
+    ...(user.day ? { user_properties: { first_seen_day: { value: user.day } } } : {}),
     non_personalized_ads: true,
     consent: { ad_user_data: 'DENIED', ad_personalization: 'DENIED' },
     events: payload.events.map(event => ({

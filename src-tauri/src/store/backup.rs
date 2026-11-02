@@ -47,7 +47,7 @@ impl Store {
         }
         let json = serde_json::to_string_pretty(&Backup {
             format: "starclip".into(),
-            version: 3,
+            version: 4,
             exported_at: now(),
             clips,
             groups,
@@ -64,7 +64,7 @@ impl Store {
         let backup: Backup = serde_json::from_str(json)
             .map_err(|_| "无法读取备份文件，请选择星笺导出的 JSON 文件。")?;
         if backup.format != "starclip"
-            || ![1, 2, 3].contains(&backup.version)
+            || ![1, 2, 3, 4].contains(&backup.version)
             || (backup.version == 1 && !backup.images.is_empty())
         {
             return Err("不支持的备份版本。".into());
@@ -137,6 +137,18 @@ impl Store {
             {
                 return Err("备份包含无效分组或记录。".into());
             }
+            if clip.kind == "file" {
+                let content = match clip.entries.as_deref() {
+                    Some(entries) => file_content(entries)?,
+                    None if backup.version < 4 => file_content(&unknown_entries(&clip.content)?)?,
+                    None => return Err("备份文件记录缺少路径列表。".into()),
+                };
+                if content != clip.content || clip.language.is_some() {
+                    return Err("备份文件记录与路径列表不一致。".into());
+                }
+            } else if clip.entries.is_some() {
+                return Err("备份中非文件记录带有路径列表。".into());
+            }
             if (clip.kind == "image"
                 && (backup.version < 2 || clip.image.is_none() || clip.language.is_some()))
                 || (clip.kind != "image" && clip.image.is_some())
@@ -208,11 +220,7 @@ impl Store {
         for clip in backup.clips {
             let group_id = clip.group_id.and_then(|id| group_mapping.get(&id).copied());
             let is_image = clip.kind == "image";
-            let predicate = if is_image {
-                "kind='image'"
-            } else {
-                "kind<>'image'"
-            };
+            let predicate = identity_predicate(&clip.kind);
             let existed: Option<i64> = tx
                 .query_row(
                     &format!("SELECT id FROM clips WHERE content=?1 AND {predicate}"),
@@ -241,6 +249,13 @@ impl Store {
             let id = existed.unwrap_or_else(|| tx.last_insert_rowid());
             if let Some(image) = prepared.remove(&clip.id) {
                 Self::put_image(&tx, id, &image)?;
+            }
+            if clip.kind == "file" {
+                let entries = match clip.entries.as_ref() {
+                    Some(entries) => entries.clone(),
+                    None => unknown_entries(&clip.content)?,
+                };
+                Self::put_file_entries(&tx, id, &entries)?;
             }
             let mut metadata = read_metadata(&tx, id)?;
             metadata.privacy_manual |=

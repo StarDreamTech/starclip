@@ -4,6 +4,16 @@ import { t } from './i18n/index.ts';
 import { analyzeDemoClip, matchesMetadata, pendingClip, protectedClip } from './privacy';
 import type { PrivacyRules, PrivacyScan } from './privacy';
 
+function absoluteFilePath(path: string): boolean {
+  if (path.startsWith('/')) return true;
+  const normalized = path.replaceAll('\\', '/');
+  const drive = (value: string) => /^[A-Za-z]:\//.test(value);
+  const unc = (value: string) => { const parts = value.split('/').slice(0, 2); return parts.length === 2 && parts.every(part => !!part && !['.', '..', '?'].includes(part)); };
+  if (drive(normalized)) return true;
+  if (normalized.startsWith('//?/')) { const rest = normalized.slice(4); return /^UNC\//i.test(rest) ? unc(rest.slice(4)) : drive(rest); }
+  return normalized.startsWith('//') && unc(normalized.slice(2));
+}
+
 export const isDesktop = '__TAURI_INTERNALS__' in window;
 // Original 320×180 moon-and-hills fixture, drawn programmatically; no clipboard or external assets.
 const demoImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAC0CAIAAABqhmJGAAAEQklEQVR42u3cX3LTZhTG4W8ZJQVaoBRKueoC+JdASiDACnrb6Z66ieyml1kDkwVg4hJCAjiKHUnvd56Z59pCR+eHbNmT9sNPj4BQzQhAwICAAQGDgAEBAwIGvhrwYyCUgEHAwDQB//wYCCVgEDAgYEDAUCjgJ0AoAYOAAQEDAgYBAwEB33oChBIwZAf8FAjVrt16CoQSMAgYEDCXc3R4YAgCJrXeJaMQMKn11mz4/X//LgiYHuot1fAy3eL1LgN+Rq5z9ZY465N6jwMuvQDt2u1nRPtcb43z/aLe8ldfwJ00XLBeAc8o4DoryKbqFfBcAq72JpCN1CvgWQR89jGMZUXAKQF//YsQ+8oF6hWwOzBuv/EBb0/uVL3bcMa3br/HDVcfTpvJv0O9CDg4YBhar4AFjIDTA76zDbO1IuDy8xEwAhYwTBGwhgWMgLMD3oHZWhnwccN15yNgBJwc8NadHZitiwS8UHY+AkbAAoZJAy7bsIDpJOCaDQuYfgIu2HDb+mUH5mxww5WGswj4OczZ0IA/ZVxiOAKm24Yvl3FW/AKm54AHZZx49xYwJRo+n3Qf770FTMWAu/nwLGA0HPzoS8BoOPjBtYDRcPDXTouAX0CWK6g3dRQCpnrD0XNoW3dfQKh1082fgICpmHE35y5gamXc2VkLeLWjwwNDQMCp9S4ZBQJOrVfDzDbgXb7jVL2mwewI+EINGwICBjYd8I93d4FQAobogH/dBUIJGAQMTBTwn0AoAYOAAQEDAgYBAwKmY0eHB4YgYFLrXTKKSQO+9xKGOvOnDgxkKgJm3YaNQsCkNmwIAgYEDAIGBAwIGFgV8B4QSsAgYGCagO/vARvx8Zct4x6xXb+/B6zv5LelYx5UwLDJekduWMCw4XrHbFjAkH0HfgWs71S94x1UwLDJhkc+ooAhmIBBwICAgYEB//YKCCVgyA74NRBKwCDgufr4xbrLjIBD6/3/p22uNAIOrVfDCNgdGATsMzAIGDgJeB8I1a4/2AdCCRgEDAgYGBbwjQf7QCgBg4CBiQJ+A1fnj/2/RlZqvAImslJtC5jOc62QtIAplGt/Sbcbv7+B06oVu6LneV8sASPa4JgFrFiCexawaAmOeRHwWzomrSliHu/6Cli0BMcsYNESHLOARUtwzG2q9+6IlvW7a3P4II5ouVx3bW5P1RAtF++uDX7Rh2+5IlaWod21tV/3HeuwmqwTXbui10W0jKCN8/+EYiEs4Mo9Wyx6C7jjnq0R5QLOrdrSIOBhbj58Nz7LgYABAfPJ83/+HoE5C5iAUFUtYPrMVdICprdi9SxgxVbhogtYtHpGwKIVs4BRrJhnF7BpilbMuRvYTFO0es5dv2aaihVz7gY20xStnnPXr1Wepgz0nL6Brc5Abbmk+9vA1uVYrS/TVj3aGTUXFXIJGAQMCBgQMAgYEDAgYEDAIGBAwICAQcBAog95oc6u5iG0XAAAAABJRU5ErkJggg==';
@@ -102,7 +112,7 @@ export const api = {
   },
   async previewCleanup(filter: CleanupFilter): Promise<CleanupPreview> {
     if (isDesktop) return invoke('preview_cleanup', { filter });
-    if (!Number.isSafeInteger(filter.minBytes) || filter.minBytes < 0 || !Number.isSafeInteger(filter.olderThanDays) || filter.olderThanDays < 0 || filter.olderThanDays > 36500 || !['all', 'text', 'link', 'code', 'color', 'image'].includes(filter.kind) || typeof filter.includeGrouped !== 'boolean') throw new Error('清理条件无效，请检查大小和天数。');
+    if (!Number.isSafeInteger(filter.minBytes) || filter.minBytes < 0 || !Number.isSafeInteger(filter.olderThanDays) || filter.olderThanDays < 0 || filter.olderThanDays > 36500 || !['all', 'text', 'link', 'code', 'color', 'image', 'file'].includes(filter.kind) || typeof filter.includeGrouped !== 'boolean') throw new Error('清理条件无效，请检查大小和天数。');
     const cutoff = Date.now() - filter.olderThanDays * 86400000;
     const clips = demo.clips.filter(c => !c.pinned && !c.keepForever && (filter.includeGrouped || c.groupId === null)
       && (filter.minBytes === 0 || contentBytes(c) > filter.minBytes)
@@ -178,12 +188,12 @@ export const api = {
     if (isDesktop) return invoke('get_state', { query });
     const counts: Record<string, number> = {}, groupCounts: Record<string, number> = {};
     const inFilter = (clip: Clip, filter = 'all') => filter === 'all' || (filter === 'pinned' && clip.pinned) || (filter === 'kept' && clip.keepForever) || (filter === 'link' ? !!clip.linkHosts?.length || clip.kind === 'link' : filter === clip.kind) || filter === `group-${clip.groupId}`;
-    for (const key of ['all', 'pinned', 'kept', 'text', 'link', 'code', 'color', 'image']) counts[key] = demo.clips.filter(clip => inFilter(clip, key)).length;
+    for (const key of ['all', 'pinned', 'kept', 'text', 'link', 'code', 'color', 'image', 'file']) counts[key] = demo.clips.filter(clip => inFilter(clip, key)).length;
     for (const clip of demo.clips) if (clip.groupId !== null) groupCounts[clip.groupId] = (groupCounts[clip.groupId] ?? 0) + 1;
     const term = (query.query ?? '').trim().toLocaleLowerCase();
     const matches = demo.clips.filter(clip => inFilter(clip, query.filter)
       && matchesMetadata(clip, query.sources ?? [], query.tag ?? '', query.privacy ?? 'all', demoRules.revision)
-      && (!query.aiEligible || (!protectedClip(clip) && !pendingClip(clip, demoRules.revision) && clip.kind !== 'image'))
+      && (!query.aiEligible || (!protectedClip(clip) && !pendingClip(clip, demoRules.revision) && clip.kind !== 'image' && clip.kind !== 'file'))
       && (!term || `${clip.title}\n${clip.kind === 'image' ? '' : clip.content}${query.aiEligible ? `\n${clip.tags?.join(' ') ?? ''}` : ''}`.toLocaleLowerCase().includes(term)))
       .sort((a, b) => b.updatedAt - a.updatedAt || b.id - a.id);
     const pageSize = 50, total = matches.length, page = Math.min(Math.max(1, Math.floor(query.page || 1)), Math.max(1, Math.ceil(total / pageSize)));
@@ -204,7 +214,7 @@ export const api = {
   async addClip(content: string, title: string, groupId: number | null, keepForever = false): Promise<Clip> {
     if (isDesktop) return invoke('add_clip', { content, title, groupId, keepForever });
     validateContent(content);
-    const existing = demo.clips.find((clip) => clip.kind !== 'image' && clip.content === content);
+    const existing = demo.clips.find((clip) => !['image', 'file'].includes(clip.kind) && clip.content === content);
     if (existing) {
       existing.updatedAt = Date.now();
       existing.keepForever ||= keepForever;
@@ -262,7 +272,7 @@ export const api = {
   async exportBackup(): Promise<string> {
     if (isDesktop) return invoke('export_backup');
     if (demo.clips.some(clip => clip.kind === 'image')) throw new Error('浏览器演示暂不支持包含图片的备份，请在桌面版导出完整备份。没有导出任何记录。');
-    const data = JSON.stringify({ format: 'starclip', version: 3, exportedAt: Date.now(), clips: demo.clips, groups: demo.groups, privacyRules: demoRules }, null, 2);
+    const data = JSON.stringify({ format: 'starclip', version: 4, exportedAt: Date.now(), clips: demo.clips, groups: demo.groups, privacyRules: demoRules }, null, 2);
     if (new TextEncoder().encode(data).length > 20 * 1024 * 1024 || demo.clips.length > 10000 || demo.groups.length > 1000) throw new Error('数据超过单个备份支持的范围（20 MB / 10000 条 / 1000 组）');
     return data;
   },
@@ -273,8 +283,8 @@ export const api = {
     if (!parsed || typeof parsed !== 'object') throw new Error('备份格式无效');
     const backup = parsed as { format?: unknown; version?: unknown; clips?: unknown; groups?: unknown; privacyRules?: PrivacyRules };
     if (backup.version === 2 || (Array.isArray(backup.clips) && backup.clips.some(clip => clip && typeof clip === 'object' && (clip.kind === 'image' || clip.image != null))) || ('images' in backup && backup.images != null)) throw new Error('浏览器演示暂不支持图片备份，请在桌面版导入。现有记录未改动。');
-    if (backup.format !== 'starclip' || ![1, 3].includes(backup.version as number) || !Array.isArray(backup.clips) || !Array.isArray(backup.groups) || backup.clips.length > 10000 || backup.groups.length > 1000) throw new Error('不支持的备份格式或条目过多');
-    const importedRules = backup.version === 3 ? backup.privacyRules?.rules ?? [] : [];
+    if (backup.format !== 'starclip' || ![1, 3, 4].includes(backup.version as number) || !Array.isArray(backup.clips) || !Array.isArray(backup.groups) || backup.clips.length > 10000 || backup.groups.length > 1000) throw new Error('不支持的备份格式或条目过多');
+    const importedRules = Number(backup.version) >= 3 ? backup.privacyRules?.rules ?? [] : [];
     if (!Array.isArray(importedRules) || demoRules.rules.length + importedRules.length > 100 || importedRules.some(rule => !rule || typeof rule.name !== 'string' || !rule.name.trim() || rule.name.length > 60 || typeof rule.value !== 'string' || !rule.value.trim() || rule.value.length > 200 || !['keyword', 'domain'].includes(rule.condition) || typeof rule.markPrivate !== 'boolean' || (rule.tag != null && (typeof rule.tag !== 'string' || rule.tag.length > 40)))) throw new Error('备份规则无效或超过 100 条，现有记录未改动。');
     const next = structuredClone(demo), groupMap = new Map<number, number>();
     for (const group of backup.groups as Group[]) {
@@ -287,14 +297,25 @@ export const api = {
     for (const clip of backup.clips as Clip[]) {
       if (!clip || typeof clip.content !== 'string' || typeof clip.title !== 'string' || clip.title.length > 200 || typeof clip.pinned !== 'boolean' || !Number.isFinite(clip.createdAt) || !Number.isFinite(clip.updatedAt) || !Number.isSafeInteger(clip.copyCount) || clip.copyCount < 0) throw new Error('备份条目无效');
       validateContent(clip.content);
+      if (clip.kind === 'file') {
+        if (clip.language != null) throw new Error('备份文件记录不能同时是代码片段。');
+        const entries = clip.entries ?? (backup.version === 4 ? [] : clip.content.split('\n').map(path => ({ path, entryKind: 'unknown' as const })));
+        if (!Array.isArray(entries) || !entries.length || entries.length > 100
+          || entries.some(entry => !entry || typeof entry.path !== 'string' || !absoluteFilePath(entry.path)
+            || /[\0\r\n]/.test(entry.path) || !['file', 'directory', 'unknown'].includes(entry.entryKind))
+          || entries.reduce((total, entry) => total + new TextEncoder().encode(entry.path).length + 1, 0) > 256 * 1024
+          || new Set(entries.map(entry => entry.path)).size !== entries.length
+          || entries.map(entry => entry.path).join('\n') !== clip.content) throw new Error('备份文件记录与路径列表不一致。');
+        clip.entries = entries;
+      } else if (clip.entries != null) throw new Error('备份中非文件记录带有路径列表。');
       for (const tags of [clip.tags, clip.manualTags, clip.privacyReasons]) if (tags !== undefined && (!Array.isArray(tags) || tags.length > 256 || tags.some(tag => typeof tag !== 'string' || tag.length > 200))) throw new Error('备份标签或隐私原因无效');
       for (const flag of [clip.privacyManual, clip.isPrivate]) if (flag !== undefined && typeof flag !== 'boolean') throw new Error('备份隐私状态无效');
-      const importedTags = backup.version === 3 ? clip.manualTags ?? [] : clip.tags ?? [];
+      const importedTags = Number(backup.version) >= 3 ? clip.manualTags ?? [] : clip.tags ?? [];
       const privacy = { privacyManual: !!clip.privacyManual || (!!clip.isPrivate && !clip.privacyReasons?.length), privacyReasons: clip.privacyReasons ?? [], manualTags: importedTags };
       if (clip.keepForever !== undefined && typeof clip.keepForever !== 'boolean') throw new Error('备份保留标记无效');
       if (clip.language != null && !languages.some(([key]) => key === clip.language)) throw new Error('未知的代码语言');
       if (clip.groupId != null && !groupMap.has(clip.groupId)) throw new Error('分组引用无效');
-      const existing = next.clips.find(c => c.kind !== 'image' && c.content === clip.content);
+      const existing = next.clips.find(c => c.kind === 'file' ? clip.kind === 'file' && c.content === clip.content : clip.kind !== 'file' && c.kind !== 'image' && c.content === clip.content);
       if (existing) {
         existing.privacyManual ||= privacy.privacyManual;
         existing.privacyReasons = [...new Set([...(existing.privacyReasons ?? []), ...privacy.privacyReasons])];
@@ -303,11 +324,12 @@ export const api = {
         existing.pinned ||= clip.pinned;
         existing.groupId ??= clip.groupId == null ? null : groupMap.get(clip.groupId)!;
         if (!existing.title) existing.title = clip.title;
+        if (clip.kind === 'file') existing.entries = clip.entries!.map((entry, index) => existing.entries?.[index]?.entryKind && existing.entries[index]!.entryKind !== 'unknown' ? existing.entries[index]! : entry);
         existing.language ??= clip.language ?? null;
         if (existing.language) existing.kind = 'code';
         continue;
       }
-      next.clips.push({ ...clip, ...privacy, keepForever: clip.keepForever ?? false, id: Math.max(0, ...next.clips.map((c) => c.id)) + 1, groupId: clip.groupId == null ? null : groupMap.get(clip.groupId)!, language: clip.language ?? null, kind: clip.language ? 'code' : classify(clip.content) }); added++;
+      next.clips.push({ ...clip, ...privacy, keepForever: clip.keepForever ?? false, id: Math.max(0, ...next.clips.map((c) => c.id)) + 1, groupId: clip.groupId == null ? null : groupMap.get(clip.groupId)!, language: clip.language ?? null, kind: clip.kind === 'file' ? 'file' : clip.language ? 'code' : classify(clip.content) }); added++;
     }
     // Import preserves the complete backup; only explicit capture/settings changes apply retention.
     next.clips = next.clips.map(clip => analyzeDemoClip(clip, demoRules));
@@ -329,9 +351,10 @@ export const api = {
   async saveCode(id: number | null, title: string, content: string, language: string, groupId: number | null): Promise<Clip> {
     if (isDesktop) return invoke('save_code', { id, title, content, language, groupId });
     if (id != null && requiredClip(id).kind === 'image') throw new Error('图片不能带入星绘坊，请选择文字或代码。');
+    if (id != null && requiredClip(id).kind === 'file') throw new Error('文件不能带入星绘坊，请选择文字或代码。');
     validateContent(content);
     if (!languages.some(([key]) => key === language)) throw new Error('未知的代码语言');
-    const conflict = demo.clips.find((clip) => clip.content === content && clip.id !== id);
+    const conflict = demo.clips.find((clip) => !['image', 'file'].includes(clip.kind) && clip.content === content && clip.id !== id);
     if (conflict) throw new Error('相同内容已存在，请编辑已有记录');
     const actual: Clip = id == null
       ? { id: Math.max(0, ...demo.clips.map(clip => clip.id)) + 1, content, title: title.trim(), groupId, kind: 'code', language, pinned: true, keepForever: false, createdAt: Date.now(), updatedAt: Date.now(), copyCount: 0 }

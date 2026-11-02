@@ -40,12 +40,12 @@
 | `src-tauri/src/desktop/` | `mod.rs` 命令注册、共享状态、托盘、全局快捷键、原生窗口与重启；`clipboard.rs` 系统剪贴板读写与后台采集循环；`ai_broker.rs` 本机 AI 回环接口（阻塞 accept）；`tests.rs` |
 | `src-tauri/src/startup.rs` | 系统登录项读取与显式启停，按应用标识隔离；核对可执行路径和可检测的系统禁用，macOS 后台运行审批仍是额外限制，不从数据库偏好重建注册 |
 | `src-tauri/src/updater.rs` | 原生更新状态与互斥、正式下载源限制、旧应用备份；desktop/ 包装检查 / 下载 / 备份 / 安装命令 |
-| `src-tauri/src/telemetry.rs`、`src-tauri/src/telemetry_device.rs` | 固定功能计数、临时会话、有界磁盘缓存与重试；架构 / 系统主版本 / 机型按白名单归一化，禁止原始固件内容或永久身份 |
+| `src-tauri/src/telemetry.rs`、`src-tauri/src/telemetry_device.rs` | off / session / installation 模式、旧 enabled / mode 偏好兼容、两种旧身份文件读取、模式 / 身份绑定的缓存 v3、客户端协议 v4；身份 / 缓存错误独立可见，generation 隔离旧批次。设备字段仍按白名单归一化，不传硬件身份；详见数据安全与统计说明 |
 | `src-tauri/src/clip_stats.rs` | 本机剪贴活动计数表、记录 / 清空、按本地时区汇总与现存历史构成；见 [数据与隐私边界](data-safety.md) |
 | `src-tauri/src/capture.rs` | 开启时捕获当前内容、变更和重试状态机，以及敏感类型 / CF_HTML SourceURL / Windows 进程名等纯函数；本模块不访问真实剪贴板 |
 | `src-tauri/src/clipboard_source.rs` | 仅 desktop：采集时读取剪贴板敏感标记、来源应用与浏览器来源页面（macOS NSPasteboard / NSWorkspace，Windows 剪贴板格式与所有者进程），失败视为无上下文 |
 | `src-tauri/src/search_index.rs` | contentless FTS5 trigram 索引与触发器，≥3 字符关键词预筛候选后仍由 `starclip_contains` 确认；开启 FTS5 secure-delete；启动时缺表 / 缺触发器自动重建 |
-| `src-tauri/src/store/` | `mod.rs` 类型与共享辅助；`schema.rs` 打开 / 升级；`preferences.rs`；`privacy_rules.rs` 规则 / 重扫；`history.rs` 分页查询；`clips.rs` 采集与写入（含 `clip_rich` HTML、文件记录）；`cleanup.rs` 删除 / 整理 / 保留；`backup.rs` JSON v3；`tests.rs`。所有内容写入在同事务扫描 |
+| `src-tauri/src/store/` | `mod.rs` 类型与共享辅助；`schema.rs` schema 4 指纹 / 快照 / 事务升级；`files.rs` 跨系统文件路径校验与明细读写；`preferences.rs`；`privacy_rules.rs`；`history.rs` 分页查询；`clips.rs` 富文本 / 文件 / 普通记录写入；`cleanup.rs`；`backup.rs` JSON v4（兼容 v1–v4）；`tests.rs`。所有内容写入在同事务扫描 |
 | `src-tauri/src/privacy.rs`、`src-tauri/resources/bip39/` | 本地敏感检测、URL 解析与来源、关键词 / 精确域名规则、手动和自动标签区分；词表来源许可随资源保存 |
 | `src-tauri/src/ai_access.rs`、`src-tauri/src/ai_transport.rs` | 会话连接、固定 ID + 随机身份授权、统一读取过滤、独立星伴权限与限时内存信号、审计及有界消息；stdio MCP / CLI 经本机桥接，不能直接打开数据库 |
 | `src-tauri/tests/ai_stdio.rs` | 启动实际主程序子进程，验证 CLI 与 MCP stdin/stdout，不读取正式用户数据 |
@@ -53,10 +53,10 @@
 | `src-tauri/src/share.rs` | 固定分享 ID、路径 / PNG 字节与尺寸校验；desktop/ 使用已打包资产并负责复制 / 保存，禁止任意内容或路径参数 |
 | `src-tauri/src/images.rs` | RGBA/PNG 校验、像素摘要、缩略图和尺寸限制 |
 | `src-tauri/src/appearance.rs` | 自定义外观白名单补丁、静态 PNG 结构与有界解码、512px 缩图；`store/` 独立偏好事务，四命令仅主窗授权 |
-| `src-tauri/src/storage.rs` | `data-location.json` 定位、数据目录校验、SQLite 一致快照、迁移与采用已有目录；受管目录 `renderers` / `fonts` 共用占用计算、迁移与恢复摘要白名单，拒绝符号链接；旧 `handwriting_directory()` 仅用于外部渲染器配置兼容，内置字体必须位于 `current/fonts` |
-| `src-tauri/src/handwriting.rs`、`public/handwriting-fonts/` | 未发布内置 CPU 渲染与受管字体：原手写仓库 9 项及 Google Fonts 14 项，固定 commit、限定字节数及 SHA-256，验证后启用，TTF 按需保存到 `current/fonts`；目录与 IPC 透传 `author` / `tags`，原 9 项按用户确认显示「来源于互联网」（英文 “Sourced from the internet”），14 个外部字体选项保留原作者；面板可筛手写体。安装包只有清单、静态 PNG 预览与分来源许可 / 提供说明，旧外部 CLI 配置仅保留迁移兼容 |
+| `src-tauri/src/storage.rs` | `data-location.json` 定位、数据目录校验、SQLite 一致快照、迁移与采用已有目录；受管目录 `renderers` / `fonts` / 旧 `papers` 缓存共用占用计算、迁移与恢复摘要白名单，拒绝符号链接；旧 `handwriting_directory()` 仅用于外部渲染器配置兼容，内置字体必须位于 `current/fonts` |
+| `src-tauri/src/handwriting.rs`、`public/handwriting-fonts/` | 0.2.3 已内置 CPU 渲染与受管字体：原手写仓库 9 项及 Google Fonts 14 项，固定 commit、限定字节数及 SHA-256，验证后启用，TTF 按需保存到 `current/fonts`；目录与 IPC 透传 `author` / `tags`，原 9 项按用户确认显示「来源于互联网」（英文 “Sourced from the internet”），14 个外部字体选项保留原作者；面板可筛手写体。安装包只有清单、静态 PNG 预览与分来源许可 / 提供说明，旧外部 CLI 配置仅保留迁移兼容 |
 
-SQLite 主要表为 `clips`、`clip_images`、`clip_privacy`、`groups`、`preferences`。`clip_privacy` 的 JSON 元数据保存手动隐私、持续保护原因、规则扫描版本、手动 / 自动标签、域名来源和随机记录身份。偏好独立使用 `settings`、`onboarding_v1`、`starpet_v1`、`starpet_growth_v1`、`appearance_v1`、`privacy_rules_v1`、`update_preferences_v1`、`telemetry_preferences_v1`、`window_startup_v1`；教程、主题、外观、成长、规则、更新提醒与启动设置保存不能随意换成完整设置保存，后者带有清理副作用。`window_startup_v1` 仅保存启动收起与图标显隐，系统登录项不缓存进数据库。JSON v3 含记录、手动标签、隐私与规则，不包含其它偏好；成长另有独立存档。
+SQLite 当前结构为 4，主要表为 `clips`、`clip_images`、`clip_files`、`clip_privacy`、`clip_rich`、`clip_activity`、`groups`、`preferences`，另有 FTS 表与触发器。`clip_files` 按 `(clip_id, position)` 保存 path / entry_kind 并级联删除；text/image/file 各自独立去重，旧主线文件路径迁为 unknown 类型，不访问文件系统。`clip_privacy` 的 JSON 元数据保存手动隐私、持续保护原因、规则扫描版本、手动 / 自动标签、域名来源和随机记录身份。偏好独立使用 `settings`、`onboarding_v1`、`starpet_v1`、`starpet_growth_v1`、`appearance_v1`、`privacy_rules_v1`、`update_preferences_v1`、`telemetry_preferences_v1`、`window_startup_v1`；教程、主题、外观、成长、规则、更新提醒与启动设置保存不能随意换成完整设置保存，后者带有清理副作用。`window_startup_v1` 仅保存启动收起与图标显隐，系统登录项不缓存进数据库。JSON v4 含记录、文件 entries、手动标签、隐私与规则，不包含其它偏好；成长另有独立存档。
 
 普通设置中的 `Settings.pause_revision`（JSON `pauseRevision`）由 Store 管理，旧数据缺字段默认为 0；前端提交 `expectedPauseRevision`，`Store::save_settings_with_pause_guard` 在同一事务读当前版本并保存。期望版本过期时保留当前 `paused`，其他字段继续保存；只有暂停状态实际改变才递增版本，忽略 payload 伪造值。`App.vue` 刷新同步较新暂停状态与版本而保留其他草稿，`settingsDirty` 排除版本字段；这也覆盖 true → false → true 的 ABA 变化。入口为 `store/`、`desktop::save_settings`、`api.ts::saveSettings`。
 
@@ -95,8 +95,8 @@ Homebrew 同步独立使用 `.github/workflows/homebrew.yml`、`scripts/homebrew
 
 产品宣传素材源为 `scripts/share-posters.html`，直接渲染既有星芽组件与原创界面 / 代码示意；中文主题 ID 为 `overview` / `workflow` / `companion` / `creation` / `ai`，英文对应加 `-en`，均为 1080 × 1440。`scripts/compress-share-images.py` 按 `product-share-catalog.json` 的十个图片条目制作 256 色索引 PNG 并回填字节数，Pillow 仅为素材制作依赖；文案 ID 为 `short` / `detailed` 及其 `-en` 版本。素材语言由面板临时选择，不写应用偏好、不自动发布；macOS 英文 AI 图原生保存 / 取消已验收，复制 / 跨应用粘贴与 Windows 原生分享仍需单独验收。见 [分享说明](../../../../docs/product-share.md)。
 
-可选统计：`telemetry.rs` 只接收 9 种固定事件并聚合计数，主窗只申报星绘坊打开，其余由原生操作路径计数。缺失偏好默认开启，已保存的关闭选择保留，读取 / 解析失败关闭；无有效接收端时不采集。复用 monitor 约每分钟 checkpoint / 调度发送，发送前后和正常 `RunEvent::Exit` 也 checkpoint；下载验签完成和进入安装阶段后另调度异步发送，不等待网络、不持有存储锁。固定缓存位于默认应用目录 `usage-counts.json`，读取上限 2 KiB，9 类各最多 100 次、TTL 72 小时，只存格式 / 应用版本、创建时间和计数；同版本恢复，换版本丢弃，不含设备 / sessionId，不加入剪贴备份或目录迁移。异常终止可能丢最后一分钟新增计数；安装只计尝试，补报按收到时间计，可能丢失或重复。
+可选统计：`telemetry.rs` 的 9 种固定功能计数由显式模式控制，主窗只申报星绘坊打开，其余由原生成功路径计数；installation 另有每日 `app_active` 及每小时 `app_running`，心跳不缓存、不补回放，session 不发这两项。`TelemetryPreferences` 将旧 enabled=true / false 映射为 session / off，显式旧三档 mode 保持；历史布尔来源有歧义，不能凭侧文件隐式升级持续身份。数据库升级事务只归一化合法值，读取 / 解析失败停止发送并保留身份。计数缓存为 `usage-counts.json` 格式 3，按事件名保存固定次数并绑定 mode 与身份 SHA-256 指纹；读取上限 2 KiB、每项 100 次、TTL 72 小时，不含设备或明文编号，不进入剪贴备份 / 迁移；旧数组缓存舍弃。无接收端的预览不读取、创建或删除统计侧文件。模式切换 / 标识重置清空旧队列并增加 generation，删除失败由 identityError / cacheError 回报；已开始的请求仍无法撤回。
 
 失败在本次运行退避 1 / 5 / 15 / 60 分钟，之后最长每小时一次，重启重置退避。关闭清队列 / 磁盘缓存并更换会话；清空递增 generation，使迟到的旧请求结果不能重新入队。`TelemetrySettings.vue` 与 `telemetry-api.ts` 展示配置、开关状态和白名单待发次数，事件按 revision 接收，操作中保护窗口释放；发送成功 / 网络失败不弹提示，用户主动修改偏好的本地保存错误仍需反馈。
 
-当前 v2 载荷由 `telemetry_device.rs` 提供应用二进制架构、系统主版本、Mac 公开产品代号 / Windows 固定产品系列 / Linux 通用类别；客户端与 Worker 双重白名单，不传 serial / 主机名 / 用户名 / 永久 ID。设备数据不进入本地计数缓存。`telemetry-relay/` 源码兼容 v1 / v2、默认仅转发 GA4；既有 `desktop-usage-relay` 已更新为兼容 v1 / v2 的生产中继，账户已确认 Cloudflare Workers Free。2026-10-29 远端与本地 SHA-256 均为 `d127d1fb4b24f4cadff240ab0a4a29b90d371119358c0b3df304d106899b96e9`，日志 / 跟踪 / 问题开关及微软开关仍关闭；真实 Rust v2 固定 9 事件批次返回 204。GA `app_arch` / `os_major` / `device_model` 事件维度已创建并核对，Realtime 的 `app_started` 已显示这三个参数（每键 2 条），`device_model` 下钻显示公开 Mac 产品代号（2 条）；此实时证据独立于 HTTP 成功；后续 GA4 常规探索已核对固定范围的 14 条事件 / `Usage count` 合计 22，macOS 进程级断网缓存、正常重启恢复与恢复联网后清队列也已验收。长期持续观察、Windows 统计联网仍未完成，分阶段证据见 [验证记录](../../../../docs/verification.md)。Google 配置无效时不外发，密钥只放云端。Workers 实际运行不接受 `redirect: 'error'`，`send` 使用 `manual` 并拒绝 3xx；Worker 不重试，客户端重试可能重复计数。Application Insights 仅在 `ENABLE_APPLICATION_INSIGHTS=true` 时校验并启用，未设置或为 `false` 时忽略残留连接字符串、不请求 Azure；当前云配置为 `false`。Worker 名称可配置，其他产品以独立部署隔离，当前没有多产品路由。构建变量 `STARCLIP_TELEMETRY_ENDPOINT` 已在 GitHub 设置并回读核对；它是 Rust 编译期地址，不含供应商密钥，运行时赋值不能更改旧包。详见 `docs/telemetry.md`。
+当前客户端协议 v4 保留设备白名单，由 `telemetry_device.rs` 提供应用架构、系统主版本及通用机型。installation 使用 `usage-install.json` 保存随机 ID；兼容旧 `usage-identity.json`，两种有效编号冲突时停止发送，不覆盖任一文件；旧编号未知创建时间时不虚构 `firstSeenDay`。`telemetry-relay/worker.mjs` 以精确字段集合兼容正式 v1/v2、两种历史 v3 和新 v4；v4 显式区分 session / installation，不接受混合身份字段。Google 密钥只在云端，微软通道默认关闭；线上部署、GA 实际入库与历史 v2 原生 / 报表证据以 [统计说明](../../../../docs/telemetry.md) 为准，不能由离线协议测试推定。

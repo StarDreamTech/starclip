@@ -13,7 +13,8 @@ use std::{
 const DATABASE: &str = "starclip.sqlite3";
 const SELECTION: &str = "handwriting-app.json";
 const LOCATOR: &str = "data-location.json";
-const MANAGED_DIRECTORIES: [&str; 2] = ["renderers", "fonts"];
+// Keep legacy downloaded papers even though current paper assets ship in the app.
+const MANAGED_DIRECTORIES: [&str; 3] = ["renderers", "fonts", "papers"];
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -917,7 +918,29 @@ impl Storage {
                 continue;
             }
             match read_manifest(&root, &name) {
-                Ok((directory, manifest)) => points.push(manifest.point(&directory)),
+                Ok((directory, manifest)) => {
+                    let mut point = manifest.point(&directory);
+                    // Schema 3 belonged to a separate development branch. The
+                    // number alone cannot promise that its database is recognized.
+                    if point.compatible && point.schema_version == 3 {
+                        let supported = (|| -> Result<()> {
+                            let conn = rusqlite::Connection::open_with_flags(
+                                directory.join(DATABASE),
+                                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+                            )
+                            .map_err(|error| error.to_string())?;
+                            if Store::check_schema_version(&conn)? != 3 {
+                                return Err("恢复点结构版本与清单不符。".into());
+                            }
+                            Ok(())
+                        })();
+                        if let Err(error) = supported {
+                            point.compatible = false;
+                            point.warnings.push(error);
+                        }
+                    }
+                    points.push(point);
+                }
                 Err(error) => points.push(RecoveryPoint {
                     id: name.clone(),
                     created_at: 0,
@@ -1059,7 +1082,7 @@ mod tests {
     }
 
     #[test]
-    fn downloaded_fonts_follow_current_directory_migration_and_recovery() {
+    fn downloaded_fonts_and_legacy_papers_follow_migration_and_recovery() {
         let scratch = Scratch::new();
         let source = scratch.0.join("source");
         let legacy = scratch.0.join("legacy");
@@ -1072,16 +1095,21 @@ mod tests {
         create_private_directory(&source.join("fonts")).unwrap();
         let font = b"original synthetic font fixture, never parsed as TTF";
         fs::write(source.join("fonts/sample.ttf"), font).unwrap();
+        create_private_directory(&source.join("papers")).unwrap();
+        let paper = b"original synthetic legacy paper cache";
+        fs::write(source.join("papers/sample.img"), paper).unwrap();
         assert_eq!(
             storage.info().unwrap().total_bytes,
-            before + font.len() as u64
+            before + font.len() as u64 + paper.len() as u64
         );
         let target = scratch.0.join("migrated");
         let plan = storage.plan(DirectoryMode::Move, &scratch.0).unwrap();
         assert_eq!(plan.total_bytes, storage.info().unwrap().total_bytes);
         storage.apply(&store, DirectoryMode::Move, &target).unwrap();
         assert_eq!(fs::read(target.join("fonts/sample.ttf")).unwrap(), font);
+        assert_eq!(fs::read(target.join("papers/sample.img")).unwrap(), paper);
         assert_eq!(fs::read(source.join("fonts/sample.ttf")).unwrap(), font);
+        assert_eq!(fs::read(source.join("papers/sample.img")).unwrap(), paper);
         assert!(!legacy.join("fonts").exists());
         assert!(
             target.join(SELECTION).is_file(),
@@ -1098,17 +1126,181 @@ mod tests {
         let (snapshot, manifest) =
             verified_recovery(&storage.recovery_directory(), &point.id).unwrap();
         assert_eq!(fs::read(snapshot.join("fonts/sample.ttf")).unwrap(), font);
+        assert_eq!(fs::read(snapshot.join("papers/sample.img")).unwrap(), paper);
         assert_eq!(manifest.files["fonts/sample.ttf"].bytes, font.len() as u64);
+        assert_eq!(
+            manifest.files["papers/sample.img"].bytes,
+            paper.len() as u64
+        );
         fs::write(target.join("fonts/sample.ttf"), b"changed fixed fixture").unwrap();
+        fs::write(
+            target.join("papers/sample.img"),
+            b"changed legacy paper fixture",
+        )
+        .unwrap();
         storage.restore_recovery_point(&store, &point.id).unwrap();
         let restored = PathBuf::from(storage.pending_path().unwrap());
         assert_ne!(restored, target);
         assert_eq!(fs::read(restored.join("fonts/sample.ttf")).unwrap(), font);
+        assert_eq!(fs::read(restored.join("papers/sample.img")).unwrap(), paper);
         assert_eq!(
             fs::read(target.join("fonts/sample.ttf")).unwrap(),
             b"changed fixed fixture"
         );
         assert_eq!(fs::read(source.join("fonts/sample.ttf")).unwrap(), font);
+        assert_eq!(fs::read(source.join("papers/sample.img")).unwrap(), paper);
+        assert_eq!(
+            fs::read(target.join("papers/sample.img")).unwrap(),
+            b"changed legacy paper fixture"
+        );
+    }
+
+    #[test]
+    fn schema_two_recovery_without_papers_remains_readable() {
+        let scratch = Scratch::new();
+        let source = scratch.0.join("source");
+        let storage = Storage::open(&source, &source).unwrap();
+        let store = storage.open_store().unwrap();
+        let clip = store.add("原创旧版恢复点样例", "保留标题", None).unwrap();
+        drop(store);
+        let conn = Connection::open(source.join(DATABASE)).unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        let original_database = fs::read(source.join(DATABASE)).unwrap();
+        let point = create_recovery_snapshot(
+            &storage.recovery_directory(),
+            &source,
+            &source,
+            2,
+            "manual",
+            |target| {
+                conn.execute("VACUUM main INTO ?1", [target.to_str().unwrap()])
+                    .map_err(|error| error.to_string())?;
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(!Path::new(&point.path).join("papers").exists());
+        let (_, manifest) = verified_recovery(&storage.recovery_directory(), &point.id).unwrap();
+        assert_eq!(manifest.schema_version, 2);
+        assert!(point.compatible);
+        let (restored, _) = prepare_recovery(&source, &point.id).unwrap();
+        assert!(!restored.join("papers").exists());
+        let restored_store = Store::open(&restored.join(DATABASE)).unwrap();
+        assert_eq!(restored_store.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(restored_store.clip(clip.id).unwrap().content, clip.content);
+        assert_eq!(restored_store.clip(clip.id).unwrap().title, clip.title);
+        assert_eq!(Store::check_schema_version(&conn).unwrap(), 2);
+        assert_eq!(fs::read(source.join(DATABASE)).unwrap(), original_database);
+    }
+
+    #[test]
+    fn legacy_schema_three_paper_snapshot_restores_and_unknown_three_stays_visible() {
+        let scratch = Scratch::new();
+        let source = scratch.0.join("source");
+        let storage = Storage::open(&source, &source).unwrap();
+        let store = storage.open_store().unwrap();
+        let clip = store
+            .capture_files(&["/original/legacy-paper.txt".into()], &Default::default())
+            .unwrap();
+        let identity = clip.record_identity.clone();
+        drop(store);
+        create_private_directory(&source.join("papers")).unwrap();
+        let paper = b"original legacy paper cache retained during recovery";
+        fs::write(source.join("papers/legacy.img"), paper).unwrap();
+        let conn = Connection::open(source.join(DATABASE)).unwrap();
+        conn.execute_batch(
+            "DROP TRIGGER clips_fts_insert;
+            DROP TRIGGER clips_fts_update; DROP TRIGGER clips_fts_delete;
+            DROP TABLE clips_fts; DROP TABLE clip_rich; DROP TABLE clip_activity;
+            PRAGMA user_version=3;",
+        )
+        .unwrap();
+        assert_eq!(Store::check_schema_version(&conn).unwrap(), 3);
+        let point = create_recovery_snapshot(
+            &storage.recovery_directory(),
+            &source,
+            &source,
+            3,
+            "manual",
+            |target| {
+                conn.execute("VACUUM main INTO ?1", [target.to_str().unwrap()])
+                    .map_err(|error| error.to_string())?;
+                Ok(())
+            },
+        )
+        .unwrap();
+        let (_, manifest) = verified_recovery(&storage.recovery_directory(), &point.id).unwrap();
+        assert_eq!(
+            manifest.files["papers/legacy.img"].bytes,
+            paper.len() as u64
+        );
+        assert!(
+            storage
+                .recovery_points()
+                .unwrap()
+                .iter()
+                .find(|item| item.id == point.id)
+                .unwrap()
+                .compatible
+        );
+        let (restored, _) = prepare_recovery(&source, &point.id).unwrap();
+        let restored_store = Store::open(&restored.join(DATABASE)).unwrap();
+        assert_eq!(restored_store.schema_version().unwrap(), SCHEMA_VERSION);
+        let restored_clip = restored_store.clip(clip.id).unwrap();
+        assert_eq!(restored_clip.content, clip.content);
+        assert_eq!(restored_clip.entries, clip.entries);
+        assert_eq!(restored_clip.record_identity, identity);
+        assert_eq!(fs::read(restored.join("papers/legacy.img")).unwrap(), paper);
+        assert_eq!(Store::check_schema_version(&conn).unwrap(), 3);
+
+        // Model an unknown schema-3 archive with self-consistent hashes. It must
+        // remain listed as an error item without hiding the good archive.
+        let bad = create_recovery_snapshot(
+            &storage.recovery_directory(),
+            &source,
+            &source,
+            3,
+            "manual",
+            |target| {
+                conn.execute("VACUUM main INTO ?1", [target.to_str().unwrap()])
+                    .map_err(|error| error.to_string())?;
+                Ok(())
+            },
+        )
+        .unwrap();
+        let bad_database = Path::new(&bad.path).join(DATABASE);
+        let bad_conn = Connection::open(&bad_database).unwrap();
+        bad_conn
+            .execute_batch("CREATE TABLE unknown_payload(value TEXT)")
+            .unwrap();
+        drop(bad_conn);
+        let (directory, mut bad_manifest) =
+            read_manifest(&storage.recovery_directory(), &bad.id).unwrap();
+        bad_manifest.files = collect_recovery_files(&directory).unwrap();
+        bad_manifest.total_bytes = bad_manifest.files.values().map(|file| file.bytes).sum();
+        fs::write(
+            directory.join("snapshot.json"),
+            serde_json::to_vec(&bad_manifest).unwrap(),
+        )
+        .unwrap();
+        let points = storage.recovery_points().unwrap();
+        assert_eq!(points.len(), 2);
+        assert!(
+            points
+                .iter()
+                .find(|item| item.id == point.id)
+                .unwrap()
+                .compatible
+        );
+        let bad_point = points.iter().find(|item| item.id == bad.id).unwrap();
+        assert!(!bad_point.compatible);
+        assert!(bad_point
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("无法识别")));
+        assert!(verified_recovery(&storage.recovery_directory(), &bad.id).is_err());
+        assert_eq!(Store::check_schema_version(&conn).unwrap(), 3);
+        assert_eq!(fs::read(source.join("papers/legacy.img")).unwrap(), paper);
     }
 
     #[test]
@@ -1383,24 +1575,27 @@ mod tests {
     }
     #[cfg(unix)]
     #[test]
-    fn font_symlinks_reject_migration_and_recovery_without_switching_data() {
-        for link_directory in [true, false] {
-            let scratch = Scratch::new();
-            let source = scratch.0.join("source");
-            let mut storage = Storage::open(&source, &source).unwrap();
-            let store = storage.open_store().unwrap();
-            if link_directory {
-                std::os::unix::fs::symlink(&scratch.0, source.join("fonts")).unwrap();
-            } else {
-                create_private_directory(&source.join("fonts")).unwrap();
-                std::os::unix::fs::symlink(&scratch.0, source.join("fonts/outside")).unwrap();
+    fn font_and_paper_symlinks_reject_migration_and_recovery_without_switching_data() {
+        for managed in ["fonts", "papers"] {
+            for link_directory in [true, false] {
+                let scratch = Scratch::new();
+                let source = scratch.0.join("source");
+                let mut storage = Storage::open(&source, &source).unwrap();
+                let store = storage.open_store().unwrap();
+                if link_directory {
+                    std::os::unix::fs::symlink(&scratch.0, source.join(managed)).unwrap();
+                } else {
+                    create_private_directory(&source.join(managed)).unwrap();
+                    std::os::unix::fs::symlink(&scratch.0, source.join(managed).join("outside"))
+                        .unwrap();
+                }
+                let target = scratch.0.join("migrated");
+                assert!(storage.apply(&store, DirectoryMode::Move, &target).is_err());
+                assert!(storage.create_recovery_point(&store, "manual").is_err());
+                assert!(!target.exists());
+                assert!(!source.join(LOCATOR).exists());
+                assert!(storage.writable().is_ok());
             }
-            let target = scratch.0.join("migrated");
-            assert!(storage.apply(&store, DirectoryMode::Move, &target).is_err());
-            assert!(storage.create_recovery_point(&store, "manual").is_err());
-            assert!(!target.exists());
-            assert!(!source.join(LOCATOR).exists());
-            assert!(storage.writable().is_ok());
         }
     }
 

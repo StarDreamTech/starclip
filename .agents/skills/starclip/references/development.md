@@ -24,6 +24,10 @@
 
 本地预览打包：`npm run build:preview:mac`（`scripts/build-preview.mjs`）只生成独立 `Starclip Preview` / `com.starclip.preview` 的 macOS app / DMG，移入忽略的 `artifacts/preview-local.noindex/<构建时间>/`，不启动、不安装、不提交或部署；统计编译地址为空、updater endpoints 为空、本地 ad-hoc 签名。2026-11-02 已随 #14 合入 main，打包最后一行单独打印可复制的 `open` 命令，路径按 shell 双引号规则转义，不用 `JSON.stringify` 代替 shell 转义。#12 的 `npm run app` 仍是安装依赖后启动原生开发版，与独立预览打包不同；不要为验证命令存在而直接启动并访问正式数据。预览构建不等于 GUI / 原生操作验收，两者分开记录；本轮证据见 `docs/verification.md` 的「本地工作区并入 main（2026-11-01 至 11-02）」。
 
+- 2026-11-02 用户启动预览后截图报告「结构版本 3，当前支持 2」。源码确认 main 的 `store/mod.rs::SCHEMA_VERSION=2`，存档 `wip/local-20261101` 的 `store.rs::SCHEMA_VERSION=3`，两套预览脚本都使用 `com.starclip.preview`。该标识隔离正式应用，却不隔离不同分支或每次构建的数据；产物时间目录不同不代表新数据目录。复用旧预览库是可能原因，未读取用户数据库或定位文件，不能确认其实际来源。现有 `store/schema.rs::check_schema_version` 会拒绝高版本库，不可通过手改 `user_version` 绕过；该截图阶段尚未修复；后续结构 4 修复见下条。用户提供的 `Preview\.app` 在双引号内多了反斜杠，已核对去掉后应用路径存在；打开命令修正与数据库版本不兼容是两件事。
+  - 提交历史补充：`27dda2e` 存档的本地实现由 schema 2 增至 3，并引入 `clip_files` 子表；main 的 #13（`f2ea1e4`）前后均为 schema 2，文件引用保存在现有 `clips.content` 的多行路径中，未采用该子表（`store/clips.rs`、`store/backup.rs`）。这是两套实现分叉后选择主线方案，不能表述为 Git 回退提交；#14 没有实现本地 schema 3 到主线的转换。隔离预览目录只能避开旧库，保留已有数据仍须比对结构后实现兼容迁移，不能直接改版本常量或数据库版本号。
+  - 后续完整审计已实际复现旧 3 索引与 main upsert 不匹配、同路径文本 / 文件改建主线索引冲突；并核对到统计偏好、同名 v3 协议、旧 JSON v4 与 papers 恢复的分叉。详见 `docs/verification.md`「数据结构与统计跨分支审计（2026-11-02）」。后续已在 `codex/schema4-compatibility` 实现结构 4 / JSON 4、文件明细与 AI 排除、papers 恢复，自动覆盖已知 2 / 3、未知拒绝和失败回滚；独立 macOS 原创结构 3 经原生迁为 4 并重开核对，原图 / 身份 / 偏好 / 纸缓存保留及恰好一个升级前恢复点通过。统计使用三档模式、新协议 4、缓存 3；旧布尔 true 一律转 session，避免把正式 0.2.3 临时身份隐式升级为固定身份。生产 Worker 已于 11-02 更新并回读源码一致，兼容正式 v1/v2、两种历史 v3 与新 v4；具体 GA / HTTP 证据与验证范围见上述验证记录和 `docs/telemetry.md`，不等于新版客户端已发布。
+
 - 字体下载复用 reqwest 0.13 系统代理与 TLS；rustls-no-provider 构建客户端前必须安装 ring provider，已有 provider 时保留。真实测试发现遗漏会 panic，不可改成绕过 TLS。GitHub 连接 10 秒 / 总计 60 秒超时，失败不安装半文件。
 
 内存测量先辨认正在运行的可执行文件、构建时间和关键接口；开发源码、隔离测试包、正式安装与线上 Release 是不同对象。用 `launchctl print pid/<pid>` 的应用域 / bundle ID 核实辅助进程，再用 `footprint --noCategories --format bytes` 汇总；不把系统所有 WebKit 相加，也不只量 Rust 主进程。RSS、虚拟地址空间、安装包大小与物理足迹不可混用。
@@ -122,5 +126,5 @@ Tauri 资产解析器在正式包中读取嵌入资产，在带 `devUrl` 的开�
 
 - 动画星伴几十 MiB 目标与长期 / 大规模历史内存性能；Windows 统计真实联网 / 断网和字体 GUI 验收；双机完整环境迁移；星伴精确拖动、透显、多屏 / 跨全屏；托盘实际点击、快捷键冲突、休眠恢复。
 - GA 长期持续观察与 Windows 原生断网；固定范围 `count` 汇总和 macOS 进程级断网 / 重启 / 恢复联网已验收，不承诺永久存储。23 项字体逐款 GUI、图片 OCR、规则试跑 / 扫描暂停续扫等见产品决策；原 9 项来源展示已按用户确认修正。分享 AI / 隐私主题与中英文素材已实现，系统图片剪贴板、跨应用粘贴与 Windows 原生分享仍待验收。
-- 文件历史、GIF、富文本、自动粘贴、云同步 / 账号 / 剪贴内容公开链接、代码执行与内置模型分析尚未实现；已有只读 AI 接口不等于内置模型。稳定版提醒已实现，预览通道未开放，不承诺 LTS 维护年限。
+- 文件引用与文字附带 HTML 已在未发布源码实现，验证边界见产品范围；GIF、自动粘贴、云同步 / 账号 / 剪贴内容公开链接、代码执行与内置模型分析尚未实现；已有只读 AI 接口不等于内置模型。稳定版提醒已实现，预览通道未开放，不承诺 LTS 维护年限。
 - 无 Apple 公证或 Windows 发行者代码签名；本地 ad-hoc 与 Tauri 更新签名不等于系统发行者认证。待办不代表排期，后续新方案标「待定」。

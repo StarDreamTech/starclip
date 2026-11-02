@@ -688,7 +688,7 @@
 
 WorkBuddy 在 0.2.3 之上留下的未提交工作区（文件剪贴、统计三档模式、月光笺原纸下载、字体弹窗与下载进度、本地预览打包）已整体存档为本地分支 `wip/local-20261101`（未推送），其中 2026-10-30 至 11-01 的逐项验证记录随该分支保存。并入 main 时：
 
-- 文件剪贴、统计模式、月光笺纸张与 main 的 #13、#8、#10 是同一功能的两套实现，保留 main 版本；本地版本另有 Windows 导入 / 定位 / 写入等待修 P1 问题，未并入。原纸中带水印与学校抬头的纸张按 main 已记录的用户决定不接入。
+- 文件剪贴、统计模式、月光笺纸张与 main 的 #13、#8、#10 用途重叠，合并时保留 main 版本；但数据结构与统计策略不等价，不能据此判断旧本地数据已经兼容，具体缺口见下方跨分支审计。本地版本另有 Windows 导入 / 定位 / 写入等待修 P1 问题，未整体并入。原纸中带水印与学校抬头的纸张按 main 已记录的用户决定不接入。
 - 移植字体下载进度：`handwriting::download_font_bytes_with` 分块读取并约每 1% 回报一次，`download_handwriting_font` 转为 `handwriting-font-progress` 事件（`{ id, received, total }`，只发给 main 窗口），字体弹出列表底部显示进度条与已接收 / 总大小，下载结束释放订阅；`tests/handwriting-fonts.test.ts` 新增进度用例。
 - 移植 `npm run build:preview:mac`（`scripts/build-preview.mjs`）：**Starclip Preview** / `com.starclip.preview`、独立默认数据目录、本地 ad-hoc 签名，编译时清空线上统计地址、移除更新源与签名 / 公证凭据，输出 `.app` / DMG 至忽略的 `artifacts/preview-local.noindex/<构建时间>/`。不启动、不安装、不推送、不打 tag、不上传 Release、不部署 Worker、不触发 Homebrew。
 - 保留 `rust-toolchain.toml` 的 `rust-analyzer` 组件与 `.gitignore` 的 `.workbuddy-ai/`。
@@ -703,11 +703,57 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 - 在 `509ec71` 上实际执行 `npm run build:preview:mac`，包含其 `beforeBuildCommand` 调用的 `npm run build`，退出码 0。输出 `artifacts/preview-local.noindex/2026-11-02T03-53-56-247Z/`（UTC，上海同为 2026-11-02）；app 文件合计 **16,428,348 B**，DMG **8,033,017 B（8.03 MB / 7.66 MiB）**，DMG SHA-256 `847f6b03481a11873f8c150ab971e14588ee95a8bd02f740ac73d8a8a66f223b`。`Info.plist` 核对独立标识与 0.2.3 版本，配置无更新源、不生成 updater 包；`codesign --verify --deep --strict` 与 `hdiutil verify` 通过。此为未发布预览，不改变正式 0.2.3 包体积的历史记录。
 - 捕获真实构建日志最后一行的 `open` 命令，核对 shell 解析得到的参数与生成的 `.app` 路径完全一致，`zsh -n` 通过；仅验证命令，未执行打开。构建日志、核验摘要在忽略的 `artifacts/main-integration-20261102.noindex/`，产物目录另存 `verification.json`。未启动预览、未访问真实剪贴板或正式数据库、未替换安装、未发版或同步 Homebrew；字体进度与新增界面没有新增原生 GUI 验收。
 
+## 数据结构与统计跨分支审计（2026-11-02）
+
+在 main `0bcc964` 与本地存档 `wip/local-20261101`（`27dda2e`）之间核对源码，并只读核实生产 Worker。用户截图的 schema 3 / 支持 2 拒绝与两个分支的源码值一致；没有读取真实数据库或定位文件，实际数据来源尚未核实。该审计阶段尚未实施统一 schema 4；后续修复与验收见下一节，不能只提升 `SCHEMA_VERSION`。
+
+| 范围 | 已核实的兼容缺口 | 实现依据 / 必须处理项 |
+| --- | --- | --- |
+| 文件去重与写入 | 本地 3 分 text / image / file 身份空间；main 合并 text / file。同名旧 `clips_text_content` 索引谓词不同，`IF NOT EXISTS` 不会替换；同路径文本与文件可各有一条 | `store/schema.rs`、`store/clips.rs`、`store/backup.rs`；目标不能合并丢行，所有索引、upsert、查询与导入须一致 |
+| 文件明细与 AI | 本地 3 的 `clip_files` 另存 position/path/entry_kind，main 只保存多行路径；旧实现禁止 file 进入 AI，main 各授权候选入口仅排除 image | 保留旧顺序与类型，不扫盘猜测；`ai_access.rs`、`store/history.rs`、`AiSettings.vue`、`api.ts` 的边界须一起核对。main 仍需显式授权，不表示自动向 AI 泄露 |
+| JSON 与恢复 | main 只接受 JSON v1/2/3，拒绝旧 v4；直接加允许版本会遗漏 entries 校验。主线受管目录不含 papers，旧恢复点带纸缓存会报未识别文件，新迁移 / 快照也不复制该缓存 | `store/backup.rs`、`storage.rs::MANAGED_DIRECTORIES` / `collect_recovery_files`；保留字体 / renderer / 配置及旧纸缓存与恢复兼容，不能把内置纸张替代当作删除旧缓存的授权 |
+| 偏好、隐私与主线扩展 | 两边 9 类普通偏好 key 相同，但统计值形状不同。main 有 `clip_rich`、`clip_activity`、FTS 与来源元数据；旧记录身份与隐私不能被重新生成 / 降低 | 保留全部偏好与未知键、暂停与修订、ID / 时间 / 计数 / 分组 / 图片 / 标签 / 隐私 / record_identity；保留主线新表，旧库不凭历史推造活动统计；迁移不能授予成长奖励 |
+| 统计偏好与侧文件 | 旧 `{mode}` 与 main `{enabled}` 不兼容；三档选择没有完整迁入主线。两个身份文件不同；缓存同名 v2 但 9 / 10 项不同；身份重置及文件删除失败也有待修边界 | `telemetry.rs`、`store/preferences.rs`；off 保留，session 不隐式变为持续身份，不虚构 firstSeenDay，跨身份队列清理与错误可见性要覆盖；侧文件不在 SQLite 快照中 |
+| 上报与生产 Worker | 两分支都叫上报 v3 却互不兼容。生产仍是正式 v1/v2，main 新 v3 会被拒绝；main sender 与 main Worker 源码匹配不等于已部署 | 详见 [生产部署核对](telemetry.md#跨分支兼容与生产部署核对2026-11-02)；先明确统一协议及兼容规则、部署 Worker，再发布 sender；GA4 新维度 / 留存与实际入库仍待核实 |
+
+实际检查与边界：
+
+- 原创纯内存 SQLite 样例复现旧索引下 main upsert 报 `ON CONFLICT clause does not match`，以及 text/file 两行改建 main 唯一索引报 `UNIQUE constraint failed`；原两行仍保留。脚本与输出在忽略的 `artifacts/audit-compat-20261102.noindex/schema-index-repro.py` / `.txt`。
+- Node 统计 relay/settings 定向测试 25 通过；Rust telemetry 13 通过、1 个真实上报测试保持忽略；Rust store telemetry 偏好 2 通过。双分支离线协议矩阵、命令和摘要在同目录 `telemetry-two-branch-contract.mjs` / `.json`、`telemetry-targeted-tests-summary.json`。现有测试未证明跨分支迁移、身份故障或 GA 入库通过。
+- Cloudflare 源码只读下载后离线校验：生产接受固定 v2、拒绝 main v3，handler 返回 400 且未调用网络。部署模块 9,028 B、SHA 与 0.2.3 已验收 v1/v2 模块一致；该审计阶段生产未部署新协议，未向真实接收端发送测试事件、未修改配置或 secret；后续部署结果见下一节。
+
+实施前验收矩阵须覆盖：新空库、正式旧 2、带主线扩展的 2、已知本地 3 到目标 4；重复打开幂等，未知 3 / 未来版本拒绝；同路径 text/file、多文件顺序与类型、跨平台与失效路径；图片 / 缩略图及全部偏好 / 隐私 / 记录身份；JSON v1–旧 v4；含 fonts/renderers/papers 的迁移与恢复、WAL 快照、失败回滚及符号链接拒绝；统计 opt-out / 三档策略 / 身份与离线队列；全部 AI 入口、FTS 与主线活动统计。现有启动会执行已保存保留规则，升级前快照应包含清理前全部内容，不能把保留规则删除与迁移丢失混为一谈。
+
+以上是实施前审计结论；当时只读，未改用户数据或云端。后续修复不等于跨分支所有功能均已原生实测。
+
+## 结构 4 兼容修复与验收（2026-11-02）
+
+按用户确认的顺序在 `codex/schema4-compatibility` 实施，SQLite / JSON / 统计协议分别处理：
+
+- `store/schema.rs` 把新空库、正式 / main 结构 2 与已知本地结构 3 统一到 4。已知 3 核对六表列属性、主键、索引谓词、外键、触发器与文件明细一致性；未知 3 / 未来版本在可写打开及快照前拒绝。已知旧库先建 before-migration 恢复点，再事务升级；失败回滚，重新打开不重复迁移。
+- text / image / file 独立去重；旧同路径文本与文件不合并丢行。`clip_files` 保留顺序、原始路径与文件 / 文件夹 / 未知类型，不扫真实文件系统猜测；主线旧文件派生未知类型。跨平台路径检查共用 19 项原创 fixture，并约束 100 项与含末尾换行的 256 KiB 路径预算。
+- JSON 导出 4、原生导入 1–4。v4 文件必须含与正文一致的 entries；非法文件 / 类型 / 路径原子拒绝，旧格式合法文件生成 unknown。保留既有图片、缩略图、分组、时间、记录身份、隐私与偏好，包括未知偏好 key。旧库不凭历史推造活动数据或成长奖励；主线 rich / activity / FTS 扩展保留。
+- 完整恢复管理目录加入 `papers`，保留 fonts / renderers / 纸缓存；已知 3 恢复点可恢复，未知 3 列为不兼容。WAL 快照、失败提交保留两端恢复点、符号链接拒绝等既有保护继续覆盖。统计侧文件仍不进入恢复点。
+- 文件在 Rust 查询 / AI 授权执行端、设置候选与浏览器演示均排除 AI；详情显示有序路径 / 类型及明确「文件记录 · 不向 AI 提供」。不会通过保存成代码绕开类型边界。
+- 三档统计 mode、旧布尔 true 保守转 session、身份冲突 / 缺日期、缓存 3 与新 HTTP 4 已实现；关闭 / 重置 / 切模式清 generation，偏好读取失败保留侧文件停止统计，未配置预览不碰侧文件，身份 / 缓存删除失败可见并可重试。详见 [统计说明](telemetry.md#当前收集范围与界面协议-4客户端尚未发布)。
+
+**自动与 macOS 原生证据**
+
+`npm test` 212 通过；Rust 无 desktop lib 145 通过 / 3 默认忽略、desktop lib 161 通过 / 3 默认忽略；Rust 格式与 `npm run build` 通过。原生构建使用独立标识 `com.starclip.compatverify20261102a`、空统计端点、无更新源和 ad-hoc 签名，未替换正式应用或真实预览数据。Apple Silicon app 构建及 `codesign --verify --deep --strict` 通过。
+
+只在该独立目录预置原创结构 3：同路径文件 / 文本各一条、原创 PNG 一条、固定分组 / 隐私身份 / 暂停与统计 off 偏好、原创纸缓存。原生列表显示三条；文件详情路径顺序、文件夹 / 未知类型及 AI 禁止文案正确；设置中 off 保留且三种模式可见。正常退出后的只读断言核对 schema 4、全部记录 / 图片与缩略图哈希 / 身份 / 计数 / 偏好 / 缓存一致，无虚构活动、无统计身份或缓存侧文件；恰好一个结构 3 的 before-migration 恢复点。重开再退出后同一断言通过，恢复点仍一个。全程保持采集暂停，未读取真实剪贴板、未点击复制 / 开启采集。
+
+证据位于忽略的 `artifacts/schema4-compat-20261102.noindex/`：`node-tests-final.log`、`rust-core-final.log`、`rust-desktop-final.log`、`native-build-final.log`、`native-before.json`、`native-after.json`、`native-file-details.txt` / `.png`、`native-telemetry-settings.txt`。原生 fixture 的范围有限，未知版本 / 失败注入 / 主线扩展等由自动检查覆盖；不将其扩大为所有 GUI 或 Windows 实机升级已通过。
+
+**云端顺序与边界**
+
+本地实现 / 原生检查之后，生产 Worker 于 08:12:38 UTC 更新到版本 `9ef49cba-c869-4e63-b6d2-092039a517f7`，100% 流量，回读源码 SHA-256 `2c5a2a2b9230a1977510f286ea1682d71e407fdc532a8164306c40d85abab827` 与仓库一致。既有 GA secret 保留、未读取值；微软仍 false。固定原创 HTTP 矩阵中 v1 / v2 / 两种历史 v3 / 无日期 v4 均返回 204，混杂身份 v4 返回 400；真实 Rust sender 的 session 九种及 installation 十一种原创事件均通过。204 只证明中继 / 供应商 HTTP 确认。新增两个 GA 维度与后续实际入库结果见 [部署核对](telemetry.md#跨分支兼容与生产部署核对2026-11-02)。云端、平台构建、GUI 与正式发布分别记，尚未发布新版客户端或同步 Homebrew。
+
 ## 尚未验证或未覆盖
 
 - Windows 安装程序运行、托盘与剪贴板的实机体验；没有操作远程 Windows 电脑。
 - 其他应用占用快捷键、休眠恢复、长期运行与大量历史的性能。
-- 密码管理器剪贴板标记、来源应用排除：尚未实现。
+- 密码管理器剪贴板标记与来源记录已在 #13 实现，新增原生场景尚待实测；按来源应用阻止采集仍未实现。
 - 没有 Apple Developer 公证或 Windows 代码签名；分发包为开发预览版。
 
 图片仅包含原创示例，没有发布真实剪贴历史、数据库、账号或个人文件。

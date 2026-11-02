@@ -101,28 +101,39 @@ fn set_telemetry_enabled(
     context: AppContext<'_>,
     enabled: bool,
 ) -> Result<TelemetryState> {
-    // Keep the storage → store → telemetry order. No network under these locks.
+    set_telemetry_mode(app, context, if enabled { "session" } else { "off" }.into())
+}
+#[tauri::command]
+fn set_telemetry_mode(
+    app: AppHandle,
+    context: AppContext<'_>,
+    mode: String,
+) -> Result<TelemetryState> {
+    let mode = telemetry::TelemetryMode::parse(&mode).ok_or("不支持的统计模式。")?;
     let storage = lock(&context.storage)?;
     let store = lock(&context.store)?;
     let mut telemetry = lock(&context.telemetry)?;
-    if !enabled {
-        telemetry.set_enabled(false);
-        telemetry_changed(&app, &telemetry.state());
-    } else {
-        telemetry.validate_enable()?;
+    if mode != telemetry::TelemetryMode::Off {
+        telemetry.validate_mode(mode)?;
     }
-    let saved = storage
+    // Revocation takes effect before persistence; a failed write never resumes sending.
+    if mode == telemetry::TelemetryMode::Off {
+        telemetry.set_mode(mode);
+        telemetry_changed(&app, &telemetry.state());
+    }
+    if let Err(error) = storage
         .writable()
-        .and_then(|()| store.set_telemetry_enabled(enabled));
-    if let Err(error) = saved {
-        return Err(if enabled {
-            error
-        } else {
+        .and_then(|()| store.set_telemetry_mode(mode))
+    {
+        return Err(if mode == telemetry::TelemetryMode::Off {
             "本次运行已停止统计，但关闭偏好未保存；请重试，重启后可能恢复原设置。".into()
+        } else {
+            error
         });
     }
-    if enabled {
-        telemetry.set_enabled(true);
+    // Do not apply Off twice: the second call used to hide identity deletion failures.
+    if mode != telemetry::TelemetryMode::Off {
+        telemetry.set_mode(mode);
     }
     let state = telemetry.state();
     telemetry_changed(&app, &state);
@@ -143,9 +154,23 @@ fn record_usage_event(
 #[tauri::command]
 fn reset_telemetry_install(app: AppHandle, context: AppContext<'_>) -> Result<TelemetryState> {
     let mut telemetry = lock(&context.telemetry)?;
-    telemetry.reset_install()?;
+    let result = telemetry.reset_install();
     let state = telemetry.state();
     telemetry_changed(&app, &state);
+    result?;
+    Ok(state)
+}
+#[tauri::command]
+fn reset_telemetry_identity(app: AppHandle, context: AppContext<'_>) -> Result<TelemetryState> {
+    let mut telemetry = lock(&context.telemetry)?;
+    let result = if telemetry.state().mode == "installation" {
+        telemetry.reset_install()
+    } else {
+        telemetry.retry_identity()
+    };
+    let state = telemetry.state();
+    telemetry_changed(&app, &state);
+    result?;
     Ok(state)
 }
 #[tauri::command]
@@ -174,7 +199,12 @@ fn flush_telemetry_with_context(app: &AppHandle, context: &Context) -> Result<Te
 }
 fn schedule_telemetry_flush(app: &AppHandle, context: &Arc<Context>) {
     if lock(&context.telemetry).is_ok_and(|mut telemetry| {
+        let before = telemetry.state().revision;
         telemetry.tick();
+        let state = telemetry.state();
+        if state.revision != before {
+            telemetry_changed(app, &state);
+        }
         telemetry.ready()
     }) {
         let app = app.clone();
@@ -2430,8 +2460,8 @@ pub fn run() {
             let context = Arc::new(Context {
                 telemetry: Mutex::new(
                     Telemetry::new(store.telemetry_preferences())
-                        .with_cache(default.join("usage-counts.json"))
-                        .with_install(default.join("usage-install.json")),
+                        .with_install(default.join("usage-install.json"))
+                        .with_cache(default.join("usage-counts.json")),
                 ),
                 storage: Mutex::new(storage),
                 ai: Mutex::new(AiAccess::default()),
@@ -2574,12 +2604,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_telemetry_state,
             set_telemetry_enabled,
+            set_telemetry_mode,
             get_clip_stats,
             clear_clip_stats,
             record_usage_event,
             flush_telemetry,
             clear_telemetry_queue,
             reset_telemetry_install,
+            reset_telemetry_identity,
             get_state,
             get_startup_preferences,
             set_startup_preferences,

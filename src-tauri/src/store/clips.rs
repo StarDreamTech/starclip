@@ -38,7 +38,7 @@ impl Store {
         validate_content(image.digest(), title)?;
         let timestamp = now();
         let tx = self.conn.unchecked_transaction().map_err(sql_error)?;
-        let existed = capture.is_some() && Self::content_exists(&tx, image.digest(), true)?;
+        let existed = capture.is_some() && Self::content_exists(&tx, image.digest(), "image")?;
         tx.execute("INSERT INTO clips(content,title,kind,group_id,created_at,updated_at,keep_forever) VALUES(?1,?2,'image',?3,?4,?4,?5)
             ON CONFLICT(content) WHERE kind='image' DO UPDATE SET updated_at=excluded.updated_at,
             title=CASE WHEN excluded.title<>'' THEN excluded.title ELSE clips.title END,
@@ -109,17 +109,10 @@ impl Store {
 
     /// 文件采集：正文是换行连接的绝对路径，复制回去写入文件列表，不读取文件内容。
     pub fn capture_files(&self, paths: &[String], context: &CaptureContext) -> Result<Clip> {
-        if paths.is_empty() || paths.len() > MAX_FILES {
-            return Err(format!("一次复制的文件需为 1–{MAX_FILES} 个。"));
-        }
-        if paths
-            .iter()
-            .any(|path| path.trim().is_empty() || path.contains('\n'))
-        {
-            return Err("文件路径无效。".into());
-        }
+        let content = paths.join("\n");
+        unknown_entries(&content)?;
         self.insert_text(
-            &paths.join("\n"),
+            &content,
             "",
             None,
             false,
@@ -150,12 +143,8 @@ impl Store {
         put_metadata(conn, id, &metadata)
     }
 
-    pub(super) fn content_exists(conn: &Connection, content: &str, image: bool) -> Result<bool> {
-        let predicate = if image {
-            "kind='image'"
-        } else {
-            "kind<>'image'"
-        };
+    pub(super) fn content_exists(conn: &Connection, content: &str, kind: &str) -> Result<bool> {
+        let predicate = identity_predicate(kind);
         conn.query_row(
             &format!("SELECT EXISTS(SELECT 1 FROM clips WHERE content=?1 AND {predicate})"),
             [content],
@@ -179,15 +168,16 @@ impl Store {
         };
         let timestamp = now();
         let tx = self.conn.unchecked_transaction().map_err(sql_error)?;
-        let existed = capture.is_some() && Self::content_exists(&tx, content, false)?;
-        tx.execute("INSERT INTO clips(content,title,kind,group_id,created_at,updated_at,keep_forever) VALUES(?1,?2,?3,?4,?5,?5,?6)
-            ON CONFLICT(content) WHERE kind<>'image' DO UPDATE SET updated_at=excluded.updated_at,
+        let existed = capture.is_some() && Self::content_exists(&tx, content, kind)?;
+        let predicate = identity_predicate(kind);
+        tx.execute(&format!("INSERT INTO clips(content,title,kind,group_id,created_at,updated_at,keep_forever) VALUES(?1,?2,?3,?4,?5,?5,?6)
+            ON CONFLICT(content) WHERE {predicate} DO UPDATE SET updated_at=excluded.updated_at,
             title=CASE WHEN excluded.title<>'' THEN excluded.title ELSE clips.title END,
             group_id=COALESCE(excluded.group_id,clips.group_id),
-            keep_forever=MAX(clips.keep_forever,excluded.keep_forever)", params![content, title.trim(), kind, group_id, timestamp, keep_forever]).map_err(sql_error)?;
+            keep_forever=MAX(clips.keep_forever,excluded.keep_forever)"), params![content, title.trim(), kind, group_id, timestamp, keep_forever]).map_err(sql_error)?;
         let id = tx
             .query_row(
-                "SELECT id FROM clips WHERE content=?1 AND kind<>'image'",
+                &format!("SELECT id FROM clips WHERE content=?1 AND {predicate}"),
                 [content],
                 |row| row.get(0),
             )
@@ -202,7 +192,20 @@ impl Store {
                     tx.execute("DELETE FROM clip_rich WHERE clip_id=?1", [id])
                         .map_err(sql_error)?;
                 }
-                CaptureExtra::Files => {}
+                CaptureExtra::Files => {
+                    let entries = unknown_entries(content)?;
+                    // Recopying a legacy list preserves its recorded file kinds.
+                    let has_entries: bool = tx
+                        .query_row(
+                            "SELECT EXISTS(SELECT 1 FROM clip_files WHERE clip_id=?1)",
+                            [id],
+                            |row| row.get(0),
+                        )
+                        .map_err(sql_error)?;
+                    if !has_entries {
+                        Self::put_file_entries(&tx, id, &entries)?;
+                    }
+                }
             }
             // A repeat keeps the stored kind, e.g. text later saved as code.
             let kind: String = tx

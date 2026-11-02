@@ -7,7 +7,7 @@
         "allow": [
           "get_state", "get_clips", "complete_onboarding", "add_clip", "update_clip", "save_code",
           "get_startup_preferences", "set_startup_preferences", "quit_starclip",
-          "get_telemetry_state", "set_telemetry_enabled", "record_usage_event", "flush_telemetry", "clear_telemetry_queue", "reset_telemetry_install",
+          "get_telemetry_state", "set_telemetry_enabled", "set_telemetry_mode", "reset_telemetry_identity", "record_usage_event", "flush_telemetry", "clear_telemetry_queue", "reset_telemetry_install",
           "delete_clip", "copy_clip", "copy_product_share_text", "copy_product_share_image", "save_product_share_image", "get_clip_image", "create_group", "delete_group", "save_settings", "set_native_language", "set_theme",
           "get_privacy_rules", "save_privacy_rules", "set_clip_privacy", "set_clip_tags", "preview_privacy_rescan", "apply_privacy_rescan", "get_ai_state", "set_ai_enabled", "create_ai_connection", "revoke_ai_connection", "get_ai_connection_config", "clear_ai_audit",
           "get_appearance", "save_appearance", "import_appearance_sticker", "remove_appearance_sticker",
