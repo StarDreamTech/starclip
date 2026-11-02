@@ -70,7 +70,7 @@ watch(playing, value => {
 watch(group, () => { if (!shown.value.some(item => item.id === selected.value)) selected.value = shown.value[0]!.id; });
 onMounted(async () => {
   try {
-    unsubscribe = await onStarPetChanged(value => { preferenceRevision++; preferences.value = value; loaded.value = true; if (!sizing.value) sizeDraft.value = value.size; notice.value = ''; error.value = ''; });
+    unsubscribe = await onStarPetChanged(value => { preferenceRevision++; if (!playing.value && value.mood !== preferences.value.mood) selected.value = value.mood; preferences.value = value; loaded.value = true; if (!sizing.value) sizeDraft.value = value.size; notice.value = ''; error.value = ''; });
     if (disposed) { unsubscribe(); return; }
     const revision = preferenceRevision;
     const value = await getStarPetPreferences();
@@ -84,7 +84,24 @@ onMounted(async () => {
   finally { if (!disposed) loading.value = false; }
 });
 onBeforeUnmount(() => { disposed = true; unsubscribe?.(); clearInterval(timer); emit('busy', false); });
-function select(id: StarPetMoodId) { playing.value = false; selected.value = id; notice.value = ''; }
+async function select(id: StarPetMoodId) {
+  if (blocked.value) return;
+  playing.value = false; selected.value = id; notice.value = ''; error.value = '';
+  if (id === preferences.value.mood) return;
+  const revision = preferenceRevision;
+  busy.value = true;
+  try {
+    const value = await setStarPetPreferences({ mood: id });
+    if (disposed) return;
+    if (revision === preferenceRevision) { preferences.value = value; selected.value = value.mood; }
+    notice.value = starPetDesktopAvailable ? t('表情已保存，已开启的桌面星芽会同步换心情。') : t('表情已在当前预览生效。');
+  } catch (reason) {
+    if (!disposed) {
+      selected.value = preferences.value.mood;
+      error.value = t('表情未能保存：{error}', { error: errorText(reason) });
+    }
+  } finally { if (!disposed) busy.value = false; }
+}
 async function save(enabled: boolean) {
   if (blocked.value || !starPetDesktopAvailable) return;
   busy.value = true; error.value = ''; notice.value = ''; playing.value = false;
@@ -156,11 +173,11 @@ function touch() { if (!blocked.value) { reaction.value++; void growthPanel.valu
       <div class="starpet-color-heading"><div><h4>{{ t('给星芽一点颜色') }}</h4><p>{{ t('轻轻一点，马上换装 · 自动保存') }}</p></div><UiColor :model-value="preferences.color" :label="t('自选星芽颜色')" :disabled="blocked" @update:model-value="changeColor" /></div>
       <div class="starpet-color-choices"><button v-for="color in starPetColors" :key="color.value" type="button" :disabled="blocked" :aria-label="t('星芽颜色：{name}', { name: t(color.name) })" :aria-pressed="preferences.color === color.value" :class="{ chosen: preferences.color === color.value }" @click="changeColor(color.value)"><span class="starpet-color-dot" :style="{ background: color.value }"><Icon v-if="preferences.color === color.value" name="check" :size="13" /></span><span>{{ t(color.name) }}</span></button></div>
     </section>
-    <div class="starpet-gallery-heading"><div><h4>{{ t('星芽的 32 种小心情') }}</h4><p>{{ t('点选预览，找到此刻的心情') }}</p></div><button type="button" class="starpet-tour" :disabled="blocked" :aria-pressed="playing" @click="playing = !playing"><Icon :name="playing ? 'pause' : 'play'" :size="13" />{{ playing ? t('暂停巡游') : t('表情巡游') }}</button></div>
+    <div class="starpet-gallery-heading"><div><h4>{{ t('星芽的 32 种小心情') }}</h4><p>{{ t('点选即保存，已开启的桌面星芽同步换心情；巡游仅预览。') }}</p></div><button type="button" class="starpet-tour" :disabled="blocked" :aria-pressed="playing" @click="playing = !playing"><Icon :name="playing ? 'pause' : 'play'" :size="13" />{{ playing ? t('暂停巡游') : t('表情巡游') }}</button></div>
     <UiSelect v-model="group" :disabled="blocked" :options="choices" :label="t('星伴表情分类')" />
     <label class="starpet-other-moods"><input type="checkbox" :checked="showOtherMoods" :disabled="blocked" @change="showOtherMoods = ($event.target as HTMLInputElement).checked" />{{ t('显示其他心情（需主动选择）') }}</label>
     <div class="starpet-moods" role="group" :aria-label="t('星芽表情')">
-      <button v-for="item in shown" :key="item.id" type="button" :disabled="blocked" :class="{ chosen: selected === item.id }" :aria-pressed="selected === item.id" :aria-label="t('预览{name}', { name: t(item.name) })" @click="select(item.id)" @mouseenter="focusedTile = item.id" @mouseleave="focusedTile = null" @focus="focusedTile = item.id" @blur="focusedTile = null"><StarPet :mood="item.id" :color="preferences.color" :size="77" :animated="focusedTile === item.id" /><span>{{ t(item.name) }}</span><Icon v-if="selected === item.id" name="check" :size="11" /></button>
+      <button v-for="item in shown" :key="item.id" type="button" :disabled="blocked" :class="{ chosen: selected === item.id }" :aria-pressed="selected === item.id" :aria-label="t('选择{name}', { name: t(item.name) })" @click="select(item.id)" @mouseenter="focusedTile = item.id" @mouseleave="focusedTile = null" @focus="focusedTile = item.id" @blur="focusedTile = null"><StarPet :mood="item.id" :color="preferences.color" :size="77" :animated="focusedTile === item.id" /><span>{{ t(item.name) }}</span><Icon v-if="selected === item.id" name="check" :size="11" /></button>
     </div>
     <p class="starpet-footnote">{{ t('原创矢量角色 · 全部本地运行 · 支持系统减少动态效果') }}<br />{{ t('星芽的成长只记录必要计数，不会读取你的剪贴内容，也不需要 AI 服务。') }}</p>
   </div>
