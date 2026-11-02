@@ -757,6 +757,17 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 
 本地实现 / 原生检查之后，生产 Worker 于 08:12:38 UTC 更新到版本 `9ef49cba-c869-4e63-b6d2-092039a517f7`，100% 流量，回读源码 SHA-256 `2c5a2a2b9230a1977510f286ea1682d71e407fdc532a8164306c40d85abab827` 与仓库一致。既有 GA secret 保留、未读取值；微软仍 false。固定原创 HTTP 矩阵中 v1 / v2 / 两种历史 v3 / 无日期 v4 均返回 204，混杂身份 v4 返回 400；真实 Rust sender 的 session 九种及 installation 十一种原创事件均通过。204 只证明中继 / 供应商 HTTP 确认。GA Realtime 已核对 Rust 版本两条、两身份模式各一、日活 / 心跳各一。所有用户日期卡片出现 2026-11-02，但可能来自历史 v3 样例，v4 日期归属仍待独立确认；新协议历史报表 count 汇总与跨天留存也未验收。新增两个 GA 维度与入库明细见 [部署核对](telemetry.md#跨分支兼容与生产部署核对2026-11-02)。云端、平台构建、GUI 与正式发布分别记，尚未发布新版客户端或同步 Homebrew。
 
+## 星伴表情点选同步（2026-11-02）
+
+用户截图为图库选中「有点好奇」、桌面仍为「喜欢你呀」。根因是 `StarPetSettings.vue::select` 仅改页内预览，需额外点击滚动上方的「用这个表情陪我」；底部普通偏好保存不提交星伴。后端保存 / 广播和浮窗订阅链路存在，本次不扩大修改 Agent 临时状态或后端。
+
+[PR #16](https://github.com/cpython666/starclip/pull/16) 已 squash 合入 main（`f7255ffeb9cf60f4d64655aee022cfcacf0b61d0`）。手动点选改为独立 mood-only 保存，已开启浮窗立即同步，关闭时只保存心情、不自动开启，也不覆盖颜色 / 大小 / 普通草稿。失败回到最新已保存值，较新跨窗口心情同步勾选并优先于迟到响应；分类和巡游仍只预览。界面文案与英文同步。
+
+- `npm test` 216 通过；星伴设置 5 项实际 Vue 渲染回归覆盖即时补丁、off 不唤醒、保存失败与较新颜色 / 心情事件、迟到响应、巡游 / 分类不落盘。`npm run build` 通过，Rust 无 desktop 核心 146 通过 / 3 默认忽略。
+- macOS 独立应用 `com.starclip.petmoodverify20261102`、空统计端点 / 更新源、ad-hoc 验签通过。仅预置原创空库，暂停采集、统计 off，初始 love / 奶油金 / 70% / 已开启；原生点选 curious 后无需额外按钮，浮窗实际图像出现问号和好奇脸、说明为「有点好奇」。退出重开浮窗仍为该表情；只读核对 mood=curious、enabled / color / size 和固定普通偏好保留，历史仍 0 条。全程未读取真实剪贴板或用户数据库、未替换正式安装。
+- 业务 head `49f07487bd5019b6174ad7dbe2bb563b6300418d` 的 [PR CI 41426142010](https://github.com/cpython666/starclip/actions/runs/41426142010) 完整 **7/7 成功**：core、两平台构建 / 成品 CLI 与两平台 fresh / upgrade。Windows 此处为安装 / 固定数据验收，不扩大为本次表情点选 GUI 已实测。
+- 用户预览在 `artifacts/preview-local.noindex/2026-11-02T10-07-12-622Z/`，包含本修复；app 签名、DMG 和最后一行 open 命令均验证，未启动共享预览命名空间。完整证据在忽略的 `artifacts/starpet-mood-20261102.noindex/`：各检查日志、`native-curious.png`、`native-restart.txt`、`native-acceptance.json`、`preview-verification.json`、`ci-status.json`。正式发布与 Homebrew 未操作。
+
 ## 尚未验证或未覆盖
 
 - Windows 安装程序运行、托盘与剪贴板的实机体验；没有操作远程 Windows 电脑。

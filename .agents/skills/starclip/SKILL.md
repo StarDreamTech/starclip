@@ -23,6 +23,8 @@ description: 星笺 Starclip 项目共享知识库。处理本仓库的功能开
 - 2026-11-02 [PR #14](https://github.com/cpython666/starclip/pull/14) 已合入 main（`509ec71`）：移植字体下载进度（`handwriting-font-progress`）与 `npm run build:preview:mac`，打包最后一行输出可复制的 `open` 命令，同时保留 #12 的 `npm run app`。#1–#14 的合并提交均在 main 历史中；旧实现存档 `wip/local-20261101` 与历史验收分支保留，不回灌重复实现。预览采用 Starclip Preview / `com.starclip.preview`、独立数据目录、无线上统计与更新源，不触发 Release / Brew；验证与限制见 [开发验证](references/development.md) 和 [合并记录](../../../docs/verification.md#本地工作区并入-main2026-11-01-至-11-02)。
 - 同日跨分支审计确认：PR 已合并不等于旧本地数据与统计语义兼容。main schema 2 与本地 schema 3 在文件去重 / 明细、AI 边界、旧 JSON v4 和纸张恢复上存在缺口；统计的同名 v3 协议也有两种不兼容形状。生产 Worker 只读核实仍为正式 v1/v2，会拒绝 main 新 v3。随后 [PR #15](https://github.com/cpython666/starclip/pull/15) 已合入 main（`e987256`），统一 schema 4 / JSON 4、文件明细保留与 AI 排除、papers 恢复，独立 macOS 原创旧 3 升级及重开核对通过。统计偏好保留显式三档、旧布尔 true 保守转 session，支持旧身份 / 缓存隔离与 HTTP 4；生产 Worker 已更新为兼容 v1/v2、两种历史 v3 及新 v4，GA 维度及 Rust 两模式、新日活 / 心跳已在实时明细核对；日期卡片未隔离历史 v3 样例，v4 首次日期独立归属、历史汇总与跨天留存仍待验证，客户端尚未正式发布。最终业务 head `7b1e845` 的 push / PR 两组均 7/7 成功，包含两平台构建和 fresh / upgrade 安装；本地 main 已同步，未替换正式安装。实现与证据见 [跨分支审计](../../../docs/verification.md#数据结构与统计跨分支审计2026-11-02) 和 [统计部署核对](../../../docs/telemetry.md#跨分支兼容与生产部署核对2026-11-02)。
 
+- 同日 [PR #16](https://github.com/cpython666/starclip/pull/16) 已合入 main（`f7255ff`）：星伴图库手动点选立即保存并同步已开启浮窗，关闭不唤醒；巡游 / 分类仍仅预览。已核对 macOS 原生点选 / 重启、5 项组件回归及完整 7 项 PR CI，Windows 点选 GUI 未单独实测；见 [验证记录](../../../docs/verification.md#星伴表情点选同步2026-11-02)。
+
 ## 按需阅读
 
 以下源码路径均相对仓库根目录；主题资料只在涉及该任务时加载。
