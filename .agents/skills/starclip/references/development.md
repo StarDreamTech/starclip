@@ -22,7 +22,7 @@
 
 ## 环境与检查
 
-本地预览打包：`npm run build:preview:mac`（`scripts/build-preview.mjs`）只生成独立 `Starclip Preview` / `com.starclip.preview` 的 macOS app / DMG，移入忽略的 `artifacts/preview-local.noindex/<构建时间>/`，不启动、不安装、不提交或部署；统计编译地址为空、updater endpoints 为空、本地 ad-hoc 签名。预览构建不等于 GUI / 原生操作验收，两者分开记录。
+本地预览打包：`npm run build:preview:mac`（`scripts/build-preview.mjs`）只生成独立 `Starclip Preview` / `com.starclip.preview` 的 macOS app / DMG，移入忽略的 `artifacts/preview-local.noindex/<构建时间>/`，不启动、不安装、不提交或部署；统计编译地址为空、updater endpoints 为空、本地 ad-hoc 签名。2026-11-02 已随 #14 合入 main，打包最后一行单独打印可复制的 `open` 命令，路径按 shell 双引号规则转义，不用 `JSON.stringify` 代替 shell 转义。#12 的 `npm run app` 仍是安装依赖后启动原生开发版，与独立预览打包不同；不要为验证命令存在而直接启动并访问正式数据。预览构建不等于 GUI / 原生操作验收，两者分开记录；本轮证据见 `docs/verification.md` 的「本地工作区并入 main（2026-11-01 至 11-02）」。
 
 - 字体下载复用 reqwest 0.13 系统代理与 TLS；rustls-no-provider 构建客户端前必须安装 ring provider，已有 provider 时保留。真实测试发现遗漏会 panic，不可改成绕过 TLS。GitHub 连接 10 秒 / 总计 60 秒超时，失败不安装半文件。
 

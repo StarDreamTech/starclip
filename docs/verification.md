@@ -684,7 +684,7 @@
 - 浏览器演示实际切换：在「使用习惯 → 界面语言」选择 English 并保存后，主窗、设置、教程、星绘坊、月光笺、星尘整理、分享和星伴设置均切换；`document.title` 变为 `Starclip — Catch every spark`，`html[lang]` 为 `en-US`。逐页检查主要界面文案；可见中文仅剩用户示例数据（分组名、片段标题 / 正文）、「简体中文」语言自称、固定分享文案和 AI 配置示例，未发现遗漏的界面标签。
 - 未验证：打包后的 macOS / Windows 应用中的托盘菜单、原生窗口标题和英文界面实际切换；原生错误弹窗正文的英文覆盖；Windows 平台。以上为待实机核对的边界，不把浏览器检查表述为原生验收。
 
-## 本地工作区并入 main（2026-11-01，未推送）
+## 本地工作区并入 main（2026-11-01 至 11-02）
 
 WorkBuddy 在 0.2.3 之上留下的未提交工作区（文件剪贴、统计三档模式、月光笺原纸下载、字体弹窗与下载进度、本地预览打包）已整体存档为本地分支 `wip/local-20261101`（未推送），其中 2026-10-30 至 11-01 的逐项验证记录随该分支保存。并入 main 时：
 
@@ -693,7 +693,15 @@ WorkBuddy 在 0.2.3 之上留下的未提交工作区（文件剪贴、统计三
 - 移植 `npm run build:preview:mac`（`scripts/build-preview.mjs`）：**Starclip Preview** / `com.starclip.preview`、独立默认数据目录、本地 ad-hoc 签名，编译时清空线上统计地址、移除更新源与签名 / 公证凭据，输出 `.app` / DMG 至忽略的 `artifacts/preview-local.noindex/<构建时间>/`。不启动、不安装、不推送、不打 tag、不上传 Release、不部署 Worker、不触发 Homebrew。
 - 保留 `rust-toolchain.toml` 的 `rust-analyzer` 组件与 `.gitignore` 的 `.workbuddy-ai/`。
 
-本轮只做源码合并与自动检查，未启动预览、未做原生 GUI 验收。
+2026-11-02 按用户要求接续合并收尾：[PR #14](https://github.com/cpython666/starclip/pull/14) 的 head `1d95e70` 两组检查均成功，包含此前失败后重跑成功的 Windows fresh；随后 squash 合入 main 为 `509ec71f233032e5c20478112e8747edfca6dd1e`。#12 的 `npm run app` 同时保留；预览打包的最后一行是按 shell 规则转义的 `open` 命令。
+
+已逐项核对 14 个 PR 的合并提交均在 main 历史中，当前无开放 PR；29 个本地 / 远端分支均已归类。非祖先分支包含 squash 前的旧提交、本地重复实现存档，以及已被真实旧版验收替代的一次性 Windows 对比版本实验，不逐个重新 merge。原工作区 README / 预览脚本的两处未提交改动已保存在本地 stash，未覆盖或丢弃。审计快照为忽略的 `artifacts/main-integration-20261102.noindex/branch-audit.json`。
+
+main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib`：128 通过、3 忽略；版本一致性、Rust 格式、预览脚本语法检查通过。平台构建与合并后 CI 的结果另列于下方；这些检查不代表原生 GUI 验收。
+
+- 合并提交 `509ec71` 的 [Verify 41385341187](https://github.com/cpython666/starclip/actions/runs/41385341187) **7 个 job 全部成功**：core、macOS / Windows desktop，以及两平台 fresh / upgrade 安装检查。该 CI 结果对应此合并提交，后续仅知识库和本节记录的文档提交不改变业务实现。
+- 在 `509ec71` 上实际执行 `npm run build:preview:mac`，包含其 `beforeBuildCommand` 调用的 `npm run build`，退出码 0。输出 `artifacts/preview-local.noindex/2026-11-02T03-53-56-247Z/`（UTC，上海同为 2026-11-02）；app 文件合计 **16,428,348 B**，DMG **8,033,017 B（8.03 MB / 7.66 MiB）**，DMG SHA-256 `847f6b03481a11873f8c150ab971e14588ee95a8bd02f740ac73d8a8a66f223b`。`Info.plist` 核对独立标识与 0.2.3 版本，配置无更新源、不生成 updater 包；`codesign --verify --deep --strict` 与 `hdiutil verify` 通过。此为未发布预览，不改变正式 0.2.3 包体积的历史记录。
+- 捕获真实构建日志最后一行的 `open` 命令，核对 shell 解析得到的参数与生成的 `.app` 路径完全一致，`zsh -n` 通过；仅验证命令，未执行打开。构建日志、核验摘要在忽略的 `artifacts/main-integration-20261102.noindex/`，产物目录另存 `verification.json`。未启动预览、未访问真实剪贴板或正式数据库、未替换安装、未发版或同步 Homebrew；字体进度与新增界面没有新增原生 GUI 验收。
 
 ## 尚未验证或未覆盖
 

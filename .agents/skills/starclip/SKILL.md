@@ -15,12 +15,12 @@ description: 星笺 Starclip 项目共享知识库。处理本仓库的功能开
 - 区分源码实现、自动检查、浏览器演示、平台构建和原生实测。历史验收只证明对应版本与场景；当前范围以代码及 [README](../../../README.md)、[产品范围](../../../docs/product.md) 核对。
 - 用户说明与当前实现不一致时分别记录，不能把代码里的现有值倒写成用户要求。原九款手写字体由用户本人创作；2026-10-29 已确认界面作者字段统一显示「来源于互联网」，具体展示、许可和验证边界见产品决策。
 
-## 当前交接（截至 2026-10-31）
+## 当前交接（截至 2026-11-02）
 
 - 0.2.3 已于 2026-10-29 正式发布为 latest，Homebrew 已同步；签名 tag 固定为 `45ffe25`。2026-10-31 只读核对正式安装 `Info.plist` 的版本文字已为 0.2.3，尚未核对其二进制来源，本轮未替换；不再沿用发布当时本机 0.2.2 的现状描述。真实旧版升级与产物证据见 [开发验证](references/development.md)；macOS 0.2.2 这次升级需手动重开，新版修复在后续升级生效。
 - 用户已明确授权并完成本轮 0.2.3 发布与 Homebrew 同步，该授权不扩张为本机安装或后续发版。当前仅采用免费 GA4 + Cloudflare Workers，Azure 开通已取消。2026-10-30 用户要求独立项目暂不处理，名称仍待商榷；「星随」仅作讨论称呼，未授权抽离。
 - 最新源码与原生证据入口为 [开发验证](references/development.md)；动画星伴仍未达到用户期望的几十 MiB。更新 skill 只维护知识，不顺带安装、发版或操作云服务。
-- 2026-11-01 把 WorkBuddy 本地未提交工作区并入 main：文件剪贴、统计三档模式与月光笺原纸下载三项与 main 的 #8 / #10 / #13 重复，按 main 实现保留，本地版本仅存档于本地分支 `wip/local-20261101`（未推送）；移植了字体下载进度条（`handwriting-font-progress` 事件）与 `npm run build:preview:mac` 独立预览打包。预览打包使用 Starclip Preview / `com.starclip.preview`、独立数据目录、无线上统计与更新源，不触发 Release / Brew，见 [开发验证](references/development.md)。
+- 2026-11-02 [PR #14](https://github.com/cpython666/starclip/pull/14) 已合入 main（`509ec71`）：移植字体下载进度（`handwriting-font-progress`）与 `npm run build:preview:mac`，打包最后一行输出可复制的 `open` 命令，同时保留 #12 的 `npm run app`。#1–#14 的合并提交均在 main 历史中；旧实现存档 `wip/local-20261101` 与历史验收分支保留，不回灌重复实现。预览采用 Starclip Preview / `com.starclip.preview`、独立数据目录、无线上统计与更新源，不触发 Release / Brew；验证与限制见 [开发验证](references/development.md) 和 [合并记录](../../../docs/verification.md#本地工作区并入-main2026-11-01-至-11-02)。
 
 ## 按需阅读
 
