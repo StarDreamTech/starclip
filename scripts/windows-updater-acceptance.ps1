@@ -30,6 +30,9 @@ if ($fixture.platform -ne 'windows-x86_64' -or $fixture.sourceHeadSha -ne $Sourc
     [string]$fixture.releaseRunId -ne $ReleaseRunId -or $fixture.sourceRef -ne "v$($fixture.targetVersion)" -or
     [version]$fixture.targetVersion -le [version]'0.2.2') { throw 'The signed fixture provenance or version does not match this run.' }
 $targetVersion = [string]$fixture.targetVersion
+$baselineSchema = 2 # Immutable genuine public 0.2.2.
+$targetSchema = [int]$fixture.targetSchema
+if ($targetSchema -lt 1) { throw 'The signed target schema is missing or invalid.' }
 $endpoint = 'https://github.com/cpython666/starclip/releases/latest/download/latest.json'
 $targetUrl = "https://github.com/cpython666/starclip/releases/download/v$targetVersion/Starclip_${targetVersion}_x64-setup.exe"
 if ($fixture.targetUrl -ne $targetUrl -or $fixture.targetFilename -ne "Starclip_${targetVersion}_x64-setup.exe") {
@@ -186,10 +189,11 @@ function Assert-PinnedManifest {
 
 function Check-UpdaterFixture([string]$Mode) {
   if ($Mode -eq 'seed') {
-    & python $helper seed-data --database $database
+    & python $helper seed-data --database $database --expected-schema $baselineSchema
     if ($LASTEXITCODE -ne 0) { throw 'Fixed data seed failed.' }
   }
-  & python $helper verify-data --database $database
+  $expectedSchema = if ($Mode -eq 'after-install') { $targetSchema } else { $baselineSchema }
+  & python $helper verify-data --database $database --expected-schema $expectedSchema
   if ($LASTEXITCODE -ne 0) { throw 'Fixed data verification failed.' }
   $points = @(Get-ChildItem -LiteralPath (Join-Path $dataDir 'recovery') -Filter snapshot.json -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
     (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).reason -eq 'before-update'
@@ -197,12 +201,12 @@ function Check-UpdaterFixture([string]$Mode) {
   if ($Mode -eq 'after-install') {
     if ($points.Count -ne 1) { throw 'Expected exactly one before-update recovery point.' }
     $snapshot = Get-Content -LiteralPath $points[0].FullName -Raw | ConvertFrom-Json
-    if ($snapshot.schemaVersion -ne 2) { throw 'Unexpected recovery schema.' }
+    if ($snapshot.schemaVersion -ne $baselineSchema) { throw 'Unexpected recovery schema.' }
     foreach ($entry in $snapshot.files.PSObject.Properties) {
       $saved = Join-Path $points[0].DirectoryName $entry.Name
       if ((Get-FileHash -LiteralPath $saved -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.Value.sha256) { throw 'Recovery file digest mismatch.' }
     }
-    & python $helper verify-data --database (Join-Path $points[0].DirectoryName 'starclip.sqlite3')
+    & python $helper verify-data --database (Join-Path $points[0].DirectoryName 'starclip.sqlite3') --expected-schema $baselineSchema
     if ($LASTEXITCODE -ne 0) { throw 'The before-update snapshot lost fixed data.' }
     $oldApp = Join-Path $dataDir "application-backups/$($snapshot.id)/starclip.exe"
     if ((Get-FileHash -LiteralPath $oldApp -Algorithm SHA256).Hash.ToLowerInvariant() -ne $baselineHash) { throw 'The old application backup differs from genuine 0.2.2.' }
@@ -230,7 +234,7 @@ try {
   $baselineHash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
   Start-And-AssertPaused
   Set-FixedClipboard
-  & python (Join-Path $RepositoryRoot 'scripts/installer-fixture.py') $database fresh 2
+  & python (Join-Path $RepositoryRoot 'scripts/installer-fixture.py') $database fresh $baselineSchema
   if ($LASTEXITCODE -ne 0) { throw 'The genuine baseline captured the fixed clipboard canary.' }
   Stop-OwnedApplication
   Check-UpdaterFixture 'seed'

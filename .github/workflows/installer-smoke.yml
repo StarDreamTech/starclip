@@ -35,6 +35,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Check original installer and updater schema fixtures
+        run: python scripts/test-fixture-schema.py
       - uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.windows-artifact }}
@@ -87,6 +89,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Check original installer and updater schema fixtures
+        run: python scripts/test-fixture-schema.py
       - uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.macos-artifact }}

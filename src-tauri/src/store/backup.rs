@@ -251,10 +251,37 @@ impl Store {
                 Self::put_image(&tx, id, &image)?;
             }
             if clip.kind == "file" {
-                let entries = match clip.entries.as_ref() {
+                let mut entries = match clip.entries.as_ref() {
                     Some(entries) => entries.clone(),
                     None => unknown_entries(&clip.content)?,
                 };
+                if existed.is_some() {
+                    // A backup can fill unknown kinds, but it must not erase or
+                    // reinterpret known classifications already stored for this path.
+                    let known = {
+                        let mut statement = tx.prepare("SELECT path,entry_kind FROM clip_files WHERE clip_id=?1 AND entry_kind IN ('file','directory')").map_err(sql_error)?;
+                        let rows = statement
+                            .query_map([id], |row| {
+                                let kind: String = row.get(1)?;
+                                Ok((
+                                    row.get::<_, String>(0)?,
+                                    if kind == "file" {
+                                        FileEntryKind::File
+                                    } else {
+                                        FileEntryKind::Directory
+                                    },
+                                ))
+                            })
+                            .map_err(sql_error)?;
+                        rows.collect::<rusqlite::Result<HashMap<_, _>>>()
+                            .map_err(sql_error)?
+                    };
+                    for entry in &mut entries {
+                        if let Some(kind) = known.get(&entry.path) {
+                            entry.entry_kind = *kind;
+                        }
+                    }
+                }
                 Self::put_file_entries(&tx, id, &entries)?;
             }
             let mut metadata = read_metadata(&tx, id)?;

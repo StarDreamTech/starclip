@@ -24,7 +24,7 @@
 - macOS 原生：独立应用 `com.starclip.usageverify20261029` 全程暂停，使用 123 条原创固定记录。主列表每页 50 条，第二页显示编号 73–24 的 50 条；全库搜索能找到仅在第三页的编号 1。星伴默认显示 26 个日常表情，额外心情开关未勾选；静默发送后无待发事件，也无成功提示。追加核对：在普通记录筛选中把原创编号 123 标记为隐私后，该记录移出当前页（普通记录共 122 条），已打开的详情立即折叠并显示手动保护依据，验证 `get_clips` IPC 可用。测试应用已退出，全程暂停。
 - 自动检查：`npm test` 166 项通过，Rust 无 desktop 核心测试 106 项通过、另有 3 项默认忽略。该阶段离线缓存、异常与重试由单元测试覆盖，尚未进行原生断网验收；后续 macOS 进程级断网证据另见下文，Windows 本轮未实机验证。最终 Apple Silicon 独立 release 应用为 14.07 MiB，应用标识 `com.starclip.usageverify20261029`，strict/deep 签名核验通过。
 
-上述验收进行时软件尚未发布；0.2.3 已于 2026-10-29 经用户明确授权[正式发布](https://github.com/cpython666/starclip/releases/tag/v0.2.3)。本机正式安装仍为 0.2.2，未替换。
+上述验收进行时软件尚未发布；0.2.3 已于 2026-10-29 经用户明确授权[正式发布](https://github.com/cpython666/starclip/releases/tag/v0.2.3)。该次 2026-10-29 验收未替换本机正式安装；2026-10-31 只读核对 Info.plist 为 0.2.3，二进制来源尚未核对。
 
 ## 补充验收：常规计数汇总与 macOS 进程级断网（2026-10-29）
 
@@ -81,7 +81,7 @@ macOS 使用独立 `com.starclip.acceptance20261029` 验收包与新空库，全
 
 载荷包含版本、应用版本、系统类别、每次运行随机编号、`identityMode`、固定事件及次数和受限设备字段。`device.architecture` 为应用二进制架构白名单；`osMajor` 仅主版本（Windows 仅 10 / 11 / unknown）；`model` 为限定格式 Mac 产品代号、Windows 固定系列白名单或通用类别。**不发送剪贴内容、图片、文件名、标题、搜索词、链接、路径、错误原文、账号、序列号、电脑名称、用户名或硬件标识。**
 
-固定编号模式另带 `installId`，仅已知创建时间时发送 UTC `firstSeenDay`；旧编号没有日期时不补造。`usage-install.json` 规范格式为版本 2、编号与可选创建时间，兼容主线旧文件和本地存档的 `usage-identity.json`。两个身份不同、损坏、读取 / 写入 / 删除失败均停止发送并提示；冲突文件保留，显式重置后才能恢复。Unix 文件权限 0600，原子写入；重置、切模式、关闭会清理待发 / 在途计数并换 generation，旧异步回调不能把旧身份计数放回。
+固定编号模式另带 `installId`，仅已知创建时间时发送 UTC `firstSeenDay`；旧编号没有日期时不补造。`usage-install.json` 规范格式为版本 2、编号与可选创建时间，兼容主线旧文件和本地存档的 `usage-identity.json`。固定编号模式遇到身份冲突、损坏或读写 / 清理失败时停止按安装统计并提示；冲突文件保留，可显式重置，或修复文件后重试以保留原编号。临时模式清理残留安装编号失败时保留可重试提示，仍可用本次临时编号发送功能计数；关闭模式不发送。Unix 文件权限 0600，原子写入；重置、切模式、关闭会清理待发 / 在途计数并换 generation，旧异步回调不能把旧身份计数放回。
 
 `usage-counts.json` 的缓存 3 使用事件名称、模式和身份 SHA-256 指纹，另含应用版本与创建时间；不含完整编号、设备字段或剪贴内容。上限 2 KiB、每事件最多 100 次、保留 72 小时；只有相同应用版本 / 模式 / 身份才恢复。旧 9 / 10 项数组缓存因身份归属不明而舍弃，不跨身份重报。固定编号可跨重启恢复；临时编号跨运行舍弃。两个侧文件均在默认应用目录，不跟随剪贴历史迁移，也不进入 JSON 或完整恢复点。
 
@@ -108,7 +108,7 @@ GA4 的 `client_id` 来自固定编号或运行编号，事件参数 `identity_m
 
 按用户确认的顺序，先实现本地 schema 4 / JSON 4 / 偏好与身份兼容，再于 **2026-11-02 08:12:38 UTC** 更新生产 Worker。回读模块为 11,927 B、SHA-256 `2c5a2a2b9230a1977510f286ea1682d71e407fdc532a8164306c40d85abab827`，部署版本 `9ef49cba-c869-4e63-b6d2-092039a517f7` 占 100% 流量，源码与仓库一致。两个 GA secret 按类型保留，未读取其值；微软仍 false、Logpush false、无 tail consumer，上传显式关闭 observability / logs / traces / issues（settings 回读未返回 observability 字段，不能据此宣称另有 UI 核对）。回退源保存在忽略目录，不改服务名或客户端地址。
 
-新增事件级 `identity_mode`、用户级 `first_seen_day` 已在 GA 自定义定义表格核对，原五个事件维度与标准 `count` 指标保留。新 sender 的实际入库与 cohort 留存需另列结果，HTTP 204、离线契约和维度创建均不能代替实际入库。此次客户端尚未正式发布或同步 Homebrew；原生数据升级证据见 [验证记录](verification.md#结构-4-兼容修复与验收2026-11-02)。
+新增事件级 `identity_mode`、用户级 `first_seen_day` 已在 GA 自定义定义表格核对，原五个事件维度与标准 `count` 指标保留。真实 Rust sender 已经生产端点发送原创样例：临时模式九种、固定模式十一种，均获 204。GA Realtime 另行核对版本 `0.0.0-telemetry-verification` 的 `app_started=2`，`studio_opened` 的 `identity_mode` 为 session / installation 各一条，`app_active` / `app_running` 各一条，用户属性 First seen day 的 `2026-11-02` 为一位用户；兼容性 HTTP 样例使用另一测试版本，不混作 Rust 证据。摘要为忽略的 `artifacts/schema4-compat-20261102.noindex/ga4-live-acceptance.json`，其中列出逐项快照。新增协议的历史报表 `count` 汇总与跨天 cohort 留存仍待后续处理时间 / 日期，未验收；HTTP 204、离线契约和维度创建均不能单独代替实际入库。此次客户端尚未正式发布或同步 Homebrew；原生数据升级证据见 [验证记录](verification.md#结构-4-兼容修复与验收2026-11-02)。
 
 ## 1. 准备 Google Analytics 4 标准版
 
@@ -179,7 +179,7 @@ cargo test --locked --offline --manifest-path src-tauri/Cargo.toml \
 
 Cloudflare Workers Free 每个账号每天共 **100,000 次请求**，同账号多个 Worker 共享，UTC 00:00 重置。当前 `workers.dev` 接收端超限后请求被拒绝（Error 1027），不会自动升级为付费计划；不同产品分部署不增加账号免费额度。此额度按进入 Worker 的请求计算，不是事件 `count` 总和。参见 [官方限制](https://developers.cloudflare.com/workers/platform/limits/#daily-requests) 与 [官方定价](https://developers.cloudflare.com/workers/platform/pricing/)。
 
-既有 v1 仅 Google 方案已有生产中继部署、真实 Rust 发送、GA Realtime 事件 / 参数、macOS 隔离原生开关 / 重启验收及 GitHub 构建变量核对。本轮兼容 v1 / v2 中继已部署，真实 Rust v2 固定批次返回 204，设备维度配置已核对，macOS 隔离分页 / 默认日常表情 / 静默发送场景已通过；新设备参数及公开 Mac 产品代号的 Realtime 接收已核对。这些能力已随 0.2.3 经用户授权发布。2026-10-29 已在 GA4 非实时探索中分别核对固定范围的事件条目数与自定义 `count` 使用次数，并完成 macOS 隔离应用进程级断网、重启恢复和恢复联网后的静默补报。该证据不覆盖系统 Wi-Fi 切换、全部网络异常、长期持续观察或 Windows 原生断网；出站头证据仍限于相同发送逻辑的回显探针。正式发布不扩大上述平台或场景的验收范围；本机正式安装仍为 0.2.2，未替换。
+既有 v1 仅 Google 方案已有生产中继部署、真实 Rust 发送、GA Realtime 事件 / 参数、macOS 隔离原生开关 / 重启验收及 GitHub 构建变量核对。本轮兼容 v1 / v2 中继已部署，真实 Rust v2 固定批次返回 204，设备维度配置已核对，macOS 隔离分页 / 默认日常表情 / 静默发送场景已通过；新设备参数及公开 Mac 产品代号的 Realtime 接收已核对。这些能力已随 0.2.3 经用户授权发布。2026-10-29 已在 GA4 非实时探索中分别核对固定范围的事件条目数与自定义 `count` 使用次数，并完成 macOS 隔离应用进程级断网、重启恢复和恢复联网后的静默补报。该证据不覆盖系统 Wi-Fi 切换、全部网络异常、长期持续观察或 Windows 原生断网；出站头证据仍限于相同发送逻辑的回显探针。正式发布不扩大上述平台或场景的验收范围；该次 2026-10-29 验收未替换本机正式安装；2026-10-31 只读核对 Info.plist 为 0.2.3，二进制来源尚未核对。
 
 ## 可选手动模板：Microsoft Application Insights（当前不启用）
 

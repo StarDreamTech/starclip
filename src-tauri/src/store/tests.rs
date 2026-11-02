@@ -3379,3 +3379,83 @@ fn portable_file_paths_match_shared_cross_platform_fixtures() {
         );
     }
 }
+
+#[test]
+fn file_backup_merge_preserves_known_types_and_fills_only_unknown() {
+    let mut db = store();
+    let known = vec![
+        FileEntry {
+            path: "/original-fixture/folder".into(),
+            entry_kind: FileEntryKind::Directory,
+        },
+        FileEntry {
+            path: "C:\\OriginalFixture\\note.txt".into(),
+            entry_kind: FileEntryKind::File,
+        },
+    ];
+    let paths: Vec<_> = known.iter().map(|entry| entry.path.clone()).collect();
+    let captured = db
+        .capture_files(&paths, &CaptureContext::default())
+        .unwrap();
+    Store::put_file_entries(&db.conn, captured.id, &known).unwrap();
+    let identity = db.clip(captured.id).unwrap().record_identity;
+    let backup: serde_json::Value = serde_json::from_str(&db.export().unwrap()).unwrap();
+
+    // Old main backups carry only paths. Their derived unknown values must not
+    // erase known directory/file metadata already retained in this library.
+    let mut old_main = backup.clone();
+    old_main["version"] = 3.into();
+    old_main["clips"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("entries");
+    assert_eq!(db.import(&old_main.to_string()).unwrap(), 0);
+    assert_eq!(
+        db.clip(captured.id).unwrap().entries.as_deref(),
+        Some(known.as_slice())
+    );
+
+    // The same rule applies when a v4 backup explicitly contains unknown types.
+    let unknown: Vec<_> = known
+        .iter()
+        .map(|entry| FileEntry {
+            path: entry.path.clone(),
+            entry_kind: FileEntryKind::Unknown,
+        })
+        .collect();
+    let mut v4_unknown = backup.clone();
+    v4_unknown["clips"][0]["entries"] = serde_json::to_value(&unknown).unwrap();
+    assert_eq!(db.import(&v4_unknown.to_string()).unwrap(), 0);
+    assert_eq!(
+        db.clip(captured.id).unwrap().entries.as_deref(),
+        Some(known.as_slice())
+    );
+
+    // Known incoming values can fill unknowns, without altering either path or order.
+    Store::put_file_entries(&db.conn, captured.id, &unknown).unwrap();
+    assert_eq!(db.import(&backup.to_string()).unwrap(), 0);
+    assert_eq!(
+        db.clip(captured.id).unwrap().entries.as_deref(),
+        Some(known.as_slice())
+    );
+
+    // Conflicting known values do not guess or overwrite the existing classification.
+    let conflicting = vec![
+        FileEntry {
+            path: known[0].path.clone(),
+            entry_kind: FileEntryKind::File,
+        },
+        FileEntry {
+            path: known[1].path.clone(),
+            entry_kind: FileEntryKind::Directory,
+        },
+    ];
+    let mut conflict = backup;
+    conflict["clips"][0]["entries"] = serde_json::to_value(&conflicting).unwrap();
+    assert_eq!(db.import(&conflict.to_string()).unwrap(), 0);
+    let merged = db.clip(captured.id).unwrap();
+    assert_eq!(merged.entries.as_deref(), Some(known.as_slice()));
+    assert_eq!(merged.content, paths.join("\n"));
+    assert_eq!(merged.record_identity, identity);
+    assert_eq!(db.clips().unwrap().len(), 1);
+}

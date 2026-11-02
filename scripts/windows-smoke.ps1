@@ -259,7 +259,7 @@ with sqlite3.connect(path.as_uri() + '?mode=ro', uri=True) as db:
     assert settings is None or json.loads(settings[0])['paused'] is True, 'Startup preferences changed recording state'
 '@ | python - $database ($Hidden.ToString()) ($Tray.ToString())
   if ($LASTEXITCODE -ne 0) { throw 'Startup settings persistence check failed.' }
-  Check-Database $Scenario 2
+  Check-Database $Scenario $targetSchema
 }
 
 function Assert-LoginRegistered {
@@ -363,7 +363,7 @@ with sqlite3.connect(path.as_uri() + '?mode=ro', uri=True) as db:
   }
   if ($second.ExitCode -ne 0) { throw 'The second instance failed to reopen the main window.' }
   Wait-ForPausedWindow
-  Check-Database $Scenario 2
+  Check-Database $Scenario $targetSchema
   Write-Host 'Native main window was destroyed and recreated; recording remains paused and fixed data is intact.'
 }
 
@@ -381,6 +381,10 @@ function Stop-OwnedApplication {
 
 # SQLite access is limited to the new runner-owned app directory checked above.
 # Python's sqlite3 is standard library; no driver, GUI framework or app hook.
+$targetSchemaText = & python (Join-Path $PSScriptRoot 'fixture_schema.py') (Split-Path $PSScriptRoot -Parent)
+if ($LASTEXITCODE -ne 0 -or $targetSchemaText -notmatch '^[1-9][0-9]*$') { throw 'Could not determine the exact candidate source schema.' }
+$targetSchema = [int]$targetSchemaText
+
 function Check-Database([string]$Mode, [int]$Schema) {
   if ($null -ne $script:appProcess) {
     $script:appProcess.Refresh()
@@ -405,10 +409,10 @@ try {
   }
   Start-And-AssertPaused
   Set-FixedClipboard $true
-  for ($i = 0; $i -lt 3; $i++) { Start-Sleep -Seconds 1; Check-Database $Scenario 2 }
+  for ($i = 0; $i -lt 3; $i++) { Start-Sleep -Seconds 1; Check-Database $Scenario $targetSchema }
   Check-WindowRecreation
   Check-StartupPreferences
-  Check-Database $Scenario 2
+  Check-Database $Scenario $targetSchema
   if ($env:GITHUB_STEP_SUMMARY) {
     "- Windows native $Scenario smoke passed: NSIS $Version, rendered pause status, fixed database checks. No capture toggle was enabled." >> $env:GITHUB_STEP_SUMMARY
     '- Candidate main-window close destroyed the native HWND while the process stayed alive; a second launch recreated the window, restored paused UI and preserved fixed data.' >> $env:GITHUB_STEP_SUMMARY

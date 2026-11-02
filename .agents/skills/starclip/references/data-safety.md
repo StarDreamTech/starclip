@@ -69,6 +69,8 @@
 - 当前源码 `store/files.rs` 为文件列表提供统一校验：1–100 项，UTF-8 字节逐项加 1 后总计 ≤256 KiB；拒绝 NUL / CR / LF、重复和非绝对路径，保留顺序及 file / directory / unknown 类型。Rust 与浏览器共用 `tests/fixtures/file-paths.json` 的跨系统正反样例；校验不访问磁盘、不读取文件内容。
 - 旧主线 schema 2 只有 content 的文件记录迁为 unknown，旧本地 schema 3 / JSON v4 的 entries 保持原值并逐项核验与 content 一致；普通文本即使恰好等于路径，也与文件独立去重。文件不能转为代码或带入星绘坊，前端候选、SQL 查询和后端授权一致排除 AI。
 
+- 文件导入同内容合并时按路径保留已有非 unknown 类型；旧 JSON 派生或显式 unknown 不降级已知类型，导入的 known 只补本机 unknown，冲突 known 保留本机值。不扫盘推断。依据 `store/backup.rs`、`store/tests.rs::file_backup_merge_preserves_known_types_and_fills_only_unknown` 和 `tests/file-compatibility.test.ts`。
+
 ## 数据结构与升级
 
 - 当前未发布源码为 schema 4。`store::open_with_recovery` 在写连接前只读检查：结构 2 可升级；结构 3 必须符合已知旧分支的六表、列类型 / 主键 / 非空、唯一索引、级联外键及逐项文件明细指纹，未知 3 / 未来版本拒绝。升级前保存一致恢复点，再事务转换并更新版本；保留 text/image/file 三个去重空间、旧 clip_files 顺序与类型、图片 / 身份 / 分组 / 隐私 / 偏好，叠加主线 rich/activity/FTS/来源信息。合法统计偏好仅归一化为 mode，revision 保留；损坏统计值保持原样、运行时停止，不阻断其它数据升级。失败回滚并报告快照位置；重开幂等。旧正式结构 2 与旧本地 3 的原创固定夹具已自动验证；本轮局部原生迁移验收及重开场景见 [验证记录](../../../../docs/verification.md)，不能扩大为真实用户数据或所有原生平台已验收。

@@ -732,22 +732,28 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 
 - `store/schema.rs` 把新空库、正式 / main 结构 2 与已知本地结构 3 统一到 4。已知 3 核对六表列属性、主键、索引谓词、外键、触发器与文件明细一致性；未知 3 / 未来版本在可写打开及快照前拒绝。已知旧库先建 before-migration 恢复点，再事务升级；失败回滚，重新打开不重复迁移。
 - text / image / file 独立去重；旧同路径文本与文件不合并丢行。`clip_files` 保留顺序、原始路径与文件 / 文件夹 / 未知类型，不扫真实文件系统猜测；主线旧文件派生未知类型。跨平台路径检查共用 19 项原创 fixture，并约束 100 项与含末尾换行的 256 KiB 路径预算。
-- JSON 导出 4、原生导入 1–4。v4 文件必须含与正文一致的 entries；非法文件 / 类型 / 路径原子拒绝，旧格式合法文件生成 unknown。保留既有图片、缩略图、分组、时间、记录身份、隐私与偏好，包括未知偏好 key。旧库不凭历史推造活动数据或成长奖励；主线 rich / activity / FTS 扩展保留。
+- JSON 导出 4、原生导入 1–4。v4 文件必须含与正文一致的 entries；非法文件 / 类型 / 路径原子拒绝，旧格式合法文件生成 unknown；重复导入只补全未知类型，保留已有已知类型，包括已知类型冲突时保留现值。保留既有图片、缩略图、分组、时间、记录身份、隐私与偏好，包括未知偏好 key。旧库不凭历史推造活动数据或成长奖励；主线 rich / activity / FTS 扩展保留。
 - 完整恢复管理目录加入 `papers`，保留 fonts / renderers / 纸缓存；已知 3 恢复点可恢复，未知 3 列为不兼容。WAL 快照、失败提交保留两端恢复点、符号链接拒绝等既有保护继续覆盖。统计侧文件仍不进入恢复点。
 - 文件在 Rust 查询 / AI 授权执行端、设置候选与浏览器演示均排除 AI；详情显示有序路径 / 类型及明确「文件记录 · 不向 AI 提供」。不会通过保存成代码绕开类型边界。
 - 三档统计 mode、旧布尔 true 保守转 session、身份冲突 / 缺日期、缓存 3 与新 HTTP 4 已实现；关闭 / 重置 / 切模式清 generation，偏好读取失败保留侧文件停止统计，未配置预览不碰侧文件，身份 / 缓存删除失败可见并可重试。详见 [统计说明](telemetry.md#当前收集范围与界面协议-4客户端尚未发布)。
 
 **自动与 macOS 原生证据**
 
-`npm test` 212 通过；Rust 无 desktop lib 145 通过 / 3 默认忽略、desktop lib 161 通过 / 3 默认忽略；Rust 格式与 `npm run build` 通过。原生构建使用独立标识 `com.starclip.compatverify20261102a`、空统计端点、无更新源和 ad-hoc 签名，未替换正式应用或真实预览数据。Apple Silicon app 构建及 `codesign --verify --deep --strict` 通过。
+`npm test` 212 通过；Rust 无 desktop lib 146 通过 / 3 默认忽略、desktop lib 162 通过 / 3 默认忽略；Rust 格式与 `npm run build` 通过。该 GUI 验收对应业务提交 `5e478a6`；后续文件导入合并补丁由新增 Rust / 浏览器回归与最终平台构建覆盖，不伪称做过原生 JSON 导入。原生构建使用独立标识 `com.starclip.compatverify20261102a`、空统计端点、无更新源和 ad-hoc 签名，未替换正式应用或真实预览数据。Apple Silicon app 构建及 `codesign --verify --deep --strict` 通过。
 
 只在该独立目录预置原创结构 3：同路径文件 / 文本各一条、原创 PNG 一条、固定分组 / 隐私身份 / 暂停与统计 off 偏好、原创纸缓存。原生列表显示三条；文件详情路径顺序、文件夹 / 未知类型及 AI 禁止文案正确；设置中 off 保留且三种模式可见。正常退出后的只读断言核对 schema 4、全部记录 / 图片与缩略图哈希 / 身份 / 计数 / 偏好 / 缓存一致，无虚构活动、无统计身份或缓存侧文件；恰好一个结构 3 的 before-migration 恢复点。重开再退出后同一断言通过，恢复点仍一个。全程保持采集暂停，未读取真实剪贴板、未点击复制 / 开启采集。
 
 证据位于忽略的 `artifacts/schema4-compat-20261102.noindex/`：`node-tests-final.log`、`rust-core-final.log`、`rust-desktop-final.log`、`native-build-final.log`、`native-before.json`、`native-after.json`、`native-file-details.txt` / `.png`、`native-telemetry-settings.txt`。原生 fixture 的范围有限，未知版本 / 失败注入 / 主线扩展等由自动检查覆盖；不将其扩大为所有 GUI 或 Windows 实机升级已通过。
 
+包含文件类型合并补丁的最终本地预览为：`artifacts/preview-local.noindex/2026-11-02T08-34-40-319Z/`，`com.starclip.preview`、空统计端点、无更新源；签名、DMG 和最后一行 `open` 的 shell 参数已核对，未启动该共享预览命名空间。原生验收使用的是上面的独立测试标识，不能混为已经访问 / 升级真实预览数据。构建与摘要见 `preview-build-final.log` / `preview-verification.json`。
+
+**安装验收夹具**
+
+首轮业务 head `5e478a6` 的 [PR CI 41412333700](https://github.com/cpython666/starclip/actions/runs/41412333700) 中 core 和两平台 desktop 构建均成功；四项安装检查的首个失败逐项核对为夹具仍传旧结构 2，不能把此轮记为完整 CI 成功。现已让普通安装检查从目标源码读结构；签名更新目标绑定精确 release checkout / SHA，真实公开 0.2.2 及 before-update 恢复点继续严格验 2，新增 before-migration 恢复点另列。目标 4 的旧统计 false 按 mode off 核对，未放宽成任意 2 / 4 皆可。`scripts/test-fixture-schema.py` 四项原创临时 SQLite 正反检查、Python AST、YAML 与 bash 语法通过；该测试已接入两平台安装 job。PowerShell 执行 / 解析以新 Windows CI 为准，本机无 pwsh；签名 updater GUI 此轮未重跑，不从脚本检查推定通过。
+
 **云端顺序与边界**
 
-本地实现 / 原生检查之后，生产 Worker 于 08:12:38 UTC 更新到版本 `9ef49cba-c869-4e63-b6d2-092039a517f7`，100% 流量，回读源码 SHA-256 `2c5a2a2b9230a1977510f286ea1682d71e407fdc532a8164306c40d85abab827` 与仓库一致。既有 GA secret 保留、未读取值；微软仍 false。固定原创 HTTP 矩阵中 v1 / v2 / 两种历史 v3 / 无日期 v4 均返回 204，混杂身份 v4 返回 400；真实 Rust sender 的 session 九种及 installation 十一种原创事件均通过。204 只证明中继 / 供应商 HTTP 确认。新增两个 GA 维度与后续实际入库结果见 [部署核对](telemetry.md#跨分支兼容与生产部署核对2026-11-02)。云端、平台构建、GUI 与正式发布分别记，尚未发布新版客户端或同步 Homebrew。
+本地实现 / 原生检查之后，生产 Worker 于 08:12:38 UTC 更新到版本 `9ef49cba-c869-4e63-b6d2-092039a517f7`，100% 流量，回读源码 SHA-256 `2c5a2a2b9230a1977510f286ea1682d71e407fdc532a8164306c40d85abab827` 与仓库一致。既有 GA secret 保留、未读取值；微软仍 false。固定原创 HTTP 矩阵中 v1 / v2 / 两种历史 v3 / 无日期 v4 均返回 204，混杂身份 v4 返回 400；真实 Rust sender 的 session 九种及 installation 十一种原创事件均通过。204 只证明中继 / 供应商 HTTP 确认。GA Realtime 已核对 Rust 版本两条、两身份模式各一、日活 / 心跳各一及首次日期 2026-11-02；新协议历史报表 count 汇总与跨天留存仍待后续验证。新增两个 GA 维度与入库明细见 [部署核对](telemetry.md#跨分支兼容与生产部署核对2026-11-02)。云端、平台构建、GUI 与正式发布分别记，尚未发布新版客户端或同步 Homebrew。
 
 ## 尚未验证或未覆盖
 

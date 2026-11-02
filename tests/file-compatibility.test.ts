@@ -39,6 +39,14 @@ test('legacy file backups keep path types, order and separate text identities wi
     const after = JSON.parse(await api.exportBackup());
     assert.deepEqual({ ...after, exportedAt: 0 }, { ...exported, exportedAt: 0 }, 'invalid import leaves the entire backup unchanged');
   }
+  assert.equal(await api.importBackup(backup([{ ...base, entries: undefined }], 3)), 0);
+  assert.deepEqual((await api.getState({ filter: 'file', query: 'missing.txt' })).clips[0].entries, entries, 'old backups cannot erase known path types');
+  const incoming = entries.map(entry => ({ ...entry, entryKind: 'file' }));
+  assert.equal(await api.importBackup(backup([{ ...base, entries: incoming }])), 0);
+  const merged = [entries[0], incoming[1]];
+  assert.deepEqual((await api.getState({ filter: 'file', query: 'missing.txt' })).clips[0].entries, merged, 'known types stay while unknown types can be completed');
+  await api.importBackup(backup([{ ...base, entries: undefined }], 3));
+  assert.deepEqual((await api.getState({ filter: 'file', query: 'missing.txt' })).clips[0].entries, merged);
   const paths = JSON.parse(fs.readFileSync(new URL('./fixtures/file-paths.json', import.meta.url), 'utf8')) as Array<{ path: string; valid: boolean }>;
   for (const { path, valid } of paths) {
     const importing = api.importBackup(backup([{ ...base, content: path, entries: [{ path, entryKind: 'unknown' }] }]));

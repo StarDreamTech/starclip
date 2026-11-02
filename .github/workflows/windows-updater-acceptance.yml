@@ -49,6 +49,10 @@ jobs:
             core.setOutput('version', version);
             core.setOutput('head-sha', commit.sha);
             core.setOutput('run-id', run_id);
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.head-sha }}
+          path: release-source
       - uses: actions/download-artifact@v4
         with:
           artifact-ids: ${{ steps.target.outputs.artifact-id }}
@@ -80,7 +84,7 @@ jobs:
             if (!(Test-Path -LiteralPath (Join-Path $opensslDir 'openssl.exe'))) { throw 'OpenSSL is unavailable.' }
             $env:PATH = "$opensslDir;$env:PATH"
           }
-          python scripts/release-updater-fixture.py prepare --assets "$env:RUNNER_TEMP/starclip-signed-target" --output "$env:RUNNER_TEMP/starclip-updater-private" --version $env:TARGET_VERSION --source-ref $env:TARGET_TAG --release-run-id $env:RELEASE_RUN_ID --source-head-sha $env:TARGET_HEAD --platform windows-x86_64
+          python scripts/release-updater-fixture.py prepare --assets "$env:RUNNER_TEMP/starclip-signed-target" --output "$env:RUNNER_TEMP/starclip-updater-private" --version $env:TARGET_VERSION --source-ref $env:TARGET_TAG --release-run-id $env:RELEASE_RUN_ID --source-head-sha $env:TARGET_HEAD --platform windows-x86_64 --source-directory "$env:GITHUB_WORKSPACE/release-source"
           if ($LASTEXITCODE -ne 0) { throw 'Signed update fixture preparation failed.' }
       - name: Exercise real 0.2.2 to signed target through native UI and trusted HTTPS
         timeout-minutes: 12

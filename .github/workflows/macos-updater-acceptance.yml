@@ -128,18 +128,20 @@ jobs:
           SOURCE_SHA: ${{ steps.target.outputs.revision }}
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
         run: |
-          python3 scripts/release-updater-fixture.py prepare --assets "$RUNNER_TEMP/starclip-release-assets" --output "$RUNNER_TEMP/starclip-private-updater-fixture" --version "$TARGET_VERSION" --source-ref "$SOURCE_REF" --source-head-sha "$SOURCE_SHA" --release-run-id "$RELEASE_RUN_ID" --platform darwin-aarch64
+          python3 scripts/release-updater-fixture.py prepare --assets "$RUNNER_TEMP/starclip-release-assets" --output "$RUNNER_TEMP/starclip-private-updater-fixture" --version "$TARGET_VERSION" --source-ref "$SOURCE_REF" --source-head-sha "$SOURCE_SHA" --release-run-id "$RELEASE_RUN_ID" --platform darwin-aarch64 --source-directory "$PWD/release-source"
       - name: Exercise authentic target upgrade over runner-local trusted HTTPS
         env:
           BASELINE: ${{ inputs.baseline }}
         run: |
           baseline="$RUNNER_TEMP/starclip-public-baseline/Starclip.app"
           flags=(--allow-manual-recovery)
+          baseline_schema=2 # Immutable genuine public 0.2.2.
           if [ "$BASELINE" = source-comparison ]; then
             baseline="$PWD/release-source/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Starclip.app"
             flags=()
+            baseline_schema=$(python3 scripts/fixture_schema.py "$PWD/release-source")
           fi
-          python3 scripts/macos-updater-acceptance.py --app "$baseline" --inspector "$RUNNER_TEMP/starclip-updater-ui" --fixture "$RUNNER_TEMP/starclip-private-updater-fixture" --baseline-origin "$BASELINE" "${flags[@]}"
+          python3 scripts/macos-updater-acceptance.py --app "$baseline" --inspector "$RUNNER_TEMP/starclip-updater-ui" --fixture "$RUNNER_TEMP/starclip-private-updater-fixture" --baseline-origin "$BASELINE" --baseline-schema "$baseline_schema" "${flags[@]}"
       - name: Retain only synthetic acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
