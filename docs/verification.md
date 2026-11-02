@@ -728,7 +728,7 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 
 ## 结构 4 兼容修复与验收（2026-11-02）
 
-按用户确认的顺序在 `codex/schema4-compatibility` 实施，SQLite / JSON / 统计协议分别处理：
+按用户确认的顺序在 `codex/schema4-compatibility` 实施，[PR #15](https://github.com/cpython666/starclip/pull/15) 于 09:12:33 UTC squash 合入 main（`e987256013573939457ce0a2a7b47b12128a99b4`）。本地 main 已快进同步，合并后业务源码与已验证 head 完全一致。SQLite / JSON / 统计协议分别处理：
 
 - `store/schema.rs` 把新空库、正式 / main 结构 2 与已知本地结构 3 统一到 4。已知 3 核对六表列属性、主键、索引谓词、外键、触发器与文件明细一致性；未知 3 / 未来版本在可写打开及快照前拒绝。已知旧库先建 before-migration 恢复点，再事务升级；失败回滚，重新打开不重复迁移。
 - text / image / file 独立去重；旧同路径文本与文件不合并丢行。`clip_files` 保留顺序、原始路径与文件 / 文件夹 / 未知类型，不扫真实文件系统猜测；主线旧文件派生未知类型。跨平台路径检查共用 19 项原创 fixture，并约束 100 项与含末尾换行的 256 KiB 路径预算。
@@ -749,7 +749,9 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 
 **安装验收夹具**
 
-首轮业务 head `5e478a6` 的 [PR CI 41412333700](https://github.com/cpython666/starclip/actions/runs/41412333700) 中 core 和两平台 desktop 构建均成功；四项安装检查的首个失败逐项核对为夹具仍传旧结构 2，不能把此轮记为完整 CI 成功。现已让普通安装检查从目标源码读结构；签名更新目标绑定精确 release checkout / SHA，真实公开 0.2.2 及 before-update 恢复点继续严格验 2，新增 before-migration 恢复点另列。目标 4 的旧统计 false 按 mode off 核对，未放宽成任意 2 / 4 皆可。`scripts/test-fixture-schema.py` 四项原创临时 SQLite 正反检查、Python AST、YAML 与 bash 语法通过；该测试已接入两平台安装 job。`d28480c` 的 [PR CI 41414937777](https://github.com/cpython666/starclip/actions/runs/41414937777) 中 core、双平台构建及 macOS fresh / upgrade 五项成功，Windows fresh / upgrade 均在新增 Python 夹具退出时因 SQLite 连接未关闭触发 WinError 32，尚未执行 GUI；现修正为显式关闭连接并保留事务提交 / 回滚，需复跑新 head。PowerShell 执行 / 解析以最终 Windows CI 为准，本机无 pwsh；签名 updater GUI 此轮未重跑，不从脚本检查推定通过。
+首轮业务 head `5e478a6` 的 [PR CI 41412333700](https://github.com/cpython666/starclip/actions/runs/41412333700) 中 core 和两平台 desktop 构建均成功；四项安装检查的首个失败逐项核对为夹具仍传旧结构 2，不能把此轮记为完整 CI 成功。现已让普通安装检查从目标源码读结构；签名更新目标绑定精确 release checkout / SHA，真实公开 0.2.2 及 before-update 恢复点继续严格验 2，新增 before-migration 恢复点另列。目标 4 的旧统计 false 按 mode off 核对，未放宽成任意 2 / 4 皆可。`scripts/test-fixture-schema.py` 四项原创临时 SQLite 正反检查、Python AST、YAML 与 bash 语法通过；该测试已接入两平台安装 job。`d28480c` 的 [PR CI 41414937777](https://github.com/cpython666/starclip/actions/runs/41414937777) 中 core、双平台构建及 macOS fresh / upgrade 五项成功，Windows fresh / upgrade 均在新增 Python 夹具退出时因 SQLite 连接未关闭触发 WinError 32，尚未执行 GUI；现修正为显式关闭连接并保留事务提交 / 回滚，已由上述最终 Windows CI 复测通过。本机仍无 pwsh，不能把本地 AST 检查表述成 PowerShell 实测；签名 updater GUI 此轮未重跑，不从脚本检查推定通过。
+
+最终业务 head `7b1e8454a097802efd0ae5a2d4a597a221e64827` 的 [push 41416720644](https://github.com/cpython666/starclip/actions/runs/41416720644) 与 [PR 41416726751](https://github.com/cpython666/starclip/actions/runs/41416726751) **均 7/7 成功**：core、macOS / Windows desktop、两平台 fresh / upgrade。Windows 已实际通过 4 项 Python 夹具及原生窗口 / 固定数据核验，修复的连接释放不只是在 macOS 检查。两组完整 14 个 job 的链接 / 状态在 `artifacts/schema4-compat-20261102.noindex/ci-status-7b1e845.json`；后续本段 / skill 的纯文档记录不改变该业务源码证据。
 
 **云端顺序与边界**
 
