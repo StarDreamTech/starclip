@@ -25,6 +25,8 @@ description: 星笺 Starclip 项目共享知识库。处理本仓库的功能开
 
 - 同日 [PR #16](https://github.com/cpython666/starclip/pull/16) 已合入 main（`f7255ff`）：星伴图库手动点选立即保存并同步已开启浮窗，关闭不唤醒；巡游 / 分类仍仅预览。已核对 macOS 原生点选 / 重启、5 项组件回归及完整 7 项 PR CI，Windows 点选 GUI 未单独实测；见 [验证记录](../../../docs/verification.md#星伴表情点选同步2026-11-02)。
 
+- 同日查询性能第一轮已实现 Store 全局数量 / 筛选选项缓存，联合按本连接变更、外部提交与 DDL 失效；事务 / 活动游标不复用，记录与隐私 / AI 权限仍实时查询，结构保持 4。原创两版完整查询基准、正确性与剩余扫描边界见 [查询性能](../../../docs/query-performance.md)；正式客户端尚未发布。
+
 ## 按需阅读
 
 以下源码路径均相对仓库根目录；主题资料只在涉及该任务时加载。
@@ -39,7 +41,7 @@ description: 星笺 Starclip 项目共享知识库。处理本仓库的功能开
 | 数据开放、隐私规则、域名筛选或 AI 接入 | [隐私与来源规则](../../../docs/privacy-ai.md)、[AI 接入说明](../../../docs/ai-access.md)、[数据与隐私边界](references/data-safety.md)；[早期设计与待办](../../../docs/open-data-ai-plan.md) 不等于完整实现 |
 | 规划星伴养成、检查贴纸来源与授权边界 | [养成规划与素材核对](references/growth-and-artwork.md) |
 | 改采集、图片、保留策略、备份或迁移 | [数据与隐私边界](references/data-safety.md) |
-| 内存过大、隐藏窗口、历史规模与分页 | [架构与实现入口](references/architecture.md)、[开发验证与测量方法](references/development.md)、[数据与隐私边界](references/data-safety.md) |
+| 内存过大、隐藏窗口、历史规模与分页 / 查询性能 | [架构与实现入口](references/architecture.md)、[开发验证与测量方法](references/development.md)、[数据与隐私边界](references/data-safety.md)、[查询性能](../../../docs/query-performance.md) |
 | 本地剪贴活动统计（星迹统计）、计数口径与清空 | [数据与隐私边界](references/data-safety.md)、[星迹统计](../../../docs/clip-insights.md) |
 | 静默埋点、离线补报、设备字段、GA4 / Worker | [数据与隐私边界](references/data-safety.md)、[开发验证](references/development.md)、[接入说明](../../../docs/telemetry.md) |
 | 内置手写渲染、字体预览 / 按需下载及署名 | [产品与交互约定](references/product-decisions.md)、[架构与实现入口](references/architecture.md) |

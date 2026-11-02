@@ -13,6 +13,7 @@ impl Store {
         let revision = self.privacy_rules()?.revision;
         let mut predicates = vec!["1=1".to_owned()];
         let mut values: Vec<rusqlite::types::Value> = vec![];
+        let mut group_filter = None;
         match query.filter.as_str() {
             "all" => {}
             "pinned" => predicates.push("c.pinned=1".into()),
@@ -25,6 +26,7 @@ impl Store {
             }
             group if group.starts_with("group-") => {
                 let id = group[6..].parse::<i64>().map_err(|_| "分组编号无效。")?;
+                group_filter = Some(id);
                 predicates.push("c.group_id=?".into());
                 values.push(id.into());
             }
@@ -89,14 +91,26 @@ impl Store {
         }
         let from = "FROM clips c LEFT JOIN clip_privacy p ON p.clip_id=c.id";
         let where_sql = predicates.join(" AND ");
-        let total: u64 = self
-            .conn
-            .query_row(
-                &format!("SELECT COUNT(*) {from} WHERE {where_sql}"),
-                rusqlite::params_from_iter(values.iter()),
-                |row| row.get(0),
-            )
-            .map_err(sql_error)?;
+        let global = self.history_global()?;
+        let total: u64 = if query.query.trim().is_empty()
+            && query.sources.is_empty()
+            && query.tag.is_empty()
+            && query.privacy == "all"
+            && !query.ai_eligible
+        {
+            match group_filter {
+                Some(id) => global.group_counts.get(&id).copied().unwrap_or(0),
+                None => global.counts.get(&query.filter).copied().unwrap_or(0),
+            }
+        } else {
+            self.conn
+                .query_row(
+                    &format!("SELECT COUNT(*) {from} WHERE {where_sql}"),
+                    rusqlite::params_from_iter(values.iter()),
+                    |row| row.get(0),
+                )
+                .map_err(sql_error)?
+        };
         let last = total
             .div_ceil(u64::from(HISTORY_PAGE_SIZE))
             .max(1)
@@ -110,77 +124,17 @@ impl Store {
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(sql_error)?;
         Self::fill_entries(&self.conn, &mut clips)?;
-        let mut counts = BTreeMap::new();
-        let mut statement = self
-            .conn
-            .prepare("SELECT kind,COUNT(*) FROM clips GROUP BY kind")
-            .map_err(sql_error)?;
-        for item in statement
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
-            })
-            .map_err(sql_error)?
-        {
-            let (kind, count) = item.map_err(sql_error)?;
-            counts.insert(kind, count);
-        }
-        counts.insert("all".into(), counts.values().sum());
-        for (key, predicate) in [
-            ("pinned", "c.pinned=1"),
-            ("kept", "c.keep_forever=1"),
-            (
-                "link",
-                "c.kind='link' OR json_array_length(p.metadata,'$.linkHosts')>0",
-            ),
-        ] {
-            counts.insert(
-                key.into(),
-                self.conn
-                    .query_row(
-                        &format!("SELECT COUNT(*) {from} WHERE {predicate}"),
-                        [],
-                        |row| row.get(0),
-                    )
-                    .map_err(sql_error)?,
-            );
-        }
-        let mut statement = self
-            .conn
-            .prepare(
-                "SELECT group_id,COUNT(*) FROM clips WHERE group_id IS NOT NULL GROUP BY group_id",
-            )
-            .map_err(sql_error)?;
-        let group_counts = statement
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(sql_error)?
-            .collect::<rusqlite::Result<BTreeMap<_, _>>>()
-            .map_err(sql_error)?;
-        let facets = |paths: &[&str]| -> Result<Vec<String>> {
-            let sql = paths.iter().map(|path| format!("SELECT value FROM clip_privacy,json_each(metadata,'$.{path}') WHERE type='text'")).collect::<Vec<_>>().join(" UNION ");
-            let mut statement = self
-                .conn
-                .prepare(&format!(
-                    "SELECT DISTINCT value FROM ({sql}) ORDER BY value"
-                ))
-                .map_err(sql_error)?;
-            let values = statement
-                .query_map([], |row| row.get(0))
-                .map_err(sql_error)?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(sql_error)?;
-            Ok(values)
-        };
         Ok(HistoryPage {
             clips,
             history: HistorySummary {
                 page,
                 page_size: HISTORY_PAGE_SIZE,
                 total,
-                counts,
-                group_counts,
-                sources: facets(&["linkSources", "originSources"])?,
-                hosts: facets(&["linkHosts", "originHosts"])?,
-                tags: facets(&["manualTags", "ruleTags", "appTags"])?,
+                counts: global.counts,
+                group_counts: global.group_counts,
+                sources: global.sources,
+                hosts: global.hosts,
+                tags: global.tags,
             },
         })
     }

@@ -768,6 +768,18 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 - 业务 head `49f07487bd5019b6174ad7dbe2bb563b6300418d` 的 [PR CI 41426142010](https://github.com/cpython666/starclip/actions/runs/41426142010) 完整 **7/7 成功**：core、两平台构建 / 成品 CLI 与两平台 fresh / upgrade。Windows 此处为安装 / 固定数据验收，不扩大为本次表情点选 GUI 已实测。
 - 用户预览在 `artifacts/preview-local.noindex/2026-11-02T10-07-12-622Z/`，包含本修复；app 签名、DMG 和最后一行 open 命令均验证，未启动共享预览命名空间。完整证据在忽略的 `artifacts/starpet-mood-20261102.noindex/`：各检查日志、`native-curious.png`、`native-restart.txt`、`native-acceptance.json`、`preview-verification.json`、`ci-status.json`。正式发布与 Homebrew 未操作。
 
+## 历史查询全局统计缓存（2026-11-02）
+
+第一轮实现见 [查询性能](query-performance.md)：只复用全局数量与筛选选项，记录及隐私 / AI 判断实时查询，结构保持 4。联合检查本连接变更、外部提交与 DDL；事务 / 活动游标绕过，冷聚合结束后重查版本，超估算保留预算的选项仍完整返回。该接口仍不保证外部并发写入时整份响应为同一快照。
+
+- `npm test` **216 通过**，前端生产构建通过；Rust 无 desktop 核心 **151 通过 / 4 默认忽略**，macOS desktop lib **167 通过 / 4 默认忽略**。新增 5 项原创临时库回归包含真实写入 API、隐私重扫、事务回滚 / FAIL 部分更新、外部连接 / WAL 活动游标 / DDL / 重开和 40,960 项合法标签的超预算完整返回。新增 benchmark 默认忽略，仅显式运行；旧 3 项忽略未改。
+- `cargo fmt --check`、`git diff --check` 和 runner 的 Node 语法检查通过。没有修改业务版本、依赖、统计协议或 Worker，也未读取真实剪贴板、用户数据库或替换正式安装。
+- 用户 macOS 预览：`artifacts/preview-local.noindex/2026-11-02T12-09-22-440Z/`，`com.starclip.preview`、无线上统计 / 更新源，app / DMG 构建成功，strict / deep ad-hoc 验签及末行 `open` shell 参数核对通过。app 文件合计 16,560,092 B，DMG 8,092,822 B / SHA-256 `08b524549a5beee5cf3fcfd461ba0209d8b37bb26facf5eb678b0536e2dd8fa7`；未启动共享预览数据命名空间，没有把编译 / 存储计时表述成 GUI 性能验收。
+
+原创 1 万 / 5 万 / 10 万条各 7 场景、每场景 20 次的真实旧源码 / 优化源码对照完成，完整响应指纹均一致。10 万条缓存可复用时首页中位数 502.214 → 0.141 ms，少量命中搜索 490.950 → 0.433 ms，宽泛 FTS 782.993 → 294.098 ms；首次及写后重算仍约 480.778 / 488.210 ms。首次仅单次观察，没有明显消除重建成本。
+
+所有本轮原始检查、两版编译及基准样本在忽略的 `artifacts/history-query-20261102.noindex/`。完整基准只测实际 `Store::history_page`，不含渲染、IPC 或锁等待；方法、数据分布、结果与仍待优化的扫描 / COUNT / OFFSET 边界见上述专页。
+
 ## 尚未验证或未覆盖
 
 - Windows 安装程序运行、托盘与剪贴板的实机体验；没有操作远程 Windows 电脑。
