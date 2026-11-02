@@ -26,7 +26,7 @@
 
 - 2026-11-02 用户启动预览后截图报告「结构版本 3，当前支持 2」。源码确认 main 的 `store/mod.rs::SCHEMA_VERSION=2`，存档 `wip/local-20261101` 的 `store.rs::SCHEMA_VERSION=3`，两套预览脚本都使用 `com.starclip.preview`。该标识隔离正式应用，却不隔离不同分支或每次构建的数据；产物时间目录不同不代表新数据目录。复用旧预览库是可能原因，未读取用户数据库或定位文件，不能确认其实际来源。现有 `store/schema.rs::check_schema_version` 会拒绝高版本库，不可通过手改 `user_version` 绕过；该截图阶段尚未修复，后续结构 4 修复见下条。用户提供的 `Preview\.app` 在双引号内多了反斜杠，已核对去掉后应用路径存在；打开命令修正与数据库版本不兼容是两件事。
   - 提交历史补充：`27dda2e` 存档的本地实现由 schema 2 增至 3，并引入 `clip_files` 子表；main 的 #13（`f2ea1e4`）前后均为 schema 2，文件引用保存在现有 `clips.content` 的多行路径中，未采用该子表（`store/clips.rs`、`store/backup.rs`）。这是两套实现分叉后选择主线方案，不能表述为 Git 回退提交；#14 没有实现本地 schema 3 到主线的转换。隔离预览目录只能避开旧库，保留已有数据仍须比对结构后实现兼容迁移，不能直接改版本常量或数据库版本号。
-  - 后续完整审计已实际复现旧 3 索引与 main upsert 不匹配、同路径文本 / 文件改建主线索引冲突；并核对到统计偏好、同名 v3 协议、旧 JSON v4 与 papers 恢复的分叉。详见 `docs/verification.md`「数据结构与统计跨分支审计（2026-11-02）」。后续已在 `codex/schema4-compatibility` 实现结构 4 / JSON 4、文件明细与 AI 排除、papers 恢复，自动覆盖已知 2 / 3、未知拒绝和失败回滚；独立 macOS 原创结构 3 经原生迁为 4 并重开核对，原图 / 身份 / 偏好 / 纸缓存保留及恰好一个升级前恢复点通过。统计使用三档模式、新协议 4、缓存 3；旧布尔 true 一律转 session，避免把正式 0.2.3 临时身份隐式升级为固定身份。生产 Worker 已于 11-02 更新并回读源码一致，兼容正式 v1/v2、两种历史 v3 与新 v4；Rust 两模式原创样例的 HTTP 与 GA 实时事件 / identity_mode / 日活 / 心跳 / 首次日期已核对，历史汇总与跨天留存仍待；证据与范围见上述验证记录和 `docs/telemetry.md`，不等于新版客户端已发布。
+  - 后续完整审计已实际复现旧 3 索引与 main upsert 不匹配、同路径文本 / 文件改建主线索引冲突；并核对到统计偏好、同名 v3 协议、旧 JSON v4 与 papers 恢复的分叉。详见 `docs/verification.md`「数据结构与统计跨分支审计（2026-11-02）」。后续已在 `codex/schema4-compatibility` 实现结构 4 / JSON 4、文件明细与 AI 排除、papers 恢复，自动覆盖已知 2 / 3、未知拒绝和失败回滚；独立 macOS 原创结构 3 经原生迁为 4 并重开核对，原图 / 身份 / 偏好 / 纸缓存保留及恰好一个升级前恢复点通过。统计使用三档模式、新协议 4、缓存 3；旧布尔 true 一律转 session，避免把正式 0.2.3 临时身份隐式升级为固定身份。生产 Worker 已于 11-02 更新并回读源码一致，兼容正式 v1/v2、两种历史 v3 与新 v4；Rust 两模式原创样例的 HTTP 与 GA 实时事件 / identity_mode / 日活 / 心跳已核对；日期卡片是所有用户且与历史 v3 样例同值，v4 首次日期归属未独立确认，历史汇总与跨天留存仍待；证据与范围见上述验证记录和 `docs/telemetry.md`，不等于新版客户端已发布。
 
 - 字体下载复用 reqwest 0.13 系统代理与 TLS；rustls-no-provider 构建客户端前必须安装 ring provider，已有 provider 时保留。真实测试发现遗漏会 panic，不可改成绕过 TLS。GitHub 连接 10 秒 / 总计 60 秒超时，失败不安装半文件。
 
@@ -56,7 +56,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
 
 仅修改文档/skill 时核对事实、链接、结构和 `git diff --check`，不把未运行的构建/实测写为本轮通过。测试数量和包大小是历史构建快照，不作为恒定项目属性。
 
-安装 / 更新验收的目标结构编号读取绑定提交的源码 `SCHEMA_VERSION`（`scripts/fixture_schema.py`），不从待验收数据库反推。真实公开 0.2.2 baseline 与 before-update 恢复点仍严格核对 2；新目标核对自身结构，额外 before-migration 恢复点不冒充 before-update。结构 4 将旧统计 false 规范为 mode off，夹具核对需按目标格式保留显式关闭。实现入口为两平台 smoke / updater 脚本与 updater workflows；源码路径支持新 `store/mod.rs` 和旧 `store.rs`。
+安装 / 更新验收的目标结构编号读取绑定提交的源码 `SCHEMA_VERSION`（`scripts/fixture_schema.py`），不从待验收数据库反推。真实公开 0.2.2 baseline 与 before-update 恢复点仍严格核对 2；新目标核对自身结构，额外 before-migration 恢复点不冒充 before-update。结构 4 将旧统计 false 规范为 mode off，夹具核对需按目标格式保留显式关闭。实现入口为两平台 smoke / updater 脚本与 updater workflows；源码路径支持新 `store/mod.rs` 和旧 `store.rs`。Python 的 `with sqlite3.connect(...)` 只管理事务、不关闭连接；Windows 会因此锁住待清理的原创临时库，验收 helper / unittest 必须显式 closing 并保留事务提交 / 回滚，不能仅靠 macOS 临时目录清理成功推定 Windows 通过。
 
 ## 回归入口
 

@@ -3,6 +3,7 @@
 
 These checks simulate harness phases only, not application migrations or GUI.
 """
+from contextlib import closing
 import importlib.util
 import json
 from pathlib import Path
@@ -30,7 +31,7 @@ MAC = load('macos-updater-acceptance')
 
 
 def database(path, schema):
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.executescript('''
           CREATE TABLE groups(id INTEGER PRIMARY KEY, name TEXT, color TEXT);
           CREATE TABLE clips(id INTEGER PRIMARY KEY, content TEXT, title TEXT, kind TEXT,
@@ -83,7 +84,7 @@ class FixtureSchemaTests(unittest.TestCase):
             shutil.copyfile(path, saved / 'starclip.sqlite3')
             (saved / 'snapshot.json').write_text(json.dumps(dict(reason='before-migration')), encoding='utf-8')
             # Harness contract simulation only. Rust tests verify real migrations.
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db, db:
                 db.execute('PRAGMA user_version=4')
             self.assertEqual(installer(path, 'upgrade', 4).returncode, 0)
             self.assertNotEqual(installer(path, 'upgrade', 2).returncode, 0)
@@ -100,11 +101,11 @@ class FixtureSchemaTests(unittest.TestCase):
             baseline = root / 'release-2.sqlite3'
             # Model the normalization required by the target harness. This does
             # not replace actual application migration/snapshot coverage.
-            with sqlite3.connect(baseline) as db:
+            with closing(sqlite3.connect(baseline)) as db, db:
                 db.execute('PRAGMA user_version=4')
             with self.assertRaisesRegex(AssertionError, 'telemetry_preferences_v1'):
                 RELEASE.verify_data(baseline, 4)
-            with sqlite3.connect(baseline) as db:
+            with closing(sqlite3.connect(baseline)) as db, db:
                 db.execute("UPDATE preferences SET value=? WHERE key='telemetry_preferences_v1'",
                            (json.dumps(dict(revision=0, mode='off')),))
             self.assertEqual(RELEASE.verify_data(baseline, 4)['fixedImages'], 1)

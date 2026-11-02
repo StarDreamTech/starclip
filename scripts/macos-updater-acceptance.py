@@ -72,7 +72,7 @@ def fresh_runner():
 
 
 def verify_database(path, expected_schema):
-    with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5) as db:
+    with contextlib.closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5)) as db, db:
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert db.execute("PRAGMA user_version").fetchone()[0] == expected_schema, "Unexpected baseline/target database schema"
         assert json.loads(db.execute("SELECT value FROM preferences WHERE key='settings'").fetchone()[0]) == SETTINGS
@@ -82,7 +82,7 @@ def verify_database(path, expected_schema):
 
 def seed_database(path, expected_schema):
     assert path.is_file(), "Only the application may create its synthetic database"
-    with sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5) as db:
+    with contextlib.closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5)) as db, db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == expected_schema
         assert db.execute("SELECT count(*) FROM clips").fetchone()[0] == 0
         assert db.execute("SELECT count(*) FROM groups").fetchone()[0] == 0

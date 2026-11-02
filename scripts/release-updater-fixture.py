@@ -6,6 +6,7 @@ release.yml run and its existing tag. This server does not exercise GitHub's
 public download infrastructure. It never disables TLS or updater signatures.
 """
 import argparse
+from contextlib import closing
 import base64
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -204,7 +205,7 @@ def preferences_for_schema(expected_schema):
 def verify_data(path, expected_schema):
     if not path.is_file() or path.is_symlink():
         raise ValueError("Application-created synthetic database is required")
-    with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5) as db:
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5)) as db, db:
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert db.execute("PRAGMA user_version").fetchone()[0] == expected_schema, "Unexpected target/baseline database schema"
         for key, value in preferences_for_schema(expected_schema).items():
@@ -222,7 +223,7 @@ def verify_data(path, expected_schema):
 def seed_data(path, expected_schema):
     if not path.is_file() or path.is_symlink():
         raise ValueError("Only the application may create its synthetic database")
-    with sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5) as db:
+    with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5)) as db, db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == expected_schema, "Unexpected seed baseline schema"
         assert db.execute("SELECT count(*) FROM clips").fetchone()[0] == 0
         assert db.execute("SELECT count(*) FROM groups").fetchone()[0] == 0

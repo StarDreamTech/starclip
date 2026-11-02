@@ -749,11 +749,11 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 
 **安装验收夹具**
 
-首轮业务 head `5e478a6` 的 [PR CI 41412333700](https://github.com/cpython666/starclip/actions/runs/41412333700) 中 core 和两平台 desktop 构建均成功；四项安装检查的首个失败逐项核对为夹具仍传旧结构 2，不能把此轮记为完整 CI 成功。现已让普通安装检查从目标源码读结构；签名更新目标绑定精确 release checkout / SHA，真实公开 0.2.2 及 before-update 恢复点继续严格验 2，新增 before-migration 恢复点另列。目标 4 的旧统计 false 按 mode off 核对，未放宽成任意 2 / 4 皆可。`scripts/test-fixture-schema.py` 四项原创临时 SQLite 正反检查、Python AST、YAML 与 bash 语法通过；该测试已接入两平台安装 job。PowerShell 执行 / 解析以新 Windows CI 为准，本机无 pwsh；签名 updater GUI 此轮未重跑，不从脚本检查推定通过。
+首轮业务 head `5e478a6` 的 [PR CI 41412333700](https://github.com/cpython666/starclip/actions/runs/41412333700) 中 core 和两平台 desktop 构建均成功；四项安装检查的首个失败逐项核对为夹具仍传旧结构 2，不能把此轮记为完整 CI 成功。现已让普通安装检查从目标源码读结构；签名更新目标绑定精确 release checkout / SHA，真实公开 0.2.2 及 before-update 恢复点继续严格验 2，新增 before-migration 恢复点另列。目标 4 的旧统计 false 按 mode off 核对，未放宽成任意 2 / 4 皆可。`scripts/test-fixture-schema.py` 四项原创临时 SQLite 正反检查、Python AST、YAML 与 bash 语法通过；该测试已接入两平台安装 job。`d28480c` 的 [PR CI 41414937777](https://github.com/cpython666/starclip/actions/runs/41414937777) 中 core、双平台构建及 macOS fresh / upgrade 五项成功，Windows fresh / upgrade 均在新增 Python 夹具退出时因 SQLite 连接未关闭触发 WinError 32，尚未执行 GUI；现修正为显式关闭连接并保留事务提交 / 回滚，需复跑新 head。PowerShell 执行 / 解析以最终 Windows CI 为准，本机无 pwsh；签名 updater GUI 此轮未重跑，不从脚本检查推定通过。
 
 **云端顺序与边界**
 
-本地实现 / 原生检查之后，生产 Worker 于 08:12:38 UTC 更新到版本 `9ef49cba-c869-4e63-b6d2-092039a517f7`，100% 流量，回读源码 SHA-256 `2c5a2a2b9230a1977510f286ea1682d71e407fdc532a8164306c40d85abab827` 与仓库一致。既有 GA secret 保留、未读取值；微软仍 false。固定原创 HTTP 矩阵中 v1 / v2 / 两种历史 v3 / 无日期 v4 均返回 204，混杂身份 v4 返回 400；真实 Rust sender 的 session 九种及 installation 十一种原创事件均通过。204 只证明中继 / 供应商 HTTP 确认。GA Realtime 已核对 Rust 版本两条、两身份模式各一、日活 / 心跳各一及首次日期 2026-11-02；新协议历史报表 count 汇总与跨天留存仍待后续验证。新增两个 GA 维度与入库明细见 [部署核对](telemetry.md#跨分支兼容与生产部署核对2026-11-02)。云端、平台构建、GUI 与正式发布分别记，尚未发布新版客户端或同步 Homebrew。
+本地实现 / 原生检查之后，生产 Worker 于 08:12:38 UTC 更新到版本 `9ef49cba-c869-4e63-b6d2-092039a517f7`，100% 流量，回读源码 SHA-256 `2c5a2a2b9230a1977510f286ea1682d71e407fdc532a8164306c40d85abab827` 与仓库一致。既有 GA secret 保留、未读取值；微软仍 false。固定原创 HTTP 矩阵中 v1 / v2 / 两种历史 v3 / 无日期 v4 均返回 204，混杂身份 v4 返回 400；真实 Rust sender 的 session 九种及 installation 十一种原创事件均通过。204 只证明中继 / 供应商 HTTP 确认。GA Realtime 已核对 Rust 版本两条、两身份模式各一、日活 / 心跳各一。所有用户日期卡片出现 2026-11-02，但可能来自历史 v3 样例，v4 日期归属仍待独立确认；新协议历史报表 count 汇总与跨天留存也未验收。新增两个 GA 维度与入库明细见 [部署核对](telemetry.md#跨分支兼容与生产部署核对2026-11-02)。云端、平台构建、GUI 与正式发布分别记，尚未发布新版客户端或同步 Homebrew。
 
 ## 尚未验证或未覆盖
 
