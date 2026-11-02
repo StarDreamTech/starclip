@@ -5,7 +5,7 @@ import { api, isDesktop } from '../api';
 import { safeFilename } from '../snippets';
 import { createHandwritingPreview } from '../handwriting-preview';
 import type { HandwritingPreviewState, HandwritingSnapshot } from '../handwriting-preview';
-import type { HandwritingAssets, HandwritingOptions, HandwritingPaper } from '../types';
+import type { HandwritingAssets, HandwritingFontProgress, HandwritingOptions, HandwritingPaper } from '../types';
 import UiColor from './UiColor.vue';
 
 const props = defineProps<{ text: string; title: string }>();
@@ -13,6 +13,7 @@ const assets = ref<HandwritingAssets>({ available: false, path: null, fonts: [],
 const loading = ref(true);
 const operation = ref<'download' | 'export' | null>(null);
 const downloadingFont = ref('');
+const downloadProgress = ref<HandwritingFontProgress | null>(null);
 const renderState = ref<HandwritingPreviewState>('idle');
 const error = ref('');
 const renderError = ref('');
@@ -41,6 +42,16 @@ const emptyFontMessage = computed(() => fontFilter.value === 'downloaded' && !do
   ? '还没有下载字体，切换到全部字体选择喜欢的一款。'
   : handwritingOnly.value ? '当前手写体筛选下没有匹配的字体，试试其他名称、下载状态或关闭手写体筛选。'
     : '没有找到匹配的字体，试试其他名称或切换到全部字体。');
+const progressFont = computed(() => assets.value.fonts.find(item => item.id === downloadProgress.value?.id));
+const progressPercent = computed(() => {
+  const value = downloadProgress.value;
+  return value && value.total > 0 ? Math.min(100, Math.round((value.received / value.total) * 100)) : 0;
+});
+const progressSize = computed(() => {
+  const value = downloadProgress.value;
+  if (!value) return '';
+  return `${formatNumber(value.received / 1048576, { maximumFractionDigits: 1 })} / ${formatNumber(value.total / 1048576, { maximumFractionDigits: 1 })} MiB`;
+});
 function fontSizeLabel(bytes: number) { return `${formatNumber(bytes / (1024 * 1024), { maximumFractionDigits: 1 })} MiB`; }
 const defaultPapers: HandwritingPaper[] = [
   { id: 'warm', name: '暖白信纸', path: 'solid:#f8f1e3:1200:1600', width: 1200, height: 1600, color: '#f8f1e3', previewUrl: null },
@@ -89,7 +100,9 @@ async function loadAssets() {
   finally { if (!disposed) loading.value = false; }
 }
 onMounted(loadAssets);
-onBeforeUnmount(() => { disposed = true; scheduler.dispose(); });
+onBeforeUnmount(() => { disposed = true; clearProgress(); scheduler.dispose(); });
+let stopProgress: (() => void) | undefined;
+function clearProgress() { stopProgress?.(); stopProgress = undefined; downloadProgress.value = null; }
 async function selectFont(id: string) {
   if (disposed || operation.value || loading.value || !isDesktop) return;
   const selected = assets.value.fonts.find(item => item.id === id);
@@ -97,6 +110,14 @@ async function selectFont(id: string) {
   error.value = ''; notice.value = '';
   if (selected.downloaded) { font.value = selected.path; fontPickerOpen.value = false; return; }
   operation.value = 'download'; downloadingFont.value = id;
+  downloadProgress.value = { id, received: 0, total: selected.bytes };
+  if (typeof api.onHandwritingFontProgress === 'function') {
+    try {
+      stopProgress = await api.onHandwritingFontProgress(progress => {
+        if (!disposed && progress.id === id) downloadProgress.value = progress;
+      });
+    } catch { stopProgress = undefined; }
+  }
   try {
     const value = await api.downloadHandwritingFont(id);
     if (disposed) return;
@@ -107,7 +128,7 @@ async function selectFont(id: string) {
     fontPickerOpen.value = false;
     notice.value = t('字体已下载，可离线使用。');
   } catch (reason) { if (!disposed) error.value = errorText(reason); }
-  finally { if (!disposed) { operation.value = null; downloadingFont.value = ''; } }
+  finally { if (!disposed) { operation.value = null; downloadingFont.value = ''; } clearProgress(); }
 }
 function retryPreview() {
   if (!request.value || renderState.value !== 'idle' || operation.value) return;
@@ -154,10 +175,11 @@ async function exportImage() {
                     <button v-for="item in visibleFonts" :key="item.id" type="button" role="listitem" class="font-row" :class="{ 'font-selected': item.downloaded && font === item.path }" :disabled="!!operation || !isDesktop" :aria-pressed="item.downloaded && font === item.path" :aria-label="item.downloaded ? t('使用 {name}', { name: t(item.name) }) : t('下载 {name}', { name: t(item.name) })" @click="selectFont(item.id)">
                       <img :src="item.previewUrl" :alt="t('{name} 字体预览', { name: t(item.name) })" loading="lazy" />
                       <span class="font-row-text"><strong>{{ t(item.name) }}</strong><small>{{ item.tags.map(tag => t(tag)).join(' · ') }} · {{ t('作者：{author}', { author: t(item.author) }) }}</small></span>
-                      <span class="font-row-state">{{ downloadingFont === item.id ? t('正在下载并验证…') : item.downloaded ? font === item.path ? t('使用中') : t('已下载') : fontSizeLabel(item.bytes) + ' ↓' }}</span>
+                      <span class="font-row-state">{{ downloadingFont === item.id ? downloadProgress ? `${t('正在下载并验证…')} ${progressPercent}%` : t('正在下载并验证…') : item.downloaded ? font === item.path ? t('使用中') : t('已下载') : fontSizeLabel(item.bytes) + ' ↓' }}</span>
                     </button>
                     <p v-if="!visibleFonts.length" class="font-empty">{{ t(emptyFontMessage) }}</p>
                   </div>
+                  <div v-if="downloadProgress && operation === 'download'" class="font-progress" role="progressbar" :aria-valuenow="progressPercent" aria-valuemin="0" aria-valuemax="100" :aria-label="t('字体下载进度')"><div class="font-progress-track"><i :style="{ width: `${progressPercent}%` }" /></div><span role="status">{{ progressFont ? t(progressFont.name) : '' }} · {{ progressPercent }}% · {{ progressSize }}</span></div>
                 </div>
               </template>
             </div>
@@ -238,6 +260,7 @@ async function exportImage() {
 .font-row-text small{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .font-row-state{font-size:10px;color:var(--muted);white-space:nowrap}
 .font-selected .font-row-state{color:var(--gold)}
+.font-progress{display:flex;flex-direction:column;gap:6px;font-size:10px;color:var(--muted)}.font-progress-track{height:6px;border:1px solid var(--line);border-radius:99px;background:var(--input);overflow:hidden}.font-progress-track i{display:block;height:100%;border-radius:99px;background:var(--gold);transition:width .18s ease}
 .font-empty{margin:0;padding:16px 8px;text-align:center;color:var(--muted);font-size:11px;line-height:1.7}
 .paper-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:8px}
 .handwriting-panel .paper-option{display:flex;flex-direction:column;align-items:center;gap:4px;padding:5px 3px;min-width:0;background:transparent;border-color:transparent}
