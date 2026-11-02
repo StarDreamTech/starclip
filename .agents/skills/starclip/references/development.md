@@ -22,6 +22,8 @@
 
 ## 环境与检查
 
+历史查询基准使用 `node scripts/benchmark-history.mjs --stage compile`，本地重构建结束后运行同命令的 `--stage measure`；真实旧提交与优化版的固定原创 1 万 / 5 万 / 10 万条数据、完整结果指纹及来源校验见 [查询性能](../../../../docs/query-performance.md)。默认忽略的 Rust benchmark 不是常规测试，不能在其它本地重负载下采样；全局 SQL 诊断与完整链路计时分别解释，不把存储基准称为 GUI / IPC / 锁等待测量。
+
 本地预览打包：`npm run build:preview:mac`（`scripts/build-preview.mjs`）只生成独立 `Starclip Preview` / `com.starclip.preview` 的 macOS app / DMG，移入忽略的 `artifacts/preview-local.noindex/<构建时间>/`，不启动、不安装、不提交或部署；统计编译地址为空、updater endpoints 为空、本地 ad-hoc 签名。2026-11-02 已随 #14 合入 main，打包最后一行单独打印可复制的 `open` 命令，路径按 shell 双引号规则转义，不用 `JSON.stringify` 代替 shell 转义。#12 的 `npm run app` 仍是安装依赖后启动原生开发版，与独立预览打包不同；不要为验证命令存在而直接启动并访问正式数据。预览构建不等于 GUI / 原生操作验收，两者分开记录；本轮证据见 `docs/verification.md` 的「本地工作区并入 main（2026-11-01 至 11-02）」。
 
 - 2026-11-02 用户启动预览后截图报告「结构版本 3，当前支持 2」。源码确认 main 的 `store/mod.rs::SCHEMA_VERSION=2`，存档 `wip/local-20261101` 的 `store.rs::SCHEMA_VERSION=3`，两套预览脚本都使用 `com.starclip.preview`。该标识隔离正式应用，却不隔离不同分支或每次构建的数据；产物时间目录不同不代表新数据目录。复用旧预览库是可能原因，未读取用户数据库或定位文件，不能确认其实际来源。现有 `store/schema.rs::check_schema_version` 会拒绝高版本库，不可通过手改 `user_version` 绕过；该截图阶段尚未修复，后续结构 4 修复见下条。用户提供的 `Preview\.app` 在双引号内多了反斜杠，已核对去掉后应用路径存在；打开命令修正与数据库版本不兼容是两件事。

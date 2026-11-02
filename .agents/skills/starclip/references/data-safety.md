@@ -122,4 +122,5 @@ installation 的随机 128 位编号存于默认应用目录 usage-install.json�
 
 - 隐私元数据新增 `appTags`、`originUrl`、`originSources`、`originHosts`，重扫保留；敏感标记写入 `privacyReasons`（「复制来源标记为敏感内容」），只加不减，解除仍需本机复核。来源页面只存协议 + 域名 + 路径，AI 的 `sources` 字段仍只给正文链接。依据：`privacy.rs`、`store/clips.rs::apply_capture`。
 - `clip_rich(clip_id, html)` 随记录级联删除，单条 ≤256 KiB；最新一次复制决定是否保留格式。JSON 备份不导出 HTML，完整数据目录迁移 / 快照保留。文件记录只存路径，不读取文件内容。
+- 2026-11-02 第一轮查询缓存仅复用全库数量及来源 / 域名 / 标签选项，不缓存记录或 AI 可读性；本连接变更、其它连接提交及 DDL 联合失效，事务 / 活动游标内不发布缓存。完整超预算选项仍返回；估算 4 MiB 是缓存保留预算，不是总内存限制。5 项原创回归覆盖真实写入 API、隐私变化、事务 / FAIL 部分写入、外部提交 / WAL 游标及大选项集合；实现入口和基准见 [查询性能](../../../../docs/query-performance.md)。
 - `clips_fts` 为 contentless trigram 索引，不保存第二份正文；开启 FTS5 secure-delete 使删除立即移除词元。trigram 为 Unicode 大小写不敏感，结果仍由原包含判断确认。3 万条合成数据粗测：少量命中的关键词候选查询约 100 ms → 0.3 ms；几乎全部命中的宽泛关键词因仍需统计总数会略慢，未做真实历史测量。

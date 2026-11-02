@@ -340,7 +340,12 @@ impl Store {
             clip_stats::ensure_table(&conn)?;
             ensure_rich_table(&conn)?;
             crate::search_index::ensure(&conn)?;
-            let store = Self { conn };
+            let store = Self {
+                conn,
+                history_global_cache: Default::default(),
+                #[cfg(test)]
+                history_global_queries: Default::default(),
+            };
             store.prune_history()?;
             return Ok(store);
         }
@@ -517,6 +522,11 @@ impl Store {
         tx.pragma_update(None, "user_version", SCHEMA_VERSION)
             .map_err(sql_error)?;
         tx.commit().map_err(sql_error)?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            history_global_cache: Default::default(),
+            #[cfg(test)]
+            history_global_queries: Default::default(),
+        })
     }
 }

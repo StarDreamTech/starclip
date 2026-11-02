@@ -45,7 +45,7 @@
 | `src-tauri/src/capture.rs` | 开启时捕获当前内容、变更和重试状态机，以及敏感类型 / CF_HTML SourceURL / Windows 进程名等纯函数；本模块不访问真实剪贴板 |
 | `src-tauri/src/clipboard_source.rs` | 仅 desktop：采集时读取剪贴板敏感标记、来源应用与浏览器来源页面（macOS NSPasteboard / NSWorkspace，Windows 剪贴板格式与所有者进程），失败视为无上下文 |
 | `src-tauri/src/search_index.rs` | contentless FTS5 trigram 索引与触发器，≥3 字符关键词预筛候选后仍由 `starclip_contains` 确认；开启 FTS5 secure-delete；启动时缺表 / 缺触发器自动重建 |
-| `src-tauri/src/store/` | `mod.rs` 类型与共享辅助；`schema.rs` schema 4 指纹 / 快照 / 事务升级；`files.rs` 跨系统文件路径校验与明细读写；`preferences.rs`；`privacy_rules.rs`；`history.rs` 分页查询；`clips.rs` 富文本 / 文件 / 普通记录写入；`cleanup.rs`；`backup.rs` JSON v4（兼容 v1–v4）；`tests.rs`。所有内容写入在同事务扫描 |
+| `src-tauri/src/store/` | `mod.rs` 类型与共享辅助；`schema.rs` schema 4 指纹 / 快照 / 事务升级；`files.rs` 跨系统文件路径校验与明细读写；`preferences.rs`；`privacy_rules.rs`；`history.rs` 分页查询、`history_cache.rs` 全局统计缓存、`history_cache_tests.rs` 失效与权限回归、`query_bench.rs` 原创数据基准；`clips.rs` 富文本 / 文件 / 普通记录写入；`cleanup.rs`；`backup.rs` JSON v4（兼容 v1–v4）；`tests.rs`。所有内容写入在同事务扫描 |
 | `src-tauri/src/privacy.rs`、`src-tauri/resources/bip39/` | 本地敏感检测、URL 解析与来源、关键词 / 精确域名规则、手动和自动标签区分；词表来源许可随资源保存 |
 | `src-tauri/src/ai_access.rs`、`src-tauri/src/ai_transport.rs` | 会话连接、固定 ID + 随机身份授权、统一读取过滤、独立星伴权限与限时内存信号、审计及有界消息；stdio MCP / CLI 经本机桥接，不能直接打开数据库 |
 | `src-tauri/tests/ai_stdio.rs` | 启动实际主程序子进程，验证 CLI 与 MCP stdin/stdout，不读取正式用户数据 |
@@ -65,6 +65,10 @@ SQLite 当前结构为 4，主要表为 `clips`、`clip_images`、`clip_files`�
 存储仍为单个 SQLite（原图 / 缩略图 BLOB），不是分库。`CleanupSnapshot` 不再保留全量 `Clip` 正文；候选为 ID 与 32 字节 SHA-256，显示项仅最大的 100 条，事务删除前逐行重新读取校验原字段。`cancel_cleanup(token)` 仅匹配当前 token 才释放，主窗独占权限；`CleanupPanel` 在改筛选、卸载及迟到预览时取消。`privacy_rescan_plan` 用查询游标逐条读取正文，仍暂存待更新元数据。全局筛选集合和候选 ID 数组不是恒定内存。
 
 历史分页由 `store::history_page(HistoryQuery)` 在 SQLite 执行搜索、分类 / 分组、标签、来源与隐私筛选，每页固定 50 条，按更新时间和 ID 稳定排序；`get_state` / `api.getState` 返回当前页正文及 `HistorySummary`。全库分类 / 分组数量、标签与来源选项单独聚合，不从当前页推算；浏览器演示返回同样形状。`App.vue` 换页替换列表，`AiSettings.vue` 独立用 `aiEligible` 分页搜索并保留跨页勾选（最多现有授权上限 500 条）；创建连接仍走后端权限校验。分页限制常驻列表正文，不声称全进程只保留 50 条对象或达到固定内存量。
+
+2026-11-02 查询性能第一轮：`history_cache.rs` 在单个 Store 内复用全局 counts / group_counts / sources / hosts / tags，按 `total_changes()`、`PRAGMA data_version`、`PRAGMA schema_version` 联合失效；仅 data_version 不会发现本连接写入。显式事务与活动 Rows 游标绕过并清除缓存，冷聚合使用一个读事务，结束后重查版本才发布，避免回滚或旧 WAL 快照污染。估算保留预算 4 MiB，超出仍完整返回但不保留，不是进程内存上限。无搜索、来源、标签、隐私或 AI 限制的分类 / 分组可复用总数，其余匹配 COUNT 与所有页记录实时查询。未修改结构 4、接口、隐私或 AI 授权边界；新开 / 迁移 / 恢复后的 Store 缓存为空。依据 `store/history.rs`、`history_cache.rs` 和 5 项缓存回归。
+
+基准由 `scripts/benchmark-history.mjs` 在真实旧提交 detached worktree 与当前源码中注入同一 `query_bench.rs`，原创 1 万 / 5 万 / 10 万条数据、release / no-default-features，比较完整 `Store::history_page` 及全部 API 序列化结果指纹。首次与写后重算单列；SQL 诊断不代表优化后执行分解。方法、结果与边界见 [查询性能](../../../../docs/query-performance.md)。未测 GUI / IPC / 锁等待或真实用户库。普通 ≥3 字符搜索已有 FTS 候选，1–2 字符及含标签的 AI 搜索仍扫描，深页仍 OFFSET；首次或频繁写后的重算、实时复杂 COUNT 和后台调度仍待后续按基准处理。已有 `App.vue` 150 ms 搜索防抖与 `store/files.rs::fill_entries` 最多 500 ID 批量明细查询。
 
 分页相关复核不能只看当前页：详情和 AI 已选 ID 经主窗 `get_clips`（最多 500）重读，私密变更移出筛选时先遮住旧正文，删除后关闭详情，失败继续保护；迟到响应不能覆盖新选择。跨页 AI 勾选在刷新、翻页和预览前重新校验，移除已删除 / 私密 / 待扫描项。`has_pending_ai_history` 用 SQL EXISTS 检查全库状态，不为授权创建加载全库正文。
 

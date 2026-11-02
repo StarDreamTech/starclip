@@ -546,6 +546,9 @@ const CLIP_SELECT: &str = "SELECT c.id,c.content,c.title,c.kind,c.pinned,c.group
 
 pub struct Store {
     conn: Connection,
+    history_global_cache: std::cell::RefCell<Option<history_cache::CachedHistoryGlobal>>,
+    #[cfg(test)]
+    history_global_queries: std::cell::Cell<u64>,
 }
 
 pub(crate) fn sql_error(error: rusqlite::Error) -> String {
@@ -768,9 +771,15 @@ mod backup;
 mod cleanup;
 mod clips;
 mod history;
+mod history_cache;
 mod preferences;
 mod privacy_rules;
 mod schema;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod history_cache_tests;
+#[cfg(test)]
+mod query_bench;
