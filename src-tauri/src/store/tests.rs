@@ -1,4 +1,378 @@
 use super::*;
+
+fn emulate_legacy_three(conn: &Connection) {
+    conn.execute_batch("DROP TRIGGER IF EXISTS clips_fts_insert; DROP TRIGGER IF EXISTS clips_fts_update; DROP TRIGGER IF EXISTS clips_fts_delete; DROP TABLE IF EXISTS clips_fts; DROP TABLE IF EXISTS clip_rich; DROP TABLE IF EXISTS clip_activity; PRAGMA user_version=3;").unwrap();
+}
+
+#[test]
+fn schema_four_migrates_known_three_without_merging_file_and_text_or_losing_metadata() {
+    let scratch = Scratch::new();
+    let path = scratch.0.join("known-three.sqlite3");
+    let db = Store::open(&path).unwrap();
+    let paths = vec![
+        r"C:\Original Fixture\note.txt".to_owned(),
+        r"\\fixture-server\original-share\folder".to_owned(),
+    ];
+    let text = db.add(&paths.join("\n"), "原创文字", None).unwrap();
+    let file = db
+        .capture_files(&paths, &CaptureContext::default())
+        .unwrap();
+    let entries = vec![
+        FileEntry {
+            path: paths[0].clone(),
+            entry_kind: FileEntryKind::File,
+        },
+        FileEntry {
+            path: paths[1].clone(),
+            entry_kind: FileEntryKind::Directory,
+        },
+    ];
+    Store::put_file_entries(&db.conn, file.id, &entries).unwrap();
+    db.set_clip_tags(file.id, &["原创迁移标签".into()]).unwrap();
+    db.set_clip_privacy(file.id, true, false).unwrap();
+    let group = db.create_group("原创迁移分组", "#aabbcc").unwrap();
+    db.update(file.id, "原创文件", Some(group.id), true)
+        .unwrap();
+    db.set_keep_forever(file.id, true).unwrap();
+    let pixels = images::prepare_rgba(2, 1, &[12, 34, 56, 255, 90, 80, 70, 123]).unwrap();
+    let image = db
+        .add_image(&pixels, "原创迁移图片", Some(group.id), true)
+        .unwrap();
+    let png = db.image_png(image.id, false).unwrap();
+    let thumb = db.image_png(image.id, true).unwrap();
+    db.conn.execute("INSERT INTO preferences(key,value) VALUES('future_original_fixture','opaque-original-value')", []).unwrap();
+    db.conn
+        .execute(
+            "INSERT INTO preferences(key,value) VALUES('telemetry_preferences_v1',?1)",
+            [r#"{"revision":7,"enabled":false}"#],
+        )
+        .unwrap();
+    let before = db.clip(file.id).unwrap();
+    let settings = db.settings().unwrap();
+    emulate_legacy_three(&db.conn);
+    drop(db);
+    Store::validate_database(&path).unwrap();
+    let upgraded = Store::open(&path).unwrap();
+    assert_eq!(upgraded.schema_version().unwrap(), 4);
+    assert_eq!(upgraded.clips().unwrap().len(), 3);
+    assert_eq!(upgraded.image_png(image.id, false).unwrap(), png);
+    assert_eq!(upgraded.image_png(image.id, true).unwrap(), thumb);
+    assert_eq!(upgraded.groups().unwrap()[0].name, group.name);
+    let after = upgraded.clip(file.id).unwrap();
+    assert_eq!(after.entries, Some(entries));
+    assert_eq!(after.record_identity, before.record_identity);
+    assert_eq!(after.group_id, before.group_id);
+    assert!(after.keep_forever);
+    assert_eq!(
+        (
+            after.created_at,
+            after.updated_at,
+            after.copy_count,
+            after.pinned,
+            after.title
+        ),
+        (
+            before.created_at,
+            before.updated_at,
+            before.copy_count,
+            before.pinned,
+            before.title
+        )
+    );
+    assert!(after.is_private && after.manual_tags.contains(&"原创迁移标签".into()));
+    assert_eq!(upgraded.settings().unwrap(), settings);
+    assert_eq!(upgraded.telemetry_preferences().unwrap().revision, 7);
+    assert_eq!(
+        upgraded.telemetry_preferences().unwrap().mode,
+        crate::telemetry::TelemetryMode::Off
+    );
+    let saved: String = upgraded
+        .conn
+        .query_row(
+            "SELECT value FROM preferences WHERE key='telemetry_preferences_v1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(saved.contains("\"mode\":\"off\"") && !saved.contains("enabled"));
+    assert_eq!(
+        upgraded.add(&paths.join("\n"), "", None).unwrap().id,
+        text.id
+    );
+    assert_eq!(
+        upgraded
+            .capture_files(&paths, &CaptureContext::default())
+            .unwrap()
+            .id,
+        file.id
+    );
+    assert_eq!(upgraded.clip(file.id).unwrap().entries, after.entries);
+    assert_eq!(
+        upgraded
+            .conn
+            .query_row(
+                "SELECT value FROM preferences WHERE key='future_original_fixture'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+        "opaque-original-value"
+    );
+    let ai = upgraded
+        .history_page(&HistoryQuery {
+            ai_eligible: true,
+            ..HistoryQuery::default()
+        })
+        .unwrap();
+    assert!(!ai.clips.iter().any(|clip| clip.kind == "file"));
+    assert!(!upgraded.has_pending_ai_history().unwrap());
+    let recovery = fs::read_dir(scratch.0.join("recovery")).unwrap().count();
+    assert_eq!(recovery, 1);
+    drop(upgraded);
+    Store::open(&path).unwrap();
+    assert_eq!(
+        fs::read_dir(scratch.0.join("recovery")).unwrap().count(),
+        1,
+        "reopening is idempotent"
+    );
+}
+
+#[test]
+fn schema_four_migrates_main_two_files_rich_activity_and_all_opaque_preferences() {
+    let scratch = Scratch::new();
+    let path = scratch.0.join("main-two.sqlite3");
+    let db = Store::open(&path).unwrap();
+    let text = db
+        .capture_rich_text(
+            "原创主线正文",
+            Some("<p>原创格式</p>"),
+            &CaptureContext {
+                app: Some("原创编辑器".into()),
+                origin_url: Some("https://example.test/original?discard=yes".into()),
+                ..CaptureContext::default()
+            },
+        )
+        .unwrap();
+    let file = db
+        .capture_files(
+            &["/original-fixture/no-longer-present".into()],
+            &CaptureContext::default(),
+        )
+        .unwrap();
+    let identity = text.record_identity.clone();
+    let stats = db
+        .clip_stats(7, 0)
+        .unwrap()
+        .kinds
+        .values()
+        .map(|value| value.new)
+        .sum::<u64>();
+    db.conn.execute_batch("DROP TABLE clip_files; DROP INDEX clips_text_content; DROP INDEX clips_file_content; CREATE UNIQUE INDEX clips_text_content ON clips(content) WHERE kind<>'image'; PRAGMA user_version=2;").unwrap();
+    db.conn.execute("INSERT INTO preferences(key,value) VALUES('telemetry_preferences_v1','broken-original-value')", []).unwrap();
+    drop(db);
+    let upgraded = Store::open(&path).unwrap();
+    assert_eq!(upgraded.schema_version().unwrap(), 4);
+    assert_eq!(
+        upgraded.clip_html(text.id).unwrap().as_deref(),
+        Some("<p>原创格式</p>")
+    );
+    let text = upgraded.clip(text.id).unwrap();
+    assert_eq!(text.record_identity, identity);
+    assert_eq!(
+        text.origin_url.as_deref(),
+        Some("https://example.test/original")
+    );
+    assert_eq!(text.app_tags, vec!["原创编辑器"]);
+    assert_eq!(
+        upgraded.clip(file.id).unwrap().entries.unwrap()[0].entry_kind,
+        FileEntryKind::Unknown
+    );
+    assert_eq!(
+        upgraded
+            .clip_stats(7, 0)
+            .unwrap()
+            .kinds
+            .values()
+            .map(|value| value.new)
+            .sum::<u64>(),
+        stats,
+        "migration does not invent activity"
+    );
+    assert!(upgraded.telemetry_preferences().is_err());
+    assert_eq!(
+        upgraded
+            .conn
+            .query_row(
+                "SELECT value FROM preferences WHERE key='telemetry_preferences_v1'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+        "broken-original-value"
+    );
+    assert_eq!(
+        upgraded
+            .history_page(&HistoryQuery {
+                query: "原创主线正文".into(),
+                ..HistoryQuery::default()
+            })
+            .unwrap()
+            .clips[0]
+            .id,
+        text.id
+    );
+}
+
+#[test]
+fn schema_four_unknown_three_and_failed_upgrade_do_not_change_existing_database() {
+    let scratch = Scratch::new();
+    let path = scratch.0.join("unknown-three.sqlite3");
+    let db = Store::open(&path).unwrap();
+    db.add("原创受保护原库", "", None).unwrap();
+    emulate_legacy_three(&db.conn);
+    db.conn
+        .execute_batch("CREATE TABLE unknown_fixture(value TEXT)")
+        .unwrap();
+    drop(db);
+    let before = fs::read(&path).unwrap();
+    assert!(Store::validate_database(&path)
+        .unwrap_err()
+        .contains("无法识别结构版本 3"));
+    assert!(Store::open(&path)
+        .err()
+        .unwrap()
+        .contains("无法识别结构版本 3"));
+    assert_eq!(fs::read(&path).unwrap(), before);
+    let conn = Connection::open(&path).unwrap();
+    conn.execute_batch("DROP TABLE unknown_fixture; PRAGMA user_version=2; CREATE TRIGGER fail_schema_four BEFORE UPDATE ON clip_privacy BEGIN SELECT RAISE(ABORT,'original migration failure'); END;").unwrap();
+    drop(conn);
+    let before = fs::read(&path).unwrap();
+    assert!(Store::open(&path)
+        .err()
+        .unwrap()
+        .contains("升级前恢复点已保留"));
+    assert_eq!(fs::read(&path).unwrap(), before);
+    let conn = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    assert_eq!(
+        conn.query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        2
+    );
+}
+
+#[test]
+fn file_backup_four_validates_portable_paths_and_preserves_order_and_kinds_atomically() {
+    let db = store();
+    let paths = vec![
+        r"C:\Original\note.txt".to_string(),
+        "/original-fixture/folder".into(),
+        r"\\fixture-server\share\draft".into(),
+    ];
+    let file = db
+        .capture_files(&paths, &CaptureContext::default())
+        .unwrap();
+    let entries = vec![
+        FileEntry {
+            path: paths[0].clone(),
+            entry_kind: FileEntryKind::File,
+        },
+        FileEntry {
+            path: paths[1].clone(),
+            entry_kind: FileEntryKind::Directory,
+        },
+        FileEntry {
+            path: paths[2].clone(),
+            entry_kind: FileEntryKind::Unknown,
+        },
+    ];
+    Store::put_file_entries(&db.conn, file.id, &entries).unwrap();
+    db.add(&paths.join("\n"), "原创路径文本", None).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&db.export().unwrap()).unwrap();
+    assert_eq!(value["version"], 4);
+    let mut restored = store();
+    assert_eq!(restored.import(&value.to_string()).unwrap(), 2);
+    assert_eq!(
+        restored
+            .clips()
+            .unwrap()
+            .into_iter()
+            .find(|clip| clip.kind == "file")
+            .unwrap()
+            .entries,
+        Some(entries)
+    );
+    assert_eq!(restored.import(&value.to_string()).unwrap(), 0);
+    for invalid in [
+        "relative/file",
+        "C:relative",
+        "https://example.test/file",
+        "/original\nextra",
+    ] {
+        let mut bad = value.clone();
+        let clip = bad["clips"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|clip| clip["kind"] == "file")
+            .unwrap();
+        clip["entries"][0]["path"] = invalid.into();
+        let content = clip["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry["path"].as_str().unwrap())
+            .collect::<Vec<_>>()
+            .join("\n");
+        clip["content"] = content.into();
+        assert!(restored.import(&bad.to_string()).is_err());
+        assert_eq!(restored.clips().unwrap().len(), 2);
+    }
+    let mut bad = value.clone();
+    let clip = bad["clips"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|clip| clip["kind"] == "file")
+        .unwrap();
+    clip.as_object_mut().unwrap().remove("entries");
+    assert!(restored.import(&bad.to_string()).is_err());
+    let mut old = value.clone();
+    old["version"] = 3.into();
+    for clip in old["clips"].as_array_mut().unwrap() {
+        clip.as_object_mut().unwrap().remove("entries");
+    }
+    let mut legacy = store();
+    legacy.import(&old.to_string()).unwrap();
+    assert!(legacy
+        .clips()
+        .unwrap()
+        .iter()
+        .find(|clip| clip.kind == "file")
+        .unwrap()
+        .entries
+        .as_ref()
+        .unwrap()
+        .iter()
+        .all(|entry| entry.entry_kind == FileEntryKind::Unknown));
+    let hundred = (0..100)
+        .map(|index| format!("/original-fixture/{index}"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        legacy
+            .capture_files(&hundred, &CaptureContext::default())
+            .unwrap()
+            .entries
+            .unwrap()
+            .len(),
+        100
+    );
+    let hundred_one = (0..101)
+        .map(|index| format!("/original-fixture/{index}"))
+        .collect::<Vec<_>>();
+    assert!(legacy
+        .capture_files(&hundred_one, &CaptureContext::default())
+        .is_err());
+}
 fn store() -> Store {
     Store::from_connection(Connection::open_in_memory().unwrap()).unwrap()
 }
@@ -587,7 +961,7 @@ fn privacy_backup_v3_roundtrip_reclassifies_and_keeps_imported_rules_disabled() 
     let json = source.export().unwrap();
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"],
-        3
+        4
     );
     let mut destination = store();
     destination.import(&json).unwrap();
@@ -662,7 +1036,7 @@ fn privacy_migration_scans_v1_and_full_snapshot_preserves_metadata() {
         .unwrap();
     drop(conn);
     let upgraded = Store::open(&path).unwrap();
-    assert_eq!(upgraded.schema_version().unwrap(), 2);
+    assert_eq!(upgraded.schema_version().unwrap(), SCHEMA_VERSION);
     assert!(upgraded.clip(clip.id).unwrap().is_private);
     assert_eq!(upgraded.clip(clip.id).unwrap().scan_version, 1);
     assert_eq!(fs::read_dir(scratch.0.join("recovery")).unwrap().count(), 1);
@@ -1240,7 +1614,7 @@ fn telemetry_preferences_persist_without_retention_or_other_preferences() {
         TelemetryPreferences::default()
     );
     let enabled = db.set_telemetry_enabled(true).unwrap();
-    assert!(enabled.enabled);
+    assert_eq!(enabled.mode, crate::telemetry::TelemetryMode::Session);
     drop(db);
     let db = Store::open(&path).unwrap();
     assert_eq!(db.telemetry_preferences().unwrap(), enabled);
@@ -1254,7 +1628,7 @@ fn telemetry_preferences_persist_without_retention_or_other_preferences() {
     db.conn.execute("INSERT INTO clips(content,kind,created_at,updated_at) VALUES('统计偏好原创超期夹具','text',0,0)", []).unwrap();
     db.conn.execute_batch("CREATE TRIGGER forbid_telemetry_prune BEFORE DELETE ON clips BEGIN SELECT RAISE(ABORT, 'telemetry must not prune'); END;").unwrap();
     let disabled = db.set_telemetry_enabled(false).unwrap();
-    assert!(!disabled.enabled);
+    assert_eq!(disabled.mode, crate::telemetry::TelemetryMode::Off);
     assert!(disabled.revision > enabled.revision);
     let saved: String = db
         .conn
@@ -1295,12 +1669,18 @@ fn telemetry_default_only_applies_to_missing_preferences_not_opt_out_or_corrupti
     let scratch = Scratch::new();
     let path = scratch.0.join("telemetry-default-fixture.sqlite3");
     let db = Store::open(&path).unwrap();
-    assert!(db.telemetry_preferences().unwrap().enabled);
+    assert_ne!(
+        db.telemetry_preferences().unwrap().mode,
+        crate::telemetry::TelemetryMode::Off
+    );
     let opted_out = db.set_telemetry_enabled(false).unwrap();
     drop(db);
     let db = Store::open(&path).unwrap();
     assert_eq!(db.telemetry_preferences().unwrap(), opted_out);
-    assert!(!db.telemetry_preferences().unwrap().enabled);
+    assert_eq!(
+        db.telemetry_preferences().unwrap().mode,
+        crate::telemetry::TelemetryMode::Off
+    );
     for json in [
         "broken",
         r#"{"enabled":true}"#,
@@ -1319,7 +1699,7 @@ fn telemetry_default_only_applies_to_missing_preferences_not_opt_out_or_corrupti
         );
     }
     assert!(
-        !db.set_telemetry_enabled(false).unwrap().enabled,
+        db.set_telemetry_enabled(false).unwrap().mode == crate::telemetry::TelemetryMode::Off,
         "explicit local choice can repair damaged preferences"
     );
     db.conn.execute_batch("DROP TABLE preferences").unwrap();
@@ -2265,7 +2645,7 @@ fn image_migration_preserves_legacy_fields_and_separates_text_identity() {
     assert_eq!(legacy.title, "旧代码");
     assert!(legacy.image.is_none());
     let old_backup: serde_json::Value = serde_json::from_str(&db.export().unwrap()).unwrap();
-    assert_eq!(old_backup["version"], 3);
+    assert_eq!(old_backup["version"], 4);
     assert!(old_backup.get("images").is_none());
 
     let mut budget_clip = legacy.clone();
@@ -2328,7 +2708,7 @@ fn image_backup_roundtrip_validation_and_failure_are_atomic() {
     source.add(pixels.digest(), "相同标识的文本", None).unwrap();
     let json = source.export().unwrap();
     let backup: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(backup["version"], 3);
+    assert_eq!(backup["version"], 4);
     assert_eq!(
         STANDARD
             .decode(backup["images"][0]["png"].as_str().unwrap())
@@ -2896,4 +3276,186 @@ fn current_schema_gains_activity_table_without_version_change() {
     db.capture_text("原创升级后计数", &CaptureContext::default())
         .unwrap();
     assert_eq!(db.clip_stats(7, 0).unwrap().daily[0].new, 1);
+}
+
+#[test]
+fn schema_four_normalizes_valid_telemetry_modes_and_preserves_other_preferences() {
+    for (index, raw, expected) in [
+        (0, r#"{"revision":11,"enabled":true}"#, "session"),
+        (1, r#"{"revision":11,"enabled":false}"#, "off"),
+        (2, r#"{"revision":11,"mode":"session"}"#, "session"),
+        (
+            3,
+            r#"{"revision":11,"mode":"installation"}"#,
+            "installation",
+        ),
+        (4, r#"{"revision":11,"mode":"off"}"#, "off"),
+    ] {
+        let scratch = Scratch::new();
+        let path = scratch.0.join(format!("mode-{index}.sqlite3"));
+        let db = Store::open(&path).unwrap();
+        let preferences = [
+            (
+                "settings",
+                serde_json::to_string(&db.settings().unwrap()).unwrap(),
+            ),
+            ("onboarding_v1", "true".into()),
+            (
+                "starpet_v1",
+                serde_json::to_string(&StarpetPreferences::default()).unwrap(),
+            ),
+            (
+                "starpet_growth_v1",
+                serde_json::to_string(&GrowthState::default()).unwrap(),
+            ),
+            (
+                "appearance_v1",
+                serde_json::to_string(&Appearance::default()).unwrap(),
+            ),
+            (
+                "privacy_rules_v1",
+                serde_json::to_string(&PrivacyRules::default()).unwrap(),
+            ),
+            (
+                "update_preferences_v1",
+                serde_json::to_string(&UpdatePreferences::default()).unwrap(),
+            ),
+            (
+                "window_startup_v1",
+                serde_json::to_string(&WindowStartupPreferences::default()).unwrap(),
+            ),
+        ];
+        for (key, json) in &preferences {
+            db.conn
+                .execute(
+                    "INSERT OR REPLACE INTO preferences(key,value) VALUES(?1,?2)",
+                    params![key, json],
+                )
+                .unwrap();
+        }
+        db.conn
+            .execute(
+                "INSERT INTO preferences(key,value) VALUES('telemetry_preferences_v1',?1)",
+                [raw],
+            )
+            .unwrap();
+        db.conn.execute_batch("PRAGMA user_version=2").unwrap();
+        drop(db);
+        let upgraded = Store::open(&path).unwrap();
+        assert_eq!(
+            upgraded.telemetry_preferences().unwrap().mode.as_str(),
+            expected
+        );
+        assert_eq!(upgraded.telemetry_preferences().unwrap().revision, 11);
+        for (key, json) in &preferences {
+            let actual: String = upgraded
+                .conn
+                .query_row("SELECT value FROM preferences WHERE key=?1", [key], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(
+                actual, *json,
+                "unrelated preference {key} must remain byte-for-byte"
+            );
+        }
+    }
+}
+
+#[test]
+fn portable_file_paths_match_shared_cross_platform_fixtures() {
+    let cases: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("../../../tests/fixtures/file-paths.json")).unwrap();
+    for case in cases {
+        let path = case["path"].as_str().unwrap();
+        let entries = vec![FileEntry {
+            path: path.into(),
+            entry_kind: FileEntryKind::Unknown,
+        }];
+        assert_eq!(
+            file_content(&entries).is_ok(),
+            case["valid"].as_bool().unwrap(),
+            "portable path {path:?}"
+        );
+    }
+}
+
+#[test]
+fn file_backup_merge_preserves_known_types_and_fills_only_unknown() {
+    let mut db = store();
+    let known = vec![
+        FileEntry {
+            path: "/original-fixture/folder".into(),
+            entry_kind: FileEntryKind::Directory,
+        },
+        FileEntry {
+            path: "C:\\OriginalFixture\\note.txt".into(),
+            entry_kind: FileEntryKind::File,
+        },
+    ];
+    let paths: Vec<_> = known.iter().map(|entry| entry.path.clone()).collect();
+    let captured = db
+        .capture_files(&paths, &CaptureContext::default())
+        .unwrap();
+    Store::put_file_entries(&db.conn, captured.id, &known).unwrap();
+    let identity = db.clip(captured.id).unwrap().record_identity;
+    let backup: serde_json::Value = serde_json::from_str(&db.export().unwrap()).unwrap();
+
+    // Old main backups carry only paths. Their derived unknown values must not
+    // erase known directory/file metadata already retained in this library.
+    let mut old_main = backup.clone();
+    old_main["version"] = 3.into();
+    old_main["clips"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("entries");
+    assert_eq!(db.import(&old_main.to_string()).unwrap(), 0);
+    assert_eq!(
+        db.clip(captured.id).unwrap().entries.as_deref(),
+        Some(known.as_slice())
+    );
+
+    // The same rule applies when a v4 backup explicitly contains unknown types.
+    let unknown: Vec<_> = known
+        .iter()
+        .map(|entry| FileEntry {
+            path: entry.path.clone(),
+            entry_kind: FileEntryKind::Unknown,
+        })
+        .collect();
+    let mut v4_unknown = backup.clone();
+    v4_unknown["clips"][0]["entries"] = serde_json::to_value(&unknown).unwrap();
+    assert_eq!(db.import(&v4_unknown.to_string()).unwrap(), 0);
+    assert_eq!(
+        db.clip(captured.id).unwrap().entries.as_deref(),
+        Some(known.as_slice())
+    );
+
+    // Known incoming values can fill unknowns, without altering either path or order.
+    Store::put_file_entries(&db.conn, captured.id, &unknown).unwrap();
+    assert_eq!(db.import(&backup.to_string()).unwrap(), 0);
+    assert_eq!(
+        db.clip(captured.id).unwrap().entries.as_deref(),
+        Some(known.as_slice())
+    );
+
+    // Conflicting known values do not guess or overwrite the existing classification.
+    let conflicting = vec![
+        FileEntry {
+            path: known[0].path.clone(),
+            entry_kind: FileEntryKind::File,
+        },
+        FileEntry {
+            path: known[1].path.clone(),
+            entry_kind: FileEntryKind::Directory,
+        },
+    ];
+    let mut conflict = backup;
+    conflict["clips"][0]["entries"] = serde_json::to_value(&conflicting).unwrap();
+    assert_eq!(db.import(&conflict.to_string()).unwrap(), 0);
+    let merged = db.clip(captured.id).unwrap();
+    assert_eq!(merged.entries.as_deref(), Some(known.as_slice()));
+    assert_eq!(merged.content, paths.join("\n"));
+    assert_eq!(merged.record_identity, identity);
+    assert_eq!(db.clips().unwrap().len(), 1);
 }

@@ -10,7 +10,7 @@ const env = {
   APPLICATIONINSIGHTS_CONNECTION_STRING: 'InstrumentationKey=12345678-1234-1234-1234-123456789abc;IngestionEndpoint=https://westus2.in.applicationinsights.azure.com/;ApplicationId=ignored',
 };
 // v1 / v2 clients only know the original nine events; `app_active` arrived with v3.
-const LEGACY_EVENTS = EVENT_NAMES.filter(name => name !== 'app_active');
+const LEGACY_EVENTS = EVENT_NAMES.slice(0, 9);
 const payload = {
   version: 1, sessionId: '0123456789abcdef0123456789abcdef', appVersion: '0.2.2', platform: 'macos',
   events: LEGACY_EVENTS.map((name, index) => ({ name, count: index + 1 })),
@@ -107,7 +107,7 @@ test('v2 rejects identity fields, arbitrary text, extra fields and models from a
   const device = { architecture: 'aarch64', osMajor: '26', model: 'Mac14,2' };
   const v2 = { ...payload, version: 2, device };
   const invalid = [
-    { ...v2, version: 1 }, { ...v2, version: 3 }, { ...v2, hostname: 'fixed-private-host' },
+    { ...v2, version: 1 }, { ...v2, version: 3, firstSeenDay: '2026-10-31' }, { ...v2, hostname: 'fixed-private-host' },
     ...[null, [], {}, { ...device, serial: 'fixed-forbidden-serial' },
       { ...device, hostname: 'fixed-private-host' }, { ...device, hardwareUuid: 'fixed-uuid' },
       { ...device, architecture: 'Apple M4' }, { ...device, architecture: 'aarch64\n' },
@@ -130,7 +130,7 @@ test('v3 uses the install ID as GA client_id with a first-seen cohort and active
   const device = { architecture: 'aarch64', osMajor: '26', model: 'Mac' };
   const v3 = {
     ...payload, version: 3, device, installId: 'fedcba9876543210fedcba9876543210', firstSeenDay: '2026-10-31',
-    events: EVENT_NAMES.map((name, index) => ({ name, count: index + 1 })),
+    events: EVENT_NAMES.filter(name => name !== 'app_running').map((name, index) => ({ name, count: index + 1 })),
   };
   const { calls, fetch } = recorder();
   assert.equal((await handleRequest(request(v3), env, fetch)).status, 204);
@@ -290,4 +290,58 @@ test('partial or failed provider delivery is never reported as full success and 
   let count = 0;
   assert.equal((await handleRequest(request(), env, async () => { count++; throw new Error('provider unavailable'); })).status, 503);
   assert.equal(count, 2);
+});
+
+test('the two historical v3 shapes remain disjoint and compatible with their original identity policy', async () => {
+  const device = { architecture: 'unknown', osMajor: 'unknown', model: 'Mac' };
+  for (const installationId of [undefined, 'fedcba9876543210fedcba9876543210']) {
+    const body = { ...payload, version: 3, device, ...(installationId ? { installationId } : {}), events: [{ name: 'app_running', count: 1 }] };
+    const { calls, fetch } = recorder();
+    assert.equal((await handleRequest(request(body), { ...env, ENABLE_APPLICATION_INSIGHTS: 'false' }, fetch)).status, 204);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.client_id, installationId ? '18364758544493064721.18364758544493064721' : '81985529216486896.81985529216486896');
+    assert.equal(calls[0].body.user_properties, undefined, 'legacy IDs have no known first-seen day');
+    assert.equal(calls[0].body.events[0].params.identity_mode, installationId ? 'installation' : 'session');
+    assert.equal(calls[0].body.events[0].params.engagement_time_msec, undefined);
+  }
+});
+
+test('v4 separates session and installation reporting without fabricating a date or engagement', async () => {
+  const base = { ...payload, version: 4, device: { architecture: 'unknown', osMajor: 'unknown', model: 'Mac' }, events: [{ name: 'app_active', count: 1 }] };
+  for (const identity of [
+    { identityMode: 'session' },
+    { identityMode: 'installation', installId: 'fedcba9876543210fedcba9876543210' },
+    { identityMode: 'installation', installId: 'fedcba9876543210fedcba9876543210', firstSeenDay: '2026-10-31' },
+  ]) {
+    const { calls, fetch } = recorder();
+    assert.equal((await handleRequest(request({ ...base, ...identity, events: [{ name: identity.identityMode === 'session' ? 'app_started' : 'app_active', count: 1 }] }), env, fetch)).status, 204);
+    const params = calls[0].body.events[0].params;
+    assert.equal(params.identity_mode, identity.identityMode);
+    assert.equal(params.session_id, String(0x01234567 + 1));
+    assert.equal(params.engagement_time_msec, undefined);
+    assert.deepEqual(calls[0].body.user_properties, 'firstSeenDay' in identity ? { first_seen_day: { value: identity.firstSeenDay } } : undefined);
+    assert.equal(calls[0].body.client_id, identity.identityMode === 'installation' ? '18364758544493064721.18364758544493064721' : '81985529216486896.81985529216486896');
+    assert.doesNotMatch(JSON.stringify(calls[1].body), /fedcba98|first_seen|identity_mode|session_id|engagement/);
+  }
+  const running = { ...base, identityMode: 'installation', installId: 'fedcba9876543210fedcba9876543210', events: [{ name: 'app_running', count: 1 }] };
+  const { calls, fetch } = recorder();
+  assert.equal((await handleRequest(request(running), env, fetch)).status, 204);
+  assert.equal(calls[0].body.events[0].params.engagement_time_msec, undefined);
+});
+
+test('v4 rejects ambiguous identities, session heartbeats and unknown fields before forwarding', async () => {
+  const base = { ...payload, version: 4, device: { architecture: 'unknown', osMajor: 'unknown', model: 'Mac' }, identityMode: 'installation', installId: 'fedcba9876543210fedcba9876543210' };
+  const { calls, fetch } = recorder();
+  for (const invalid of [
+    { ...base, identityMode: 'off' }, { ...base, identityMode: 'session' }, { ...base, installId: base.sessionId },
+    { ...base, installId: undefined }, { ...base, firstSeenDay: '2026-02-30' },
+    { ...base, installationId: base.installId }, { ...base, content: 'original-forbidden-content' },
+    { ...base, version: 3 },
+    { ...base, identityMode: 'session', installId: undefined, firstSeenDay: '2026-10-31' },
+    { ...base, identityMode: 'session', installId: undefined, events: [{ name: 'app_running', count: 1 }] },
+    { ...base, identityMode: 'session', installId: undefined, events: [{ name: 'app_active', count: 1 }] },
+    { ...base, events: [{ name: 'app_running', count: 2 }] },
+    { ...base, version: 3, identityMode: undefined, installationId: base.installId },
+  ]) assert.equal((await handleRequest(request(invalid), env, fetch)).status, 400);
+  assert.equal(calls.length, 0);
 });

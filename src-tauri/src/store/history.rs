@@ -84,7 +84,7 @@ impl Store {
         }
         if query.ai_eligible {
             predicates.push(format!(
-                "c.kind!='image' AND NOT {private} AND NOT {pending}"
+                "c.kind NOT IN ('image','file') AND NOT {private} AND NOT {pending}"
             ));
         }
         let from = "FROM clips c LEFT JOIN clip_privacy p ON p.clip_id=c.id";
@@ -104,11 +104,12 @@ impl Store {
         let page = query.page.max(1).min(last);
         let offset = u64::from(page - 1) * u64::from(HISTORY_PAGE_SIZE);
         let mut statement = self.conn.prepare(&format!("{CLIP_SELECT} WHERE {where_sql} ORDER BY c.updated_at DESC,c.id DESC LIMIT {HISTORY_PAGE_SIZE} OFFSET {offset}")).map_err(sql_error)?;
-        let clips = statement
+        let mut clips = statement
             .query_map(rusqlite::params_from_iter(values.iter()), clip_from_row)
             .map_err(sql_error)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(sql_error)?;
+        Self::fill_entries(&self.conn, &mut clips)?;
         let mut counts = BTreeMap::new();
         let mut statement = self
             .conn
@@ -192,8 +193,11 @@ impl Store {
             ))
             .map_err(sql_error)?;
         let rows = stmt.query_map([], clip_from_row).map_err(sql_error)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(sql_error)
+        let mut clips = rows
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(sql_error)?;
+        Self::fill_entries(&self.conn, &mut clips)?;
+        Ok(clips)
     }
 
     pub fn groups(&self) -> Result<Vec<Group>> {
@@ -230,24 +234,29 @@ impl Store {
                 "{CLIP_SELECT} WHERE c.id IN ({placeholders}) ORDER BY c.id"
             ))
             .map_err(sql_error)?;
-        let clips = statement
+        let mut clips = statement
             .query_map(rusqlite::params_from_iter(ids.iter()), clip_from_row)
             .map_err(sql_error)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(sql_error)?;
+        Self::fill_entries(&self.conn, &mut clips)?;
         Ok(clips)
     }
 
     pub fn has_pending_ai_history(&self) -> Result<bool> {
         let revision = self.privacy_rules()?.revision;
-        self.conn.query_row("SELECT EXISTS(SELECT 1 FROM clips c LEFT JOIN clip_privacy p ON p.clip_id=c.id WHERE c.kind!='image' AND COALESCE(json_extract(p.metadata,'$.scanVersion'),0) != ?1)", [revision], |row| row.get(0)).map_err(sql_error)
+        self.conn.query_row("SELECT EXISTS(SELECT 1 FROM clips c LEFT JOIN clip_privacy p ON p.clip_id=c.id WHERE c.kind NOT IN ('image','file') AND COALESCE(json_extract(p.metadata,'$.scanVersion'),0) != ?1)", [revision], |row| row.get(0)).map_err(sql_error)
     }
 
     pub fn clip(&self, id: i64) -> Result<Clip> {
-        self.conn
+        let clip = self
+            .conn
             .query_row(&format!("{CLIP_SELECT} WHERE c.id=?1"), [id], clip_from_row)
             .optional()
             .map_err(sql_error)?
-            .ok_or_else(|| "这条星笺已被删除。".into())
+            .ok_or_else(|| "这条星笺已被删除。".to_string())?;
+        let mut clips = vec![clip];
+        Self::fill_entries(&self.conn, &mut clips)?;
+        Ok(clips.remove(0))
     }
 }

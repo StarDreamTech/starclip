@@ -1,6 +1,6 @@
 # 可选使用统计：GA4 标准版与 Cloudflare Free
 
-当前方案使用 GA4 标准版与 Cloudflare Workers Free，按用户要求只使用免费服务，不开通 Azure、不绑定银行卡、不升级付费计划。既有 v1 接收端已部署，固定事件与 macOS 隔离桌面事件已在 GA Realtime 核对。已发布的 0.2.3 新增静默离线缓存和 v2 设备字段；兼容 v1 / v2 的中继已部署，真实 Rust v2 固定批次返回 204，GA 三个设备维度已创建并核对。新设备参数已在 Realtime 核对；2026-10-29 已另行完成 GA4 非实时探索中的 `count` 汇总，以及 macOS 隔离应用进程级断网、重启恢复与恢复联网后的静默补报。长期持续观察和 Windows 原生断网仍未完成，具体证据与边界见下文；不能由 HTTP 成功或实时参数推定其他报表已验收。没有配置接收端地址的构建不收集、不发送统计；接收端缺少 Google 配置时拒绝转发。使用统计缺省开启、可随时关闭；已保存的关闭选择保留。它与默认开启的「检查新版本」是两个独立开关。
+当前方案使用 GA4 标准版与 Cloudflare Workers Free，按用户要求只使用免费服务，不开通 Azure、不绑定银行卡、不升级付费计划。2026-11-02 源码已统一为三档统计模式与上报协议 4（客户端尚未正式发布），生产中继已兼容正式 v1/v2、两种历史 v3 与新 v4，当前状态见下文。既有 v1 接收端已部署，固定事件与 macOS 隔离桌面事件已在 GA Realtime 核对。已发布的 0.2.3 新增静默离线缓存和 v2 设备字段；兼容 v1 / v2 的中继已部署，真实 Rust v2 固定批次返回 204，GA 三个设备维度已创建并核对。新设备参数已在 Realtime 核对；2026-10-29 已另行完成 GA4 非实时探索中的 `count` 汇总，以及 macOS 隔离应用进程级断网、重启恢复与恢复联网后的静默补报。长期持续观察和 Windows 原生断网仍未完成，具体证据与边界见下文；不能由 HTTP 成功或实时参数推定其他报表已验收。没有配置接收端地址的构建不收集、不发送统计；接收端缺少 Google 配置时拒绝转发。新安装默认使用每次运行随机编号，可随时关闭；已保存的关闭选择保留。它与默认开启的「检查新版本」是两个独立开关。
 
 本方案不需要自行购买服务器或域名：桌面端通过 HTTPS 向 Cloudflare Worker 发送精简计数，Worker 默认只转给 Google Analytics 4（GA4）。接收端可使用 Cloudflare 提供的 [workers.dev 地址](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)。已有 Microsoft Application Insights 通道仅保留为显式启用的可选模板，不属于当前接入计划；不集成网页录屏、点击热图或自动采集 SDK。
 
@@ -24,7 +24,7 @@
 - macOS 原生：独立应用 `com.starclip.usageverify20261029` 全程暂停，使用 123 条原创固定记录。主列表每页 50 条，第二页显示编号 73–24 的 50 条；全库搜索能找到仅在第三页的编号 1。星伴默认显示 26 个日常表情，额外心情开关未勾选；静默发送后无待发事件，也无成功提示。追加核对：在普通记录筛选中把原创编号 123 标记为隐私后，该记录移出当前页（普通记录共 122 条），已打开的详情立即折叠并显示手动保护依据，验证 `get_clips` IPC 可用。测试应用已退出，全程暂停。
 - 自动检查：`npm test` 166 项通过，Rust 无 desktop 核心测试 106 项通过、另有 3 项默认忽略。该阶段离线缓存、异常与重试由单元测试覆盖，尚未进行原生断网验收；后续 macOS 进程级断网证据另见下文，Windows 本轮未实机验证。最终 Apple Silicon 独立 release 应用为 14.07 MiB，应用标识 `com.starclip.usageverify20261029`，strict/deep 签名核验通过。
 
-上述验收进行时软件尚未发布；0.2.3 已于 2026-10-29 经用户明确授权[正式发布](https://github.com/cpython666/starclip/releases/tag/v0.2.3)。本机正式安装仍为 0.2.2，未替换。
+上述验收进行时软件尚未发布；0.2.3 已于 2026-10-29 经用户明确授权[正式发布](https://github.com/cpython666/starclip/releases/tag/v0.2.3)。该次 2026-10-29 验收未替换本机正式安装；2026-10-31 只读核对 Info.plist 为 0.2.3，二进制来源尚未核对。
 
 ## 补充验收：常规计数汇总与 macOS 进程级断网（2026-10-29）
 
@@ -53,9 +53,17 @@ macOS 使用独立 `com.starclip.acceptance20261029` 验收包与新空库，全
 
 以上确认 macOS 进程级断网、正常退出 / 重启恢复及恢复联网后的静默补报；不是系统 Wi-Fi 切换或所有网络条件的验收，不据此宣称该次补报已逐条在 GA 报表核对。验收包构建于字体展示文案修改之前，统计代码未因此更改；这些证据不用于证明最新字体展示已原生验证。长期持续观察、Windows 原生断网仍未完成。该轮隔离验收未发布或替换正式应用；0.2.3 已在后续经用户授权发布。
 
-## 收集范围与界面
+## 当前收集范围与界面（协议 4，客户端尚未发布）
 
-入口：**设置 → 规则与隐私 → 可选使用统计**。界面显示是否配置、开关状态、固定事件与待发次数（含从缓存恢复的次数）。发送成功与网络失败均静默处理，不弹提示、不打断其他功能；保存开关或清空本地缓存失败属于用户操作的本地保存问题，仍应明确反馈。没有旧偏好时默认开启；已保存的关闭选择保留，偏好损坏或读失败时停止统计。只有已配置接收端且开关开启才计数，可随时关闭；关闭会清空未发送计数与本地缓存，已经开始发送的请求无法撤回。
+入口：**设置 → 规则与隐私 → 可选使用统计**。未配置接收端的构建不计数、不发送，也不改动统计侧文件；偏好读取失败时停止统计并保留身份与缓存，界面提示重新选择模式。统计与「检查新版本」独立保存。
+
+| 模式 | 身份与统计范围 |
+| --- | --- |
+| `off` 不发送统计 | 不计数、不发送；清空待发批次、缓存与两个旧 / 新身份文件。删除失败可见且可重试，不能声称清理成功 |
+| `session` 每次运行随机编号 | 新安装默认；只发送九种功能计数，每次启动换编号，不跨启动恢复旧会话缓存 |
+| `installation` 本机固定编号 | 用户明确选择后保存随机编号；另有当日使用与在线心跳，可重置；不来自硬件或账号 |
+
+旧显式 `{revision,mode}` 保留三档选择。旧 `{revision,enabled:false}` 转为 `off`，`true` 保守转为 `session`：已发布 0.2.3 与未发布主线使用同形布尔值，却分别代表临时 / 持续身份，无法据此推断持续授权。原主线布尔用户需明确选择固定编号；不凭残留身份文件猜测同意。偏好修订号保留。
 
 | 事件 | 计数含义 |
 | --- | --- |
@@ -65,62 +73,42 @@ macOS 使用独立 `com.starclip.acceptance20261029` 验收包与新空库，全
 | `backup_exported` | 成功导出备份 |
 | `backup_imported` | 成功导入备份 |
 | `update_check_completed` | 完成更新检查 |
-| `update_download_completed` | 更新包下载完成并通过签名校验；失败、取消或重复点击已下载包不计数 |
-| `update_install_started` | 确认版本有效且已进入安装阶段；是安装尝试，不表示成功 |
+| `update_download_completed` | 更新包下载完成并通过签名校验；不表示安装成功 |
+| `update_install_started` | 已进入安装阶段；是安装尝试，不表示成功 |
 | `font_downloaded` | 成功下载字体 |
+| `app_active` | 仅固定编号模式；每次运行每个 UTC 日最多一次，属于应用进程运行口径，不证明用户前台交互 |
+| `app_running` | 仅固定编号模式；约每小时一次，单次 count=1；不落盘、不补报离线心跳，不代表使用时长 |
 
-v2 发送协议版本、应用版本、系统类别、每次运行随机编号、上述事件及次数，以及以下基础设备字段：
+载荷包含版本、应用版本、系统类别、每次运行随机编号、`identityMode`、固定事件及次数和受限设备字段。`device.architecture` 为应用二进制架构白名单；`osMajor` 仅主版本（Windows 仅 10 / 11 / unknown）；`model` 为限定格式 Mac 产品代号、Windows 固定系列白名单或通用类别。**不发送剪贴内容、图片、文件名、标题、搜索词、链接、路径、错误原文、账号、序列号、电脑名称、用户名或硬件标识。**
 
-| 字段 | 允许范围 |
-| --- | --- |
-| `device.architecture` | 当前应用二进制架构：`aarch64` / `x86_64` / `x86` / `arm`，否则 `unknown`；运行于兼容层时不冒充物理 CPU 架构 |
-| `device.osMajor` | macOS 主版本；Windows 只区分 `10` / `11`；Linux 内核主版本；不可识别时 `unknown` |
-| `device.model` | Mac 的限定格式公开产品代号或 `Mac`；Windows 的固定产品系列白名单或 `WindowsPC`；Linux 固定 `LinuxPC` |
+固定编号模式另带 `installId`，仅已知创建时间时发送 UTC `firstSeenDay`；旧编号没有日期时不补造。`usage-install.json` 规范格式为版本 2、编号与可选创建时间，兼容主线旧文件和本地存档的 `usage-identity.json`。固定编号模式遇到身份冲突、损坏或读写 / 清理失败时停止按安装统计并提示；冲突文件保留，可显式重置，或修复文件后重试以保留原编号。临时模式清理残留安装编号失败时保留可重试提示，仍可用本次临时编号发送功能计数；关闭模式不发送。Unix 文件权限 0600，原子写入；重置、切模式、关闭会清理待发 / 在途计数并换 generation，旧异步回调不能把旧身份计数放回。
 
-客户端和 Worker 都限制字段和值，不把任意固件文字、细分配置当作机型上报。**不发送剪贴内容、图片、文件名、标题、搜索词、链接、路径、错误原文、账号、序列号、电脑名称、用户名或硬件标识。** 每次运行的随机会话编号不会写入磁盘。v3 起另有一个本机统计编号（见下文「v3：独立用户、日活与留存」），GA4 的 `client_id` 由它转换而来；v1 / v2 的 `client_id` 仍来自每次运行的随机编号。设备信息只在发送时附带，不进入本地统计缓存。
+`usage-counts.json` 的缓存 3 使用事件名称、模式和身份 SHA-256 指纹，另含应用版本与创建时间；不含完整编号、设备字段或剪贴内容。上限 2 KiB、每事件最多 100 次、保留 72 小时；只有相同应用版本 / 模式 / 身份才恢复。旧 9 / 10 项数组缓存因身份归属不明而舍弃，不跨身份重报。固定编号可跨重启恢复；临时编号跨运行舍弃。两个侧文件均在默认应用目录，不跟随剪贴历史迁移，也不进入 JSON 或完整恢复点。
 
-固定计数暂存在默认应用数据目录的 `usage-counts.json`，不跟随剪贴历史数据目录迁移，也不进入历史 JSON 或完整恢复点。文件只包含缓存格式版本、应用版本、创建时间和 9 类计数；读取上限 2 KiB，每事件最多 100 次，最长保留 72 小时。同版本重启恢复未过期计数，应用版本变化则丢弃旧缓存；损坏、超限、未来时间及不受支持的缓存不恢复。缓存不含设备字段、会话编号或任何剪贴内容。
+一般事件约每分钟发送；更新下载完成 / 安装开始尽快后台发送。网络失败按 1 / 5 / 15 / 60 分钟退避，之后最多每小时一次；退避不落盘。写盘失败保留内存数据待重试，异常退出可能丢失最后一分钟。已经发出的请求不能撤回，响应丢失或通道部分成功可能重复；离线事件按服务端接收时间汇总，不重建发生时刻。功能计数、应用内更新尝试、公开安装包下载量和真实安装成功率不能互相替代。
 
-约每分钟、发送前后及正常退出时尝试写缓存；网络请求不阻塞功能操作。写盘失败静默保留内存数据以便后续再试，异常终止可能丢失最后一分钟的新增计数。网络失败后在本次运行按 1 / 5 / 15 / 60 分钟退避，之后最多每小时一次；退避状态不落盘，重启从正常调度重新开始。关闭统计清空计数与缓存，并更换临时会话身份；请求中途撤回不会让旧批次的失败回调重新恢复已清空计数。
+## Worker 协议与报表口径
 
-一般事件约每分钟发送一次，更新下载完成和安装开始时会尽快在后台发送，不让统计请求阻塞更新。关闭、升级时舍弃缓存、异常退出或安装器终止进程可能使计数丢失；请求已被接收但回复丢失时，补报也可能重复。离线事件按服务端接收时间汇总，不还原事件发生时刻，不能以安装尝试数推断更新成功率。可按服务端收到的日期、应用版本与系统汇总下载 / 更新趋势；不含持续设备编号，因此不是单个用户的精确更新频率。此处只统计应用内更新，不代表 GitHub / Homebrew 安装包的全部下载量。
+SQLite schema、JSON 备份、缓存与 HTTP 协议独立编号。Worker 通过精确字段形状兼容以下请求；拒绝未知或混杂字段，v4 临时模式不允许日活 / 心跳：
 
-Worker 源码兼容 v1 与 v2，只接受 `POST /collect` 的 JSON；上限 4 KiB、9 种事件、每种 1–100 次，拒绝未知字段、未知事件、重复事件与异常值，v2 还验证设备字段白名单。默认每个有效批次只向 Google 发出一次请求；GA 配置无效时返回 503，完全不外发。`ENABLE_APPLICATION_INSIGHTS` 未设置或为 `false` 时，不校验微软连接字符串、不请求 Azure；即使残留连接字符串，也不会启用微软通道。只有显式设为 `true` 才校验并启用可选双发。供应商请求最长等待 5 秒，不跟随重定向；启用的通道任一失败均返回 503；Worker 本身不重试，客户端按上述退避机制重新提交。没有跨请求去重，供应商部分成功时后续补报也可能重复。
+| 协议 | 身份形状 | 新增事件 |
+| --- | --- | --- |
+| 正式 v1 / v2 | 每次运行 session；v2 含 device | 原九种 |
+| 历史 main v3 | 必需 `installId` + `firstSeenDay` | `app_active` |
+| 历史本地 v3 | 可选 `installationId`，无日期 | `app_running` |
+| 新 v4 | 必需 `identityMode`；固定模式含 `installId`、可选日期 | 固定模式允许 `app_active` / `app_running` |
 
-Worker 不保存请求，不打印密钥、载荷或错误原文；模板关闭 Worker Observability。不复制用户的 Cookie、User-Agent 或请求头，并为 IP 转发头设置固定占位值；参见 [Cloudflare Worker 子请求的 IP 规则](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip-in-worker-subrequests)。相同发送逻辑的独立无 secret 探针已在回显端核对未观察到原始 IP / Cookie / User-Agent；这不是 Google 接收侧的完整抓包。接收端及其云平台仍会在网络层接触来源 IP，平台基础服务政策与日志设置需单独核查，不能把本实现理解为网络层匿名化。
+只接受 `POST /collect` JSON，上限 4 KiB，固定事件每种 1–100 次、不得重复。默认仅向 Google 发一次请求，配置无效 / 外发失败返回 503；微软只有 `ENABLE_APPLICATION_INSIGHTS=true` 才启用。5 秒超时、不跟随重定向、不跨请求去重、不保存或打印载荷 / 密钥。静态 IP 转发占位头保持不变；历史回显探针只证明回显端未观察到原始 IP / Cookie / User-Agent，不等于 Google 接收侧完整抓包或网络层匿名。
 
-## v3：独立用户、日活与留存（未发布，待部署与 GA 核对）
+GA4 的 `client_id` 来自固定编号或运行编号，事件参数 `identity_mode` 用于区分口径，已知日期转 `user_properties.first_seen_day`。新 v4 **不虚构 `engagement_time_msec`**；历史 main v3 的固定 1 ms 映射只为旧协议兼容保留，不用于新客户端。按 `count` 自定义指标汇总功能次数；事件数量代表批次中的条目数。活跃安装数应筛选 `identity_mode=installation` 和 `app_active` 后查看去重用户；临时会话不能算跨启动独立用户，进程常驻不等于前台使用。只对已知 `first_seen_day` 做后续留存分组，未知日期不能当新安装。GA 自带活跃用户、参与时长、首次访问与留存概览可能不适用于纯 Measurement Protocol 自定义事件，应以实际探索口径验收。参见 [GA4 协议参考](https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference) 和 [纯服务端方案限制](https://developers.google.com/analytics/devguides/collection/protocol/ga4#full_server-to-server)。
 
-用户要求能统计独立用户、日活和留存，v3 在不收集任何硬件或账号信息的前提下加入一个本机随机编号。实现见 `src-tauri/src/telemetry.rs` 与 `telemetry-relay/worker.mjs`；目前只有单元测试，尚未部署 Worker、未在 GA 报表核对、也未原生验收。
+## 跨分支兼容与生产部署核对（2026-11-02）
 
-**本机统计编号**
+实施前只读审计确认生产仅支持 v1/v2（模块 SHA-256 `d127d1fb4b24f4cadff240ab0a4a29b90d371119358c0b3df304d106899b96e9`）；两个历史 v3 互不兼容，均不能只按协议数字混用。审计与离线矩阵在忽略的 `artifacts/audit-compat-20261102.noindex/`。
 
-- 统计开启时由系统随机数生成 128 位编号（32 位小写十六进制），保存在默认应用数据目录的 `usage-install.json`，与 `usage-counts.json` 同目录：不跟随剪贴数据目录迁移，不进入历史 JSON 或完整恢复点；macOS / Linux 权限 0600，原子写入。文件只有格式版本、编号与生成时间（秒）三个字段，读取上限 512 字节，格式错误、多余字段或未来时间均丢弃并重新生成。
-- 编号不来自硬件、序列号、账号、用户名或电脑名称；两台电脑或重装后的同一台电脑是不同编号。
-- 关闭统计时删除文件并从内存清除；再次开启生成全新编号，前后数据无法关联。偏好为关闭时启动也会删除残留文件。设置页只显示前 6 位，并可「重置统计编号」，重置后视为新用户。
-- 写入失败时编号仅在本次运行有效，下次启动会被当成新用户，可能高估人数。
+按用户确认的顺序，先实现本地 schema 4 / JSON 4 / 偏好与身份兼容，再于 **2026-11-02 08:12:38 UTC** 更新生产 Worker。回读模块为 11,927 B、SHA-256 `2c5a2a2b9230a1977510f286ea1682d71e407fdc532a8164306c40d85abab827`，部署版本 `9ef49cba-c869-4e63-b6d2-092039a517f7` 占 100% 流量，源码与仓库一致。两个 GA secret 按类型保留，未读取其值；微软仍 false、Logpush false、无 tail consumer，上传显式关闭 observability / logs / traces / issues（settings 回读未返回 observability 字段，不能据此宣称另有 UI 核对）。回退源保存在忽略目录，不改服务名或客户端地址。
 
-**载荷与转发**
-
-- v3 在 v2 字段外增加 `installId` 与 `firstSeenDay`（编号生成的 UTC 日期，仅精确到天），并允许新事件 `app_active`。Worker 要求两者格式正确、`installId` 不等于 `sessionId`、日期不早于 2026-01-01 且不晚于次日；v1 / v2 不允许 `app_active`。
-- 转发 GA4 时：`client_id` 由 `installId` 转换，跨重启保持一致；`user_properties.first_seen_day` 携带首次日期；每个事件加 `session_id`（由每次运行的随机编号前 32 位转换）和固定 `engagement_time_msec=1`。后者只是让 GA 把事件计入活跃用户的标记，不是测量的使用时长。
-- 微软模板通道仍不发送任何编号或日期。
-
-**`app_active` 当日使用**
-
-- 每次运行在每个 UTC 日最多记录一次，由已有的分钟定时器触发；星笺常驻托盘、几天不重启时也能逐日计入日活。清空待发事件不会在同一天重新补记；关闭再开启或重置编号后，当天会再记一次。
-
-**在 GA4 中查看（待核对）**
-
-- 独立用户 / 日活：报表的「活跃用户」按 `client_id` 去重；日活可在探索中按「日期」查看活跃用户，或筛选事件 `app_active`。
-- 留存：在「探索 → 同类群组探索」中，以 `first_seen_day` 用户属性（需先在「自定义定义」注册为用户级维度）或首次接触日期分组，回访条件选 `app_active`。Measurement Protocol 不会产生 `first_visit` / `first_open`，GA 自带的「新用户 / 留存」概览可能与此不一致，以探索结果为准。
-- 按 GA 报告时区按收到时间计日；客户端以 UTC 日去重，跨时区边界时一天可能出现两次 `app_active`，不影响去重后的用户数。
-
-**仍需注意**
-
-- 统计默认开启，加入持续编号后，面向欧盟等地区用户时通常需要事先同意；当前未做地区区分，发布前请自行确认合规要求。
-- 公开接收端可被伪造请求，编号不能防止刷量。
-- 部署顺序：先部署兼容 v1 / v2 / v3 的 Worker，再发布新版客户端；旧 Worker 会以 400 拒绝 v3，客户端只会静默退避重试。
+新增事件级 `identity_mode`、用户级 `first_seen_day` 已在 GA 自定义定义表格核对，原五个事件维度与标准 `count` 指标保留。真实 Rust sender 已经生产端点发送原创样例：临时模式九种、固定模式十一种，均获 204。GA Realtime 另行核对版本 `0.0.0-telemetry-verification` 的 `app_started=2`，`studio_opened` 的 `identity_mode` 为 session / installation 各一条，`app_active` / `app_running` 各一条，“所有用户”的 First seen day 卡片还显示 `2026-11-02`、一位活跃用户，但历史 main-v3 兼容样例使用同一日期，且此卡片未按版本 / 模式 / 具体用户筛选，不能唯一归属于 Rust v4；v4 首次日期实际入库仍待独立确认。兼容性 HTTP 样例使用另一测试版本，事件版本证据不混作 Rust 证据。摘要为忽略的 `artifacts/schema4-compat-20261102.noindex/ga4-live-acceptance.json`，其中列出逐项快照。新增协议的历史报表 `count` 汇总与跨天 cohort 留存仍待后续处理时间 / 日期，未验收；HTTP 204、离线契约和维度创建均不能单独代替实际入库。此次客户端尚未正式发布或同步 Homebrew；原生数据升级证据见 [验证记录](verification.md#结构-4-兼容修复与验收2026-11-02)。
 
 ## 1. 准备 Google Analytics 4 标准版
 
@@ -131,7 +119,7 @@ Worker 不保存请求，不打印密钥、载荷或错误原文；模板关闭 
 3. 关闭不需要的数据共享、广告个性化和增强型衡量；本代码也固定发送广告用途与广告个性化 `DENIED`，不发送广告标识或账号信息。
 4. 在「自定义定义」创建事件级自定义指标，事件参数填 **`count`**、单位为标准；可将 `app_version` 和 `platform` 注册为事件级自定义维度；当前 v2 的 `app_arch`、`os_major`、`device_model` 三个事件级维度已创建并在表格核对；三个参数及公开 Mac 产品代号也已在 Realtime 核对，但维度配置与实时参数不能代替常规汇总报表验收。看功能使用次数时汇总 `count`，GA4 默认的事件数量只代表聚合批次中的事件条目数。
 
-协议格式依据 [GA4 Measurement Protocol 参考](https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference?client_type=gtag)。此方案仅发送自定义事件，未接入 gtag / Firebase 自动采集；[Google 说明纯服务端方案仅有部分报表可用](https://developers.google.com/analytics/devguides/collection/protocol/ga4#full_server-to-server)。v1 / v2 不含持续编号，不能计算活跃人数或留存；v3 的做法与边界见下文。本实现不测量停留时长，GA4 中的参与时长没有意义。
+协议格式依据 [GA4 Measurement Protocol 参考](https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference?client_type=gtag)。此方案仅发送自定义事件，未接入 gtag / Firebase 自动采集；[Google 说明纯服务端方案仅有部分报表可用](https://developers.google.com/analytics/devguides/collection/protocol/ga4#full_server-to-server)。v1 / v2 不含持续编号，不能计算跨启动独立用户或留存；当前 v4 的口径见上文。本实现不测量停留时长，GA4 中的参与时长没有意义。
 
 ## 2. 配置接收端
 
@@ -163,7 +151,7 @@ Worker 主程序是 [`telemetry-relay/worker.mjs`](../telemetry-relay/worker.mjs
 STARCLIP_TELEMETRY_ENDPOINT='https://<worker>.<账户子域>.workers.dev/collect' npm run tauri -- build
 ```
 
-这里的尖括号需要替换；不要原样构建。接收端地址改变后需重新构建客户端。没有旧偏好时统计默认开启；最终用户仍可随时关闭，构建配置不会覆盖已经保存的关闭选择。
+这里的尖括号需要替换；不要原样构建。接收端地址改变后需重新构建客户端。没有旧偏好时默认使用临时编号；最终用户可关闭或明确选择固定编号，构建配置不会覆盖已保存的模式。
 
 ## 4. 验证与运行边界
 
@@ -173,7 +161,7 @@ STARCLIP_TELEMETRY_ENDPOINT='https://<worker>.<账户子域>.workers.dev/collect
 node --experimental-strip-types --test tests/telemetry-relay.test.ts
 ```
 
-真实 Rust sender 测试默认忽略。已获授权的接收端验收可使用测试专用环境变量显式执行；只发送 9 种固定事件各 1 次，批次版本为 `0.0.0-telemetry-verification`，不访问 SQLite 或剪贴板：
+真实 Rust sender 测试默认忽略。已获授权的接收端验收可使用测试专用环境变量显式执行；分别通过临时 / 固定编号发送原创功能计数，固定模式另验证当日使用和心跳；批次版本为 `0.0.0-telemetry-verification`，不访问 SQLite 或剪贴板：
 
 ```sh
 STARCLIP_TELEMETRY_TEST_ENDPOINT='https://<worker>.<账户子域>.workers.dev/collect' \
@@ -183,7 +171,7 @@ cargo test --locked --offline --manifest-path src-tauri/Cargo.toml \
   -- --ignored --exact --nocapture
 ```
 
-其中尖括号需替换为已授权验收的真实地址；成功只断言接收端返回 204，不自动查询 GA 报表。关闭后的无批次检查在同一测试内完成；原生设置与重启行为需另行按本页记录的隔离应用场景验收。
+其中尖括号需替换为已授权验收的真实地址；成功只断言接收端返回 204，不自动查询 GA 报表。关闭后的无批次由离线回归检查；原生设置与重启行为需另行按本页记录的隔离应用场景验收。
 
 部署验收使用隔离应用和原创固定事件，不能用真实剪贴内容。先用 [Google 的验证服务器](https://developers.google.com/analytics/devguides/collection/protocol/ga4/validating-events) 核对载荷；再确认测试版已配置接收端、默认开关开启，完成一次固定功能操作，检查待发计数、发送结果和 GA 报表，并确认关闭后无请求。Google `/mp/collect` 的 2xx 仅表示收到 HTTP 请求，**不保证事件有效或已入库**；不能只凭 HTTP 成功判定报表接通；用户界面不会显示发送成功或失败通知。
 
@@ -191,7 +179,7 @@ cargo test --locked --offline --manifest-path src-tauri/Cargo.toml \
 
 Cloudflare Workers Free 每个账号每天共 **100,000 次请求**，同账号多个 Worker 共享，UTC 00:00 重置。当前 `workers.dev` 接收端超限后请求被拒绝（Error 1027），不会自动升级为付费计划；不同产品分部署不增加账号免费额度。此额度按进入 Worker 的请求计算，不是事件 `count` 总和。参见 [官方限制](https://developers.cloudflare.com/workers/platform/limits/#daily-requests) 与 [官方定价](https://developers.cloudflare.com/workers/platform/pricing/)。
 
-既有 v1 仅 Google 方案已有生产中继部署、真实 Rust 发送、GA Realtime 事件 / 参数、macOS 隔离原生开关 / 重启验收及 GitHub 构建变量核对。本轮兼容 v1 / v2 中继已部署，真实 Rust v2 固定批次返回 204，设备维度配置已核对，macOS 隔离分页 / 默认日常表情 / 静默发送场景已通过；新设备参数及公开 Mac 产品代号的 Realtime 接收已核对。这些能力已随 0.2.3 经用户授权发布。2026-10-29 已在 GA4 非实时探索中分别核对固定范围的事件条目数与自定义 `count` 使用次数，并完成 macOS 隔离应用进程级断网、重启恢复和恢复联网后的静默补报。该证据不覆盖系统 Wi-Fi 切换、全部网络异常、长期持续观察或 Windows 原生断网；出站头证据仍限于相同发送逻辑的回显探针。正式发布不扩大上述平台或场景的验收范围；本机正式安装仍为 0.2.2，未替换。
+既有 v1 仅 Google 方案已有生产中继部署、真实 Rust 发送、GA Realtime 事件 / 参数、macOS 隔离原生开关 / 重启验收及 GitHub 构建变量核对。本轮兼容 v1 / v2 中继已部署，真实 Rust v2 固定批次返回 204，设备维度配置已核对，macOS 隔离分页 / 默认日常表情 / 静默发送场景已通过；新设备参数及公开 Mac 产品代号的 Realtime 接收已核对。这些能力已随 0.2.3 经用户授权发布。2026-10-29 已在 GA4 非实时探索中分别核对固定范围的事件条目数与自定义 `count` 使用次数，并完成 macOS 隔离应用进程级断网、重启恢复和恢复联网后的静默补报。该证据不覆盖系统 Wi-Fi 切换、全部网络异常、长期持续观察或 Windows 原生断网；出站头证据仍限于相同发送逻辑的回显探针。正式发布不扩大上述平台或场景的验收范围；该次 2026-10-29 验收未替换本机正式安装；2026-10-31 只读核对 Info.plist 为 0.2.3，二进制来源尚未核对。
 
 ## 可选手动模板：Microsoft Application Insights（当前不启用）
 

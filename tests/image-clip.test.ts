@@ -77,5 +77,5 @@ test('image demo keeps payload out of state, copies PNG, counts binary bytes and
   assert.equal(result.deletedCount, 1);
   assert.equal(result.contentBytes, expectedBytes);
   await assert.rejects(api.imageData(image.id, false), /不存在/);
-  assert.equal(JSON.parse(await api.exportBackup()).version, 3, 'text-only demo backup remains supported');
+  assert.equal(JSON.parse(await api.exportBackup()).version, 4, 'text-only demo backup remains supported');
 });

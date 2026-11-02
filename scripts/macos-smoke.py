@@ -11,6 +11,7 @@ import signal
 import subprocess
 import tempfile
 import time
+from fixture_schema import source_schema
 
 
 def command(*args, **kwargs):
@@ -117,6 +118,8 @@ def main():
                 process.wait(timeout=10)
         process = None
 
+    target_schema = source_schema(scripts.parent)
+
     def check(mode, schema):
         command("python3", str(scripts / "installer-fixture.py"), str(database), mode, str(schema))
 
@@ -135,9 +138,9 @@ def main():
             time.sleep(1)
             if process.poll() is not None:
                 raise RuntimeError("Installed application exited during observation")
-            check(args.scenario, 2)
+            check(args.scenario, target_schema)
         stop()
-        check(args.scenario, 2)
+        check(args.scenario, target_schema)
         summary = f"- macOS native {args.scenario} smoke passed: DMG {args.version}, visible main window, continuous canary exclusion and fixed database checks. Absent fresh settings use the verified paused default. No UI buttons or in-app updater were exercised.\n"
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as file:
             file.write(summary)

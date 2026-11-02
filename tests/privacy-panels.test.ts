@@ -75,14 +75,14 @@ test('rules panel preserves drafts after failed save, normalizes empty tags, and
 
 test('AI panel excludes protected, unscanned and image records, requires preview, and retains selection on native rejection', async () => {
   const base = { title: '原创普通资料', content: '原创正文', kind: 'text', language: null, pinned: false, keepForever: false, groupId: null, createdAt: 1, updatedAt: 1, copyCount: 0, scanVersion: 2 } as Clip;
-  const clips = ref<Clip[]>([{ ...base, id: 1 }, { ...base, id: 2, isPrivate: true, title: '不可显示私密标题' }, { ...base, id: 3, scanVersion: 1 }, { ...base, id: 4, kind: 'image' }]);
+  const clips = ref<Clip[]>([{ ...base, id: 1 }, { ...base, id: 2, isPrivate: true, title: '不可显示私密标题' }, { ...base, id: 3, scanVersion: 1 }, { ...base, id: 4, kind: 'image' }, { ...base, id: 5, kind: 'file', title: '不可授权的文件路径' }]);
   const calls: any[] = []; let reject!: (error: Error) => void;
   const Component = await component('AiSettings', {
     async state() { return { enabled: true, available: true, connections: [], audit: [], limits: { maxRecords: 500, maxResults: 50, maxHours: 168 } }; },
     create(request: unknown) { calls.push(request); return new Promise((_resolve, failure) => { reject = failure; }); },
   });
   const root = node('root'); const app = renderer.createApp({ setup: () => () => h(Component, { clips: clips.value, groups: [], revision: 2 }) }); app.mount(root); await flush();
-  assert.doesNotMatch(text(root), /不可显示私密标题/); assert.match(text(root), /隐私、图片与待扫描记录不会出现在可授权列表/);
+  assert.doesNotMatch(text(root), /不可显示私密标题|不可授权的文件路径/); assert.match(text(root), /隐私、图片、文件与待扫描记录不会出现在可授权列表/);
   await button(root, '选择当前结果').props.onClick(); await flush();
   assert.equal(calls.length, 0); await button(root, '预览本次授权').props.onClick(); await flush();
   assert.equal(calls.length, 0); assert.match(text(root), /开放 1 条记录/);
@@ -121,5 +121,15 @@ test('AI panel grants pet-only control without records or fields and previews it
     await button(root, '确认创建连接').props.onClick(); await flush();
     assert.deepEqual(calls[0], { name: '我的 AI 助手', clipIds: [], fields: [], maxResults: 20, expiresHours: 24, allowPetControl: true });
     assert.equal(button(root, '预览本次授权').props.disabled, true, 'new connections do not inherit pet permission');
+  } finally { app.unmount(); }
+});
+
+test('file details state their AI exclusion even when the path is an ordinary reviewed record', async () => {
+  const Component = await component('ClipPrivacy', {});
+  const clip = { id: 100, title: '原创文件', content: '/original-fixture/note.txt', kind: 'file', scanVersion: 1, tags: [], manualTags: [], privacyReasons: [] } as unknown as Clip;
+  const root = node('root'); const app = renderer.createApp(Component, { clip, revision: 1 }); app.mount(root); await flush();
+  try {
+    assert.match(text(root), /文件记录 · 不向 AI 提供/);
+    assert.doesNotMatch(text(root), /普通记录 · 需单独授权才供 AI 读取/);
   } finally { app.unmount(); }
 });

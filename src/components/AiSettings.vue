@@ -24,7 +24,7 @@ const canRelease = computed(() => !!state.value && !busy.value && !recordLoading
 defineExpose({ canRelease })
 const fieldChoices = computed(() => [{ key: 'title', label: t('标题') }, { key: 'content', label: t('正文') }, { key: 'tags', label: t('普通标签') }, { key: 'sources', label: t('来源域名') }])
 const groupOptions = computed(() => [{ value: null as number | null, label: t('全部分组') }, ...props.groups.map(item => ({ value: item.id, label: item.name }))])
-const eligible = computed(() => (props.loadHistory ? records.value : props.clips).filter(clip => !protectedClip(clip) && !pendingClip(clip, props.revision) && clip.kind !== 'image'))
+const eligible = computed(() => (props.loadHistory ? records.value : props.clips).filter(clip => !protectedClip(clip) && !pendingClip(clip, props.revision) && clip.kind !== 'image' && clip.kind !== 'file'))
 const available = computed(() => (recordLoading.value || recordReadFailed.value) ? [] : props.loadHistory ? eligible.value : eligible.value.filter(clip => (group.value === null || clip.groupId === group.value) && (!search.value.trim() || `${clip.title}\n${clip.content}\n${clip.tags?.join(' ')}`.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase()))))
 const chosen = computed(() => selectedRecords.value.filter(clip => selected.value.includes(clip.id)))
 const previewClips = computed(() => preview.value ? selectedRecords.value.filter(clip => preview.value!.clipIds.includes(clip.id)) : [])
@@ -46,7 +46,7 @@ async function loadRecords() {
     records.value = result.clips; history.value = result.history; recordPage.value = result.history?.page ?? 1
     if (selectedDetails) {
       const requested = new Set(selectedIds)
-      const current = new Map(selectedDetails.filter(clip => !protectedClip(clip) && !pendingClip(clip, props.revision) && clip.kind !== 'image').map(clip => [clip.id, clip]))
+      const current = new Map(selectedDetails.filter(clip => !protectedClip(clip) && !pendingClip(clip, props.revision) && clip.kind !== 'image' && clip.kind !== 'file').map(clip => [clip.id, clip]))
       selectedRecords.value = selectedRecords.value.flatMap(clip => !requested.has(clip.id) ? [clip] : current.has(clip.id) ? [current.get(clip.id)!] : [])
       selected.value = selected.value.filter(id => !requested.has(id) || current.has(id))
     }
@@ -108,7 +108,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(recordTimer); config.value
         <label class="ai-pet-permission"><input v-model="allowPetControl" type="checkbox" :aria-label="t('允许星伴动作与消息')" />{{ t('允许这个连接控制星伴') }}</label>
         <p class="field-note">{{ t('Agent 可显示思考、工作、等待、成功或出错状态，触发已解锁的动作，显示最多 120 字的短句。请先在星伴设置中显示星伴；消息最多停留 60 秒，不会改变成长经验或你保存的心情。只用星伴时，无需选择下面的记录或扫描历史。') }}</p>
         <h3>{{ t('选择本次授权的记录（可选）') }}</h3>
-        <p>{{ t('先筛选再勾选，授权只绑定这批记录的 ID，自动标签和导入不会扩大授权。') }}{{ t('隐私、图片与待扫描记录不会出现在可授权列表。') }}</p>
+        <p>{{ t('先筛选再勾选，授权只绑定这批记录的 ID，自动标签和导入不会扩大授权。') }}{{ t('隐私、图片、文件与待扫描记录不会出现在可授权列表。') }}</p>
         <div class="ai-filter"><input @keydown.enter.prevent v-model="search" :placeholder="t('筛选标题、正文或标签')" :aria-label="t('筛选可授权记录')" /><UiSelect v-model="group" :options="groupOptions" :label="t('筛选授权分组')" :disabled="busy || disabled || !state.enabled || !state.available" /></div>
         <div class="privacy-buttons"><button type="button" class="button subtle" :disabled="recordLoading || !available.length" @click="selectVisible">{{ t('选择当前结果') }}</button><button type="button" class="button subtle" :disabled="!selected.length" @click="selected = []">{{ t('清空选择') }}</button><span>{{ t('已选 {count} / {max}', { count: chosen.length, max: state.limits.maxRecords }) }}</span></div>
         <HistoryPagination v-if="history" :history="history" :disabled="recordLoading || busy || disabled" @page="changeRecordPage" /><button v-if="recordReadFailed" type="button" class="button subtle" @click="loadRecords">{{ t('重新读取') }}</button><p v-if="recordLoading" class="field-note">{{ t('正在读取…') }}</p><div class="ai-records"><label v-for="clip in available" :key="clip.id"><input v-model="selected" type="checkbox" :value="clip.id" :disabled="!selected.includes(clip.id) && selected.length >= state.limits.maxRecords" /><span><strong>{{ clip.title || clip.content.slice(0, 70) || t('未命名记录') }}</strong><small>{{ clip.tags?.join(' · ') || t('记录 #{id}', { id: clip.id }) }}</small></span></label><p v-if="!recordLoading && !available.length" class="field-note">{{ allowPetControl ? t('没有可授权记录。只授权星伴时可直接预览，无需历史扫描。') : t('没有符合条件的记录。可先到「规则与隐私」完成历史扫描。') }}</p></div>

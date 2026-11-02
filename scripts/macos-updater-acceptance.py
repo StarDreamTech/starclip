@@ -71,19 +71,19 @@ def fresh_runner():
     return Path(os.environ["RUNNER_TEMP"]).resolve(strict=True), data
 
 
-def verify_database(path):
-    with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5) as db:
+def verify_database(path, expected_schema):
+    with contextlib.closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5)) as db, db:
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("PRAGMA user_version").fetchone()[0] == expected_schema, "Unexpected baseline/target database schema"
         assert json.loads(db.execute("SELECT value FROM preferences WHERE key='settings'").fetchone()[0]) == SETTINGS
         assert db.execute("SELECT content,title,kind,pinned,keep_forever,group_id,copy_count FROM clips").fetchall() == [(NOTE, TITLE, "text", 1, 0, 1001, 7)], "Fixed record changed or canary captured"
         assert db.execute("SELECT id,name,color FROM groups").fetchall() == [(1001, GROUP, "#7BBEB0")]
 
 
-def seed_database(path):
+def seed_database(path, expected_schema):
     assert path.is_file(), "Only the application may create its synthetic database"
-    with sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+    with contextlib.closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5)) as db, db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == expected_schema
         assert db.execute("SELECT count(*) FROM clips").fetchone()[0] == 0
         assert db.execute("SELECT count(*) FROM groups").fetchone()[0] == 0
         now = int(time.time() * 1000)
@@ -93,7 +93,7 @@ def seed_database(path):
             db.execute("INSERT INTO preferences(key,value) VALUES('settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(SETTINGS),))
             db.execute("INSERT INTO preferences(key,value) VALUES('onboarding_v1','true') ON CONFLICT(key) DO UPDATE SET value=excluded.value")
         db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    verify_database(path)
+    verify_database(path, expected_schema)
 
 
 def verify_app(app, version):
@@ -249,6 +249,7 @@ def main():
     parser.add_argument("--inspector", type=Path)
     parser.add_argument("--fixture", type=Path)
     parser.add_argument("--baseline-origin", choices=("source-comparison", "public-0.2.2"), default="source-comparison")
+    parser.add_argument("--baseline-schema", type=int, default=2, help="Exact baseline schema; genuine public 0.2.2 is 2")
     parser.add_argument("--allow-manual-recovery", action="store_true")
     args = parser.parse_args()
     runner_temp, data = fresh_runner()
@@ -267,6 +268,15 @@ def main():
         COMPARISON, TARGET = "0.2.2", release_fixture["targetVersion"]
         MANIFEST_HASH = release_fixture["latestManifestSha256"]
         TARGET_URL, TARGET_HASH = release_fixture["targetUrl"], release_fixture["targetSha256"]
+    baseline_schema = args.baseline_schema
+    target_schema = release_fixture["targetSchema"] if release_fixture else 2
+    assert type(target_schema) is int and target_schema > 0 and baseline_schema > 0
+    if args.baseline_origin == "public-0.2.2":
+        assert baseline_schema == 2, "The immutable public 0.2.2 baseline is schema 2"
+    elif release_fixture:
+        assert baseline_schema == target_schema, "Source-comparison baseline uses the exact tag schema"
+    if not release_fixture:
+        assert baseline_schema == 2, "The historical public-0.2.2 experiment requires its schema-2 baseline"
     assert not args.allow_manual_recovery or (release_fixture and args.baseline_origin == "public-0.2.2")
     inspector = args.inspector.resolve(strict=True)
     assert inspector.is_relative_to(runner_temp), "UI helper must be runner-owned"
@@ -354,21 +364,21 @@ def main():
         active_pid = None
 
     def fixture(mode):
-        def verify(path):
+        def verify(path, expected_schema):
             if release_fixture:
-                return json.loads(command(sys.executable, str(Path(__file__).with_name("release-updater-fixture.py")), "verify-data", "--database", str(path), capture_output=True, text=True).stdout)
-            verify_database(path)
-            return dict(schema=2, paused=True, fixedRecords=1, fixedGroups=1)
-        details = verify(database)
+                return json.loads(command(sys.executable, str(Path(__file__).with_name("release-updater-fixture.py")), "verify-data", "--database", str(path), "--expected-schema", str(expected_schema), capture_output=True, text=True).stdout)
+            verify_database(path, expected_schema)
+            return dict(schema=expected_schema, paused=True, fixedRecords=1, fixedGroups=1)
+        details = verify(database, target_schema if mode == "after-install" else baseline_schema)
         points = [(p, json.loads(p.read_text())) for p in (data / "recovery").glob("*/snapshot.json")]
         points = [(p, m) for p, m in points if m["reason"] == "before-update"]
         if mode == "after-install":
             assert len(points) == 1, "Expected one pre-update recovery point"
             path, manifest = points[0]
-            assert manifest["schemaVersion"] == 2
+            assert manifest["schemaVersion"] == baseline_schema
             snapshot = path.parent / "starclip.sqlite3"
             assert digest(snapshot) == manifest["files"]["starclip.sqlite3"]["sha256"]
-            verify(snapshot)
+            verify(snapshot, baseline_schema)
             backup = data / "application-backups" / manifest["id"] / "Starclip.app"
             assert verify_app(backup, COMPARISON) == baseline_hash, "Original application backup changed"
         else:
@@ -399,12 +409,12 @@ def main():
             assert baseline_hash == "ec6d08edf90f2d51b1cb75cf9271103b82f3e68763f1d94931a8e66ae94fe40f", "Baseline is not the actual public macOS 0.2.2 executable"
         start()
         time.sleep(2)
-        command("python3", str(Path(__file__).with_name("installer-fixture.py")), str(database), "fresh", "2")
+        command("python3", str(Path(__file__).with_name("installer-fixture.py")), str(database), "fresh", str(baseline_schema))
         stop()
         if release_fixture:
-            command(sys.executable, str(Path(__file__).with_name("release-updater-fixture.py")), "seed-data", "--database", str(database))
+            command(sys.executable, str(Path(__file__).with_name("release-updater-fixture.py")), "seed-data", "--database", str(database), "--expected-schema", str(baseline_schema))
         else:
-            seed_database(database)
+            seed_database(database, baseline_schema)
         start()
         original_pid = active_pid
         wait_ui(r"^(?:开启剪贴记录|Start recording)$")

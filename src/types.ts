@@ -1,8 +1,10 @@
+export interface FileEntry { path: string; entryKind: 'file' | 'directory' | 'unknown' }
 export interface Clip {
   id: number;
   content: string;
   title: string;
   kind: 'text' | 'link' | 'code' | 'color' | 'image' | 'file';
+  entries?: FileEntry[] | null;
   image?: { width: number; height: number; bytes: number } | null;
   language: string | null;
   pinned: boolean;

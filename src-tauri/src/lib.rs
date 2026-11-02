@@ -104,6 +104,8 @@ mod capability_tests {
             "remove_appearance_sticker",
             "get_telemetry_state",
             "set_telemetry_enabled",
+            "set_telemetry_mode",
+            "reset_telemetry_identity",
             "record_usage_event",
             "flush_telemetry",
             "clear_telemetry_queue",

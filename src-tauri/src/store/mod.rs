@@ -17,7 +17,7 @@ use std::{
 };
 
 pub type Result<T> = std::result::Result<T, String>;
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 4;
 pub const MAX_CONTENT_BYTES: usize = 256 * 1024;
 const MAX_BACKUP_BYTES: usize = 20 * 1024 * 1024;
 const MAX_BACKUP_CLIPS: usize = 10_000;
@@ -87,6 +87,29 @@ pub struct HistoryPage {
     pub history: HistorySummary,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileEntryKind {
+    File,
+    Directory,
+    Unknown,
+}
+impl FileEntryKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Directory => "directory",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FileEntry {
+    pub path: String,
+    pub entry_kind: FileEntryKind,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Clip {
@@ -100,6 +123,8 @@ pub struct Clip {
     pub language: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<ImageMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entries: Option<Vec<FileEntry>>,
     pub pinned: bool,
     #[serde(default)]
     pub keep_forever: bool,
@@ -568,6 +593,7 @@ fn clip_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clip> {
         app_tags: metadata.app_tags,
         origin_url: (!metadata.origin_url.is_empty()).then_some(metadata.origin_url),
         rich: row.get(15)?,
+        entries: None,
     })
 }
 
@@ -629,7 +655,14 @@ fn read_privacy_rules(conn: &Connection) -> Result<PrivacyRules> {
 }
 /// 富文本只作为文字记录的附加格式保存，随记录删除。
 pub const MAX_RICH_BYTES: usize = 256 * 1024;
-pub const MAX_FILES: usize = 64;
+pub const MAX_FILES: usize = 100;
+fn identity_predicate(kind: &str) -> &'static str {
+    match kind {
+        "image" => "kind='image'",
+        "file" => "kind='file'",
+        _ => "kind NOT IN ('image','file')",
+    }
+}
 fn ensure_rich_table(conn: &Connection) -> Result<()> {
     conn.execute_batch("CREATE TABLE IF NOT EXISTS clip_rich (clip_id INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE, html TEXT NOT NULL);")
         .map_err(sql_error)
@@ -729,6 +762,8 @@ pub fn classify(content: &str) -> &'static str {
     }
 }
 
+mod files;
+use files::{file_content, unknown_entries};
 mod backup;
 mod cleanup;
 mod clips;

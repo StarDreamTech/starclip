@@ -111,7 +111,10 @@ pub struct AiAccess {
 }
 
 fn safe(clip: &Clip, revision: u32) -> bool {
-    revision > 0 && clip.scan_version == revision && !clip.is_private && clip.kind != "image"
+    revision > 0
+        && clip.scan_version == revision
+        && !clip.is_private
+        && !matches!(clip.kind.as_str(), "image" | "file")
 }
 impl AiAccess {
     pub fn state(&self) -> Value {
@@ -945,6 +948,12 @@ mod tests {
             .unwrap();
         let image = crate::images::prepare_rgba(1, 1, &[12, 34, 56, 255]).unwrap();
         let image = store.add_image(&image, "原创像素", None, false).unwrap();
+        let file = store
+            .capture_files(
+                &["/original-fixture/private-file.txt".into()],
+                &crate::privacy::CaptureContext::default(),
+            )
+            .unwrap();
         let mut ai = AiAccess::default();
         assert!(!ai.enabled);
         let (token, id) = connect(
@@ -954,7 +963,7 @@ mod tests {
             FIELDS.iter().map(|s| s.to_string()).collect(),
         );
         assert!(!ai.state().to_string().contains(&token));
-        for forbidden in [private.id, other.id, image.id, 99999] {
+        for forbidden in [private.id, other.id, image.id, file.id, 99999] {
             assert_eq!(
                 ai.respond(store, request(&token, "get", json!({"id":forbidden}))),
                 json!({"error":DENIED})
@@ -999,6 +1008,17 @@ mod tests {
         };
         assert!(ai
             .create(store, unsafe_request, Path::new("/fixed/starclip"))
+            .is_err());
+        let file_request = CreateConnection {
+            name: "文件".into(),
+            clip_ids: vec![file.id],
+            fields: vec!["content".into()],
+            max_results: 1,
+            expires_hours: 1,
+            allow_pet_control: false,
+        };
+        assert!(ai
+            .create(store, file_request, Path::new("/fixed/starclip"))
             .is_err());
         ai.revoke(&id);
         assert!(ai

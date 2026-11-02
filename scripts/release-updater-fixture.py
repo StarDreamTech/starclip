@@ -6,6 +6,7 @@ release.yml run and its existing tag. This server does not exercise GitHub's
 public download infrastructure. It never disables TLS or updater signatures.
 """
 import argparse
+from contextlib import closing
 import base64
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,6 +21,7 @@ import subprocess
 import time
 from urllib.parse import urlsplit
 import zlib
+from fixture_schema import source_schema
 
 PUBLIC_KEY = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVEQjQ4MUM1NTgxMDBGRjEKUldUeER4Qll4WUcwWFpqaHJOVDZvRGxTcXNZK3FVdGVpTnFxMVNJbmgyRmFNeUVtVFRJcCtVaGEK"
 ENDPOINT = "https://github.com/cpython666/starclip/releases/latest/download/latest.json"
@@ -103,6 +105,11 @@ def prepare(args, temporary):
         raise ValueError("Assets and a new private output folder must be inside RUNNER_TEMP")
     if args.source_ref != "v" + args.version or not re.fullmatch(r"[a-f0-9]{40}", args.source_head_sha):
         raise ValueError("Tag and exact release source revision are required")
+    source = args.source_directory.resolve(strict=True)
+    actual_head = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+    if actual_head != args.source_head_sha:
+        raise ValueError("Target schema source is not the exact signed release commit")
+    target_schema = source_schema(source)
     manifest, hashes, mapping = verify_assets(assets, args.version)
     output.mkdir(mode=0o700)
     config = output / "certificate.cnf"
@@ -137,7 +144,7 @@ authorityKeyIdentifier = keyid,issuer
     target = manifest["platforms"][args.platform]
     filename = Path(urlsplit(target["url"]).path).name
     metadata = dict(latestManifestSha256=hashes["latest.json"], targetVersion=args.version,
-                    platform=args.platform, targetFilename=filename, targetSha256=hashes[filename],
+                    platform=args.platform, targetSchema=target_schema, targetFilename=filename, targetSha256=hashes[filename],
                     targetUrl=target["url"], releaseRunId=args.release_run_id, sourceRef=args.source_ref,
                     sourceHeadSha=args.source_head_sha, publicKey=PUBLIC_KEY, endpoint=ENDPOINT,
                     assetDirectory=str(assets), mapping=mapping, hashes=hashes,
@@ -186,13 +193,22 @@ def serve(directory, temporary):
     server.serve_forever()
 
 
-def verify_data(path):
+def preferences_for_schema(expected_schema):
+    # The genuine public 0.2.2 baseline used the boolean shape. The schema-4
+    # migration normalizes it to mode without changing the explicit opt-out.
+    values = dict(PREFERENCES)
+    if expected_schema >= 3:
+        values["telemetry_preferences_v1"] = dict(revision=0, mode="off")
+    return values
+
+
+def verify_data(path, expected_schema):
     if not path.is_file() or path.is_symlink():
         raise ValueError("Application-created synthetic database is required")
-    with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5) as db:
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5)) as db, db:
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
-        for key, value in PREFERENCES.items():
+        assert db.execute("PRAGMA user_version").fetchone()[0] == expected_schema, "Unexpected target/baseline database schema"
+        for key, value in preferences_for_schema(expected_schema).items():
             row = db.execute("SELECT value FROM preferences WHERE key=?", (key,)).fetchone()
             assert row is not None and json.loads(row[0]) == value, "Saved preference changed: " + key
         assert db.execute("SELECT id,content,title,kind,pinned,keep_forever,group_id,copy_count FROM clips ORDER BY id").fetchall() == [
@@ -200,15 +216,15 @@ def verify_data(path):
             (1002, IMAGE_IDENTITY, "CI original four-pixel image", "image", 0, 1, 1001, 0)], "Fixed records changed or canary captured"
         assert db.execute("SELECT id,name,color FROM groups").fetchall() == [(1001, GROUP, "#7BBEB0")]
         assert db.execute("SELECT clip_id,width,height,bytes,png,thumbnail FROM clip_images").fetchall() == [(1002, 2, 2, len(PNG), PNG, PNG)], "Original PNG or thumbnail changed"
-    return dict(schema=2, paused=True, fixedRecords=2, fixedImages=1, fixedGroups=1,
+    return dict(schema=expected_schema, paused=True, fixedRecords=2, fixedImages=1, fixedGroups=1,
                 growthVerified=True, telemetryDisabled=True, imageSha256=hashlib.sha256(PNG).hexdigest())
 
 
-def seed_data(path):
+def seed_data(path, expected_schema):
     if not path.is_file() or path.is_symlink():
         raise ValueError("Only the application may create its synthetic database")
-    with sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+    with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5)) as db, db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == expected_schema, "Unexpected seed baseline schema"
         assert db.execute("SELECT count(*) FROM clips").fetchone()[0] == 0
         assert db.execute("SELECT count(*) FROM groups").fetchone()[0] == 0
         now = int(time.time() * 1000)
@@ -217,11 +233,11 @@ def seed_data(path):
             db.execute("INSERT INTO clips(id,content,title,kind,pinned,group_id,created_at,updated_at,copy_count) VALUES(1001,?,?,?,1,1001,?,?,7)", (NOTE, TITLE, "text", now, now))
             db.execute("INSERT INTO clips(id,content,title,kind,keep_forever,group_id,created_at,updated_at) VALUES(1002,?,?,'image',1,1001,?,?)", (IMAGE_IDENTITY, "CI original four-pixel image", now, now))
             db.execute("INSERT INTO clip_images(clip_id,width,height,bytes,png,thumbnail) VALUES(1002,2,2,?,?,?)", (len(PNG), PNG, PNG))
-            for key, value in PREFERENCES.items():
+            for key, value in preferences_for_schema(expected_schema).items():
                 db.execute("INSERT INTO preferences(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(value)))
             db.execute("INSERT INTO preferences(key,value) VALUES('onboarding_v1','true') ON CONFLICT(key) DO UPDATE SET value=excluded.value")
         db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    return verify_data(path)
+    return verify_data(path, expected_schema)
 
 
 def main():
@@ -232,11 +248,14 @@ def main():
         preparation.add_argument("--" + name, type=Path, required=True)
     for name in ("version", "source-ref", "source-head-sha"):
         preparation.add_argument("--" + name, required=True)
+    preparation.add_argument("--source-directory", type=Path, required=True)
     preparation.add_argument("--release-run-id", type=int, required=True)
     preparation.add_argument("--platform", choices=("darwin-aarch64", "windows-x86_64"), required=True)
     commands.add_parser("serve").add_argument("--directory", type=Path, required=True)
     for name in ("seed-data", "verify-data"):
-        commands.add_parser(name).add_argument("--database", type=Path, required=True)
+        data_command = commands.add_parser(name)
+        data_command.add_argument("--database", type=Path, required=True)
+        data_command.add_argument("--expected-schema", type=int, required=True)
     args = parser.parse_args()
     temporary = guard_runner()
     if args.command == "prepare":
@@ -245,7 +264,8 @@ def main():
         serve(args.directory, temporary)
     else:
         path = args.database.resolve(strict=True)
-        print(json.dumps(seed_data(path) if args.command == "seed-data" else verify_data(path)))
+        if args.expected_schema < 1: parser.error("--expected-schema must be positive")
+        print(json.dumps(seed_data(path, args.expected_schema) if args.command == "seed-data" else verify_data(path, args.expected_schema)))
 
 
 if __name__ == "__main__":
