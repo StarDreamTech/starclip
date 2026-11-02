@@ -25,7 +25,7 @@ description: 星笺 Starclip 项目共享知识库。处理本仓库的功能开
 
 - 同日 [PR #16](https://github.com/cpython666/starclip/pull/16) 已合入 main（`f7255ff`）：星伴图库手动点选立即保存并同步已开启浮窗，关闭不唤醒；巡游 / 分类仍仅预览。已核对 macOS 原生点选 / 重启、5 项组件回归及完整 7 项 PR CI，Windows 点选 GUI 未单独实测；见 [验证记录](../../../docs/verification.md#星伴表情点选同步2026-11-02)。
 
-- 同日查询性能第一轮已实现 Store 全局数量 / 筛选选项缓存，联合按本连接变更、外部提交与 DDL 失效；事务 / 活动游标不复用，记录与隐私 / AI 权限仍实时查询，结构保持 4。原创两版完整查询基准、正确性与剩余扫描边界见 [查询性能](../../../docs/query-performance.md)；正式客户端尚未发布。
+- 同日 [PR #17](https://github.com/cpython666/starclip/pull/17) 已合入 main（`b61206b`），查询性能第一轮实现 Store 全局数量 / 筛选选项缓存，联合按本连接变更、外部提交与 DDL 失效；事务 / 活动游标不复用，记录与隐私 / AI 权限仍实时查询，结构保持 4。原创两版完整查询基准、正确性与剩余扫描边界见 [查询性能](../../../docs/query-performance.md)；精确业务 head `2bcef07` 的 push / PR 两组均 7/7 通过，包含双平台构建与 fresh / upgrade，未单独做 GUI / IPC 延迟测量；正式客户端尚未发布。
 
 ## 按需阅读
 

@@ -1,6 +1,6 @@
 # 历史查询性能（2026-11-02，客户端尚未发布）
 
-本轮在 SQLite 结构 4 上优化连续搜索、切换分类和翻页时重复执行的全局聚合。没有改变查询接口、每页 50 条、搜索匹配方式或数据迁移协议，也没有修改 Cloudflare Worker / 统计上报。
+[PR #17](https://github.com/cpython666/starclip/pull/17) 已合入 main（`b61206b`）。本轮在 SQLite 结构 4 上优化连续搜索、切换分类和翻页时重复执行的全局聚合。没有改变查询接口、每页 50 条、搜索匹配方式或数据迁移协议，也没有修改 Cloudflare Worker / 统计上报。
 
 ## 实现与一致性
 
@@ -35,7 +35,7 @@ node scripts/benchmark-history.mjs --stage measure
 
 ## 本轮结果
 
-运行环境为 macOS aarch64 / Rust 1.90.0。旧版固定为上述 `2c64c48`，优化版为测量时尚未提交的冻结源码，Rust / 构建输入快照 SHA-256 为 `acc56c0ca16b8f31d56d7330b8328b57dae10144f9b2fa317b7877b5f9671ffa`；harness SHA-256 为 `9c8a879e9cee7bcd9b3d46cb6bde7503c0ba632ae6499c96dee8be278d8bd670`。本轮两版 21 种连续查询及 6 种首次 / 变更后查询的完整响应指纹一致。
+运行环境为 macOS aarch64 / Rust 1.90.0。旧版固定为上述 `2c64c48`，优化版为测量时尚未提交、随后提交为 `2bcef07` 并经完整双平台 CI 通过的冻结源码，Rust / 构建输入快照 SHA-256 为 `acc56c0ca16b8f31d56d7330b8328b57dae10144f9b2fa317b7877b5f9671ffa`；harness SHA-256 为 `9c8a879e9cee7bcd9b3d46cb6bde7503c0ba632ae6499c96dee8be278d8bd670`。本轮两版 21 种连续查询及 6 种首次 / 变更后查询的完整响应指纹一致。
 
 以下为完整存储查询中位数，单位 ms，箭头为旧版 → 优化版；每档每场景 20 次。统计缓存已预热，数据在各轮连续查询中不变化。
 
