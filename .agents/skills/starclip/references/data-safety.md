@@ -8,7 +8,7 @@
 - `store/clips.rs::stage_images` 在同一只读事务内预检实际 BLOB 总大小、身份 / 类型 / 隐私，再逐张验证并写原 PNG；不拼图、不降低永久保留或隐私保护，不提升 schema 4。目录导出采用新随机子目录，失败清理本批，文件名不含标题；缩略图也检查有效 PNG 与 320 px 上限。纯逻辑及原图 / 顺序 / 保护、非法批次 / 超限 / 失败清理、缓存清理有原创回归。
 - `desktop/image_transfer.rs` 仅主窗可调用。复制沿用 `ClipboardWrite::Files` 与自身写入抑制，成功逐张计 reuse；拖出使用 `drag` 2.1.1 原生文件列表，固定 Copy，开始前重验记录身份、隐私与临时文件。macOS 主线程先确认左键仍按住，避免快速松开后 IPC 才到达造成悬挂会话；不把 OS 的 Dropped 回调当作目标文件已核对。
 - 缓存为应用 cache 下 `image-transfers/` 的明文原 PNG，Unix 目录 0700 / 文件 0600；最多约 512 MiB，保留 24 小时后在下一次准备 / 复制时清理（包括崩溃残留受管临时目录），不提前淘汰仍可能用于粘贴的文件。替换未拖出的准备批次会清理旧副本；已拖出 / 复制副本到期再清理，退出不立即删；用户导出目录不自动清理。不把这段缓存当数据库备份、同步或加密。
-- 本机独立 `com.starclip.imagebatchverify20261103` 仅三张原创 PNG、全程暂停 / 统计 off；两张图片复制后 Finder 粘贴和原生目录导出已核对逐字节一致。原生拖放到文件夹与 Windows GUI 仍需按 [验证记录](../../../../docs/verification.md#批量图片传出2026-11-03) 单独验收；构建和回调成功不能替代收件文件验证。
+- 本机独立 `com.starclip.imagebatchverify20261103` 仅三张原创 PNG、全程暂停 / 统计 off；最终包 checkbox 勾选状态、两图 Finder 粘贴和原生目录导出已核对逐字节一致，测试应用已退出 / 注销。业务提交 `8617a99` 的 [push 41609745952](https://github.com/cpython666/starclip/actions/runs/41609745952) / [PR 41610355122](https://github.com/cpython666/starclip/actions/runs/41610355122) 均 7/7 通过（双平台构建、字体原生检查与 fresh / upgrade），见 [草稿 PR #28](https://github.com/cpython666/starclip/pull/28)。原生拖放到文件夹与 Windows GUI 仍需按 [验证记录](../../../../docs/verification.md#批量图片传出2026-11-03) 单独验收；构建和回调成功不能替代收件文件验证。
 
 ## 采集与默认值
 
