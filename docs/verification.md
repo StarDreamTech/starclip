@@ -1,4 +1,27 @@
-# 星笺验证记录（当前公开版 0.2.3，更新至 2026-10-29）
+# 星笺验证记录（当前公开版 0.2.4，更新至 2026-11-03）
+
+## 0.2.4 正式发布与原生升级验收
+
+- **发布状态：** 用户于 2026-11-03 明确授权本地测试通过后发布。[v0.2.4](https://github.com/cpython666/starclip/releases/tag/v0.2.4) 已于 **2026-11-03T04:54:57Z（北京时间 2026-11-03 12:54:57）** 公开为 latest，Release ID `432289352`，draft / prerelease 均 false。不可变 tag 指向 `6d83640f94178307300b7a12bf12debd02ca4388`；[PR #27](https://github.com/cpython666/starclip/pull/27) 最终业务 head `cda83d2` 的 [完整 PR CI 41578056439](https://github.com/cpython666/starclip/actions/runs/41578056439) 7/7 成功，合并后的树完全一致。签名 [Release 41579229975](https://github.com/cpython666/starclip/actions/runs/41579229975) **8/8 成功**，8 个完整附件上传结束后才发布。
+- **程序包核验：** 全部本地草稿文件的大小 / SHA-256 匹配 GitHub digest，`SHA256SUMS` 的 7 个唯一条目均通过。`latest.json` 为 0.2.4，两平台正式 tag URL、签名文件内容 / 公钥 key ID / 绑定版本与当前 CHANGELOG 一致。真实密码学验签由发布 assemble 及 macOS 升级 job 的原包正例 / 翻转字节拒绝负例通过；本机未安装 minisign，不将结构核对替代密码学验签。
+- **macOS 包身份：** DMG 完整性、只读挂载、strict / deep ad-hoc 签名、`com.starclip.desktop` / 0.2.4 / arm64 均通过；更新归档内身份和主程序 SHA 与 DMG 相同。主程序 SHA-256 `c7b0da1a1b4a55a6cf61e57aa005afcaaa269fa11106b28bf81489f42e0a731a`，app 常规文件合计 16,674,556 B。该体积不是运行内存；仍无 Apple Developer 公证或 Windows 发行者证书，没有在本机安装或启动正式包。
+- **真实 0.2.3 升级：** [macOS 41580453911](https://github.com/cpython666/starclip/actions/runs/41580453911) 与 [Windows 41580457922](https://github.com/cpython666/starclip/actions/runs/41580457922) 均为真实公开 `public-0.2.3` → 此精确签名 0.2.4，`result=passed` / `restartMode=automatic`，新旧 PID 不同，目标程序摘要 / 来源 tag / release run 与本轮一致。检查、签名下载、稍后、明确确认、升级前恢复点与旧程序备份、安装和重启后的原创数据 / PNG / 分组 / 成长 / 暂停 / 统计 off 保留均通过；目标结构为 4。该证据来自一次性 runner 的临时可信 HTTPS 服务，保留生产 URL 和签名包原字节，不等于原生更新 GUI 已在公网 CDN 重跑。
+- **清理边界：** 两平台清理无错误。macOS 明确核对 hosts / 服务 / 证书文件 / 信任撤销 / 私钥删除，撤信后 TLS probe 为 60；临时 deny 信任记录保留到 VM 销毁。Windows 实际报告为汇总 `restored=true` / `errors=[]`。不扩大为整个信任库逐字节恢复；未改用户电脑的 hosts、证书或正式数据。
+
+本轮签名附件如下，DMG 为 **8.18 MB**、Windows NSIS 为 **6.92 MB**（十进制）；分享文案已按实际范围改为「约 8 MB」。
+
+| 附件 | 字节 | SHA-256 |
+| --- | ---: | --- |
+| `SHA256SUMS` | 652 | `5bbe25823478e1f3a12d40fc14b54dd50545a9179024edb500a97938d586e28e` |
+| `Starclip_0.2.4_aarch64.app.tar.gz` | 8,391,207 | `f44ebe5de73bcc479b16e9dfaa43ea26a8a6e841a055621c767fb17d26234273` |
+| `Starclip_0.2.4_aarch64.app.tar.gz.sig` | 424 | `1be3bbd1ffd901043eef10c26ad1d8582dc4a72f9c67e2f22dd0792eb817ec41` |
+| `Starclip_0.2.4_aarch64.dmg` | 8,182,631 | `640d2bd02a216ccd15a742cf6c47868390ad874440efede9c7c2d470f4df0ad2` |
+| `Starclip_0.2.4_x64-setup.exe` | 6,917,240 | `a0f712d2d8d6f9bcb18656f8287e540475e1f31c4b3dca217fbcd7601ab541f1` |
+| `Starclip_0.2.4_x64-setup.exe.sig` | 436 | `e3f80db73bbd7c7eae24dba2f1cf23bb6b00a5b4e1c4cbb4aef3bcef269d62c8` |
+| `latest.json` | 4,637 | `cb2fcdd3fec6d04307928ec908d04e3b189d5794a80bf28827e4d974b1e86968` |
+| `release-notes.md` | 3,332 | `94fe0dcae9dc40bd7bc2b8d911524847246b8cd9ca7920913c50457f7fe29db8` |
+
+本地独立旧 3 → 4、123 条分页与表情 / 创作验收见本页后方「0.2.4 本地发布前验收」。证据全部位于忽略的 `artifacts/release-0.2.4.noindex/`：`verify-ci.json`、`release-ci.json`、`published-metadata.json`、`signed-assets/`、`final-signed-assets-verification.json`、`signed-updater-acceptance.json` 及两平台原创验收 artifacts。匿名公开下载已完成：不用认证头的 8 个正式附件与草稿逐字节相同，大小 / SHA / GitHub digest 一致；稳定 latest 别名匿名 HTTP 200，完整 4,637 B / SHA-256 `cb2fcdd3fec6d04307928ec908d04e3b189d5794a80bf28827e4d974b1e86968` 与已验收清单相同，version=0.2.4。Homebrew [自动同步 41580841113](https://github.com/cpython666/starclip/actions/runs/41580841113) verify / update-tap **2/2 通过**，实际远端 Cask 为 0.2.4 / DMG SHA `640d2bd02a216ccd15a742cf6c47868390ad874440efede9c7c2d470f4df0ad2`；[机器人提交 2c96150](https://github.com/cpython666/homebrew-tap/commit/2c961507eea106de52b9e667ba029cc39826ab0f) 仅改该 Cask。公开下载与 Tap 分别记录在 `public-download-verification.json` / `homebrew-verification.json`，未安装本机正式应用。
 
 ## 0.2.3 正式发布与原生升级验收
 
@@ -735,7 +758,7 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 - JSON 导出 4、原生导入 1–4。v4 文件必须含与正文一致的 entries；非法文件 / 类型 / 路径原子拒绝，旧格式合法文件生成 unknown；重复导入只补全未知类型，保留已有已知类型，包括已知类型冲突时保留现值。保留既有图片、缩略图、分组、时间、记录身份、隐私与偏好，包括未知偏好 key。旧库不凭历史推造活动数据或成长奖励；主线 rich / activity / FTS 扩展保留。
 - 完整恢复管理目录加入 `papers`，保留 fonts / renderers / 纸缓存；已知 3 恢复点可恢复，未知 3 列为不兼容。WAL 快照、失败提交保留两端恢复点、符号链接拒绝等既有保护继续覆盖。统计侧文件仍不进入恢复点。
 - 文件在 Rust 查询 / AI 授权执行端、设置候选与浏览器演示均排除 AI；详情显示有序路径 / 类型及明确「文件记录 · 不向 AI 提供」。不会通过保存成代码绕开类型边界。
-- 三档统计 mode、旧布尔 true 保守转 session、身份冲突 / 缺日期、缓存 3 与新 HTTP 4 已实现；关闭 / 重置 / 切模式清 generation，偏好读取失败保留侧文件停止统计，未配置预览不碰侧文件，身份 / 缓存删除失败可见并可重试。详见 [统计说明](telemetry.md#当前收集范围与界面协议-4客户端尚未发布)。
+- 三档统计 mode、旧布尔 true 保守转 session、身份冲突 / 缺日期、缓存 3 与新 HTTP 4 已实现；关闭 / 重置 / 切模式清 generation，偏好读取失败保留侧文件停止统计，未配置预览不碰侧文件，身份 / 缓存删除失败可见并可重试。详见 [统计说明](telemetry.md#当前收集范围与界面协议-4)。
 
 **自动与 macOS 原生证据**
 
@@ -784,14 +807,14 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 
 ## 0.2.4 本地发布前验收（2026-11-03）
 
-用户已明确授权在本地测试，通过后打包正式发布与同步 Homebrew。本段为本地隔离应用证据，发布和签名目标升级结果须另外核对后记录。
+用户已明确授权在本地测试，通过后打包正式发布与同步 Homebrew。本段保留发布前本地隔离应用证据；随后签名目标、真实升级、公开附件及 Homebrew 结果见本页顶部 0.2.4 正式发布记录。
 
 - 源码版本同步为 0.2.4；`npm test` 216 项、Rust 无 desktop 核心 151 项、macOS desktop lib 167 项及 `ai_stdio` 1 项全部通过，Rust lib 各 4 项默认忽略。Web 生产构建、独立 macOS release app 和 strict / deep ad-hoc 验签通过；统计迁移说明补明旧版已关闭的保持关闭，中英文同步。
 - 独立标识 `com.starclip.releaseverify20261103`，无线上统计与更新源。仅预置原创结构 3：120 条分页文本、同路径文件与文本各一条、原创 PNG 一条，暂停 / mode off，星伴 love / 奶油金 / 70%。原生启动迁为 4；每页 50 条、第二页 070–021、跨页搜索找到 001，旧文件顺序与 directory / unknown 类型及 AI 排除说明正确。新增标签即时保存后，记录与全局筛选选项均更新，实际筛选可找到该文件。
 - 手动点选 curious 后，实际桌面浮窗出现问号、好奇脸及「有点好奇」。关主窗后从星伴按钮恢复主窗成功。正常退出并确认进程结束，再重开得到不同 PID，浮窗保留 curious。未声称用注入按键完整验收了全局快捷键。
 - 星绘坊以原创 Python 正文核对自动识别、当前预览及系统保存对话框导出 PNG，1088×648；切换月光笺保留正文，选择「手写体」后观察下载 0% 进度和下载完成，生成原创中文纸笺并实际导出 1200×1600 PNG；两图已目视核对。仅代表字体一款，不扩大为全部字体 GUI。
 - 规则与隐私页显示三档统计，选中 off，接收端未配置时其它模式禁用；星迹统计显示历史 123、采集 0。最终只读核对结构 4、记录仍 123、暂停版本 7、off、文件 entries / PNG 哈希 / 固定偏好保留，标签只增加原创验收项，活动表仍 0，恰好一个 before-migration 快照，无统计身份或队列。未读取真实剪贴板或正式数据，未替换 `/Applications` 应用。
-- 产物与原始日志在忽略的 `artifacts/release-0.2.4.noindex/`：各测试 / 构建日志、`native-before.json`、`native-acceptance.json`、`native-curious.png`、`native-restart-curious.png`、两张原创导出 PNG、统计设置与星迹 AX 记录。原生应用正常退出，后续读界面可能重新唤起，不用于后台内存测量。
+- 产物与原始日志在忽略的 `artifacts/release-0.2.4.noindex/`：各测试 / 构建日志、`native-before.json`、`native-acceptance.json`、`native-curious.png`、`native-restart-curious.png`、两张原创导出 PNG、统计设置与星迹 AX 记录。原生应用正常退出，并逐路径取消本轮隔离测试 app 的 Launch Services 注册，产物留在 `.noindex` 证据目录；后续读界面可能重新唤起，不用于后台内存测量。
 
 发布准备首轮 head `dc25da816b331dbb9d767a5fabb4dcfe3d8bcf13` 的 [push 41576356823](https://github.com/cpython666/starclip/actions/runs/41576356823) 与 [PR 41576409073](https://github.com/cpython666/starclip/actions/runs/41576409073) 均 7/7 成功，含双平台构建和两平台 fresh / upgrade。该普通 Verify 的 DMG 实测 8,192,597 B，SHA-256 `9b63e2b2325fb92b4c6baea79059f8b51b7de4ae94c5834933d5336cd47481c9`，已超过 8 MB；据此将当前分享文案改为「约 8 MB」，仅重制中英总览图，十图总计 805,527 B，其余八图 SHA 未变。两图以既有 HTML 在 Ego 1080×1440 / DPR1 渲染，压缩后目视核对；该包非最终签名目标，最终附件须重测。先前本地功能原生验收在这次素材调整前完成，不扩大为新总览图已逐图原生保存。CHANGELOG 同时补齐已实现的月光笺 11 种纸张与双栏布局，发布状态仍待签名和升级门禁。
 

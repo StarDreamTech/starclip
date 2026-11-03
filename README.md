@@ -30,9 +30,9 @@ Apple Silicon Mac（M 系列芯片，macOS 11+）可通过星笺维护的 [Homeb
 brew install --cask cpython666/tap/starclip
 ```
 
-Apple Silicon macOS 和 Windows x64 已可从 [0.2.3 GitHub Release](https://github.com/cpython666/starclip/releases/tag/v0.2.3) 下载。Homebrew 已[同步至 0.2.3](https://github.com/cpython666/starclip/actions/runs/40896366521)，远端 Cask 与公开 DMG 摘要匹配；先退出应用，再运行 `brew update` 和 `brew upgrade --cask cpython666/tap/starclip`，无需先卸载。已有带更新器的版本可在「偏好设置 → 帮助」检查更新。
+Apple Silicon macOS 和 Windows x64 已可从 [0.2.4 GitHub Release](https://github.com/cpython666/starclip/releases/tag/v0.2.4) 下载。Homebrew 已[同步至 0.2.4](https://github.com/cpython666/starclip/actions/runs/41580841113)，远端 Cask 版本与公开 DMG 摘要已回读一致；先退出应用，再运行 `brew update` 和 `brew upgrade --cask cpython666/tap/starclip`，无需先卸载。已有带更新器的版本可在「偏好设置 → 帮助」检查更新。
 
-**0.2.3 已于 2026-10-29 正式发布**，提供两平台安装包与签名更新清单。2026-10-29 发布验收时没有替换本机正式安装。macOS 0.2.2 升级到 0.2.3 后可能需要手动重新打开星笺：旧版自身的重启问题不会被新包追溯修复；本次验收已验证安装完成后手动重开及数据保留，0.2.3 修复用于后续更新的重启流程。
+**0.2.4 已于 2026-11-03 04:54:57 UTC 正式发布为 latest**，提供两平台安装包与签名更新清单；[签名发布流水线](https://github.com/cpython666/starclip/actions/runs/41579229975) 8 项检查通过。真实公开 0.2.3 → 0.2.4 的 [macOS](https://github.com/cpython666/starclip/actions/runs/41580453911) 与 [Windows](https://github.com/cpython666/starclip/actions/runs/41580457922) 均通过自动重启、固定数据及恢复副本核对；验收使用临时受信任 HTTPS 虚拟机环境，不代表公网 GitHub / CDN 更新链路，未替换本机正式安装。旧 macOS 0.2.2 的重启问题与手动重开边界仍见下方历史记录。
 
 如果 Homebrew 提示 Cask 未受信任，执行 `brew trust --cask cpython666/tap/starclip` 后重试，只授权星笺这一项。自有 Tap 不等于 Homebrew 官方主仓收录；更新包具备 Tauri 签名校验，但尚无 Apple Developer 公证或 Windows 发行者证书。安装、升级和分发边界见 [发布说明](docs/releases.md)。
 
@@ -40,7 +40,7 @@ Apple Silicon macOS 和 Windows x64 已可从 [0.2.3 GitHub Release](https://git
 
 内存与大历史边界：0.2.3 按 SQLite 每页 50 条读取历史，数据库和图片仍在同一个磁盘文件中，不按月份分库。2026-10-29 macOS 空库、暂停采集的诊断对照中，主控制页销毁后只留 100% idle 动画星伴，120 秒总物理足迹三轮中位数为 **196.0 MiB**；共享 SVG 路径实验同包仅少 1.5 MiB，未证明稳定收益，不合入生产。随后固定阴影实验在同一新诊断包的单轮 120 秒对照为基线 **201.3 MiB**、实验 **199.6 MiB**，仅差 **1.7 MiB**，同样未证明稳定收益、未合入。几十 MiB 动画目标仍未达到，空白与静态仅是诊断对照。这不代表生产前端、长期或大图库性能，也不能与此前 123 条文本的 242.6 MiB 样本计算降幅，详见 [内存诊断与共享路径实验](docs/verification.md#内存诊断与共享路径实验)。2026-10-29 该轮未替换本机正式安装。
 
-- **剪贴历史**：记录系统剪贴板中的文本、图片与文件路径引用，去重、SQLite 持久化、搜索与分类筛选；图片支持缩略图、原图预览和复制回图片剪贴板，文件只保存路径、不读取文件内容。当前文件兼容更新为未发布源码，原生平台读写验收边界见 [验证记录](docs/verification.md)。
+- **剪贴历史**：记录系统剪贴板中的文本、图片与文件路径引用，去重、SQLite 持久化、搜索与分类筛选；图片支持缩略图、原图预览和复制回图片剪贴板，文件只保存路径、不读取文件内容。文件兼容更新已随 0.2.4 发布，原生平台读写验收边界见 [验证记录](docs/verification.md)。
 - **自己的星系**：星标收藏、永久保留、彩色分组、标题编辑、卡片 / 列表 / 流星栏；星夜、月白、素白、青苔、暮樱五套主题，以及跟随系统。另有四套可独立选择或关闭的原创贴纸。
 - **自定义外观**：主题强调色、纯色或双色渐变背景，0–359° 方向与配色预设；可导入一张透明 PNG 贴纸，自动压缩后在本机独立保存。见 [外观说明](docs/appearance.md)。
 - **流星启动画面**：短暂的星空与流星动画，可跳过、关闭或从偏好设置重看。
@@ -59,7 +59,7 @@ Apple Silicon macOS 和 Windows x64 已可从 [0.2.3 GitHub Release](https://git
 
 0.2.3 将历史改为每页 50 条：SQLite 按搜索、分类、分组、标签、域名和隐私条件查询全库，主列表只保留当前页；侧栏数量与筛选选项仍来自全库。AI 授权选择有独立分页，可跨页选中记录，不受主列表当前页限制。这能减少同时载入的正文和图片，但不代表总运行内存已降到几十 MiB。
 
-当前未发布源码还会在数据未变化时复用全库分类数量和筛选选项，减少连续搜索、翻页的重复聚合；记录和隐私 / AI 权限仍实时查询。原创数据对照方法及剩余成本见 [查询性能](docs/query-performance.md)。
+0.2.4 会在数据未变化时复用全库分类数量和筛选选项，减少连续搜索、翻页的重复聚合；记录和隐私 / AI 权限仍实时查询。原创数据对照方法及剩余成本见 [查询性能](docs/query-performance.md)。
 
 图片捕获优先读取系统提供的图片像素，以像素 SHA-256 去重；PNG 原图与最长边不超过 320 px 的等比缩略图保存在 SQLite。列表仅携带尺寸与大小，预览进入可见区后才读取图片；标题、星标、永久保留、分组和清理规则与文字共用。图片不进入文字 / 代码工坊。单图最多 1,600 万像素、任一边 16,000 px、PNG 20 MiB；系统剪贴板解码发生在检查前，这些限制不代表进程内存峰值不超过 64 MiB。
 
@@ -188,7 +188,7 @@ MCP、数据 CLI 与用户 Skill 共用本机权限层，默认关闭；历史�
 
 技术栈：**Rust + Tauri 2 + SQLite + Vue 3 + TypeScript + Vite**。主界面与桌面星伴代码分开加载，星绘坊 `CodeStudio` 在打开时按需加载；语法高亮使用 highlight.js。无需账户，剪贴内容保存在本机。
 
-0.2.3 已发布的可选使用统计采用固定功能计数，经 Cloudflare Workers Free 转发到 GA4 标准版。当前未发布源码提供三种独立保存模式：不发送、每次运行随机编号（缺省）、本机固定随机编号；已有关闭选择保留，旧布尔 `enabled=true` 迁为 session、false 迁为 off，显式旧三档选择不变。只有固定编号模式发送每日 `app_active` 与每小时 `app_running`，不测量实际使用时长；统计不含剪贴内容、路径或硬件身份。客户端使用协议 v4，Worker 源码兼容旧 v1/v2 与两种历史 v3；部署与 GA 入库须单独验收，不能由本地测试推定。统计侧文件不进入剪贴 JSON 或完整数据迁移，模式 / 身份不匹配的旧缓存舍弃，详见 [统计说明](docs/telemetry.md)。
+0.2.3 已发布的可选使用统计采用固定功能计数，经 Cloudflare Workers Free 转发到 GA4 标准版。0.2.4 已发布三种独立保存模式：不发送、每次运行随机编号（缺省）、本机固定随机编号；已有关闭选择保留，旧布尔 `enabled=true` 迁为 session、false 迁为 off，显式旧三档选择不变。只有固定编号模式发送每日 `app_active` 与每小时 `app_running`，不测量实际使用时长；统计不含剪贴内容、路径或硬件身份。客户端使用协议 v4，生产 Worker 已兼容旧 v1/v2、两种历史 v3 与 v4，Rust 两模式样例已在 GA 实时明细核对；v4 首次日期的独立归属、历史汇总与跨天留存仍未验收，不能由发布或本地测试推定。统计侧文件不进入剪贴 JSON 或完整数据迁移，模式 / 身份不匹配的旧缓存舍弃，详见 [统计说明](docs/telemetry.md)。
 
 既有 v1 接收端与 GitHub 构建变量已配置核对，固定事件与 macOS 隔离桌面事件已在 GA Realtime 核对，关闭与重启保留选择已通过原生验收。2026-10-29 的兼容 v1 / v2 中继已部署，真实 Rust v2 固定批次返回 204，GA 设备维度配置已核对；macOS 隔离应用已验证 123 条原创记录分页、跨页搜索、默认 26 个日常表情及静默发送。新设备参数已在 Realtime 核对；2026-10-29 GA4 非实时探索已核对 2026-10-01 至 10-28 的 9 类事件共 14 条、`Usage count` 合计 22 次。macOS 专用空库、暂停采集的测试包已验证进程级断网缓存、正常退出后重启恢复及恢复联网后的清队列与静默发送；该证据不覆盖系统网络切换、Windows 原生断网或长期持续观察。0.2.3 已按用户授权发布；发布不扩大上述验收范围。配置、免费额度及验证边界见 [配置与隐私说明](docs/telemetry.md)。
 
@@ -208,7 +208,7 @@ npm run build
 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features
 ```
 
-[GitHub Actions](https://github.com/cpython666/starclip/actions) 检查前端、Rust 存储行为，并生成 Apple Silicon macOS DMG 与 Windows x64 安装程序。构建产物从成功运行的 Artifacts 下载。当前为未签名的开发预览版，没有 Apple 公证或 Windows 签名；Windows 运行体验需在实际 Windows 电脑验证。
+[GitHub Actions](https://github.com/cpython666/starclip/actions) 检查前端、Rust 存储行为，并生成 Apple Silicon macOS DMG 与 Windows x64 安装程序。构建产物从成功运行的 Artifacts 下载。正式更新包具备 Tauri 更新签名，macOS 应用使用 ad-hoc 签名；仍没有 Apple Developer 公证或 Windows 发行者证书。两平台安装 / 升级的固定场景已验证，其他 Windows 原生体验仍按场景验收。
 
 ### macOS 本地预览包
 
@@ -229,11 +229,11 @@ macOS 更新时先从应用菜单或托盘退出星笺，再把新版 `Starclip.
 - **应用内更新**：在「偏好设置 → 帮助 → 软件更新与恢复」手动检查并下载，显示下载进度；包签名及签名版本校验通过后弹出「安装并重启」，可以选择稍后。确认安装才保存数据与旧应用备份，安装完成后自动重启；重启失败保留重试入口。待安装包仅保留在本次运行中，完全退出后需重新下载。
   检查失败会明确提示 GitHub 更新来源，并区分连接超时、访问失败、更新信息格式及平台包问题；无法确定原因时同时说明链接访问失败或文件尚未发布的可能，不直接拼接英文底层报错。
   0.2.3 新增默认开启的稳定版提醒：启动后检查，距上次检查至少 24 小时才再次自动联网；可在帮助页即时关闭、忽略某个版本或手动检查。只连接 GitHub 获取更新信息，不上传剪贴内容，不自动下载、安装或抢占焦点；自动检查保留已下载待安装的包。当前没有预览通道或 LTS 维护承诺。
-- **数据结构迁移**：当前未发布源码使用 SQLite 结构 4；兼容正式旧结构 2 和通过严格指纹核验的旧本地结构 3，升级前先保存一致快照，再事务转换文件明细及独立去重索引。未知结构 3、未来版本或损坏数据拒绝写入；失败保留原库与恢复点。预览的稳定应用标识会复用既有预览数据，重新打包不等于全新空库。
+- **数据结构迁移**：0.2.4 使用 SQLite 结构 4；兼容正式旧结构 2 和通过严格指纹核验的旧本地结构 3，升级前先保存一致快照，再事务转换文件明细及独立去重索引。未知结构 3、未来版本或损坏数据拒绝写入；失败保留原库与恢复点。预览的稳定应用标识会复用既有预览数据，重新打包不等于全新空库。
 - **备份与恢复**：完整恢复点包含历史、图片、分组、已保存偏好、星伴成长、已下载字体、旧纸张缓存与受管组件，附文件摘要；恢复前再备份当前数据，复制到新目录后重启，保留原目录。它与合并记录的 JSON 导入不同。
 - **版本发布管理**：统一版本号、更新记录、两平台构建和签名清单，GitHub Actions 只生成完整发布草稿，人工审核后公开。
 
-[0.2.3 已正式发布](https://github.com/cpython666/starclip/releases/tag/v0.2.3)，提供 Apple Silicon macOS 和 Windows x64 安装包及签名更新清单；[签名发布流水线](https://github.com/cpython666/starclip/actions/runs/40882819215) 已通过。已有带更新器的版本可在帮助页检查更新；0.1.0 没有更新器，第一次仍须退出后手动覆盖安装。此前 `f3da89d` 的 macOS / Windows 构建、成品 CLI、23 款字体下载校验与离线渲染、全新安装 / 真实 0.1.0 覆盖升级固定数据验收已通过，历史范围见 [候选 CI](docs/verification.md#未发布启动与后台运行2026-10-29)。
+[0.2.4 已正式发布](https://github.com/cpython666/starclip/releases/tag/v0.2.4)，提供 Apple Silicon macOS 和 Windows x64 安装包及 Tauri 签名更新清单；[签名发布流水线](https://github.com/cpython666/starclip/actions/runs/41579229975) 已通过。已有带更新器的版本可在帮助页检查更新；0.1.0 没有更新器，第一次仍须退出后手动覆盖安装。此前 `f3da89d` 的 macOS / Windows 构建、成品 CLI、23 款字体下载校验与离线渲染、全新安装 / 真实 0.1.0 覆盖升级固定数据验收已通过，历史范围见 [候选 CI](docs/verification.md#未发布启动与后台运行2026-10-29)。
 
 0.2.3 发布前已使用真实公开 0.2.2 二进制验收本次签名目标：[Windows](https://github.com/cpython666/starclip/actions/runs/40891766297) 自动重启通过；[macOS](https://github.com/cpython666/starclip/actions/runs/40895064653) 验证安装替换完成后手动重新打开成功，明确不记为自动重启通过。两平台均核对暂停状态、原创固定文本与 PNG、分组、成长和偏好，以及更新前快照和旧程序备份。验收在一次性 runner 使用临时受信任 HTTPS 服务、生产 URL 和未修改的签名包；该链路不代表公开 GitHub / CDN 下载验收；完整证据见 [0.2.3 发布与升级验收](docs/verification.md#023-正式发布与原生升级验收)。此前 `22480ca` / `7fbbae5` 的比较版本 0.2.1 → 公开 0.2.2 实验另保留在 [验证记录](docs/verification.md)。2026-10-29 该轮未替换本机正式安装。恢复点和旧应用副本不自动删除，也不提供自动程序降级；数据仍为本机明文。详见 [软件升级与发布](docs/releases.md)。
 

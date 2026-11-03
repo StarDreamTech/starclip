@@ -1,6 +1,6 @@
-# 历史查询性能（2026-11-02，客户端尚未发布）
+# 历史查询性能（2026-11-02 实现，随 0.2.4 发布）
 
-[PR #17](https://github.com/cpython666/starclip/pull/17) 已合入 main（`b61206b`）。本轮在 SQLite 结构 4 上优化连续搜索、切换分类和翻页时重复执行的全局聚合。没有改变查询接口、每页 50 条、搜索匹配方式或数据迁移协议，也没有修改 Cloudflare Worker / 统计上报。
+[PR #17](https://github.com/cpython666/starclip/pull/17) 已合入 main（`b61206b`），并随 [0.2.4](https://github.com/cpython666/starclip/releases/tag/v0.2.4) 于 2026-11-03 正式发布。本轮在 SQLite 结构 4 上优化连续搜索、切换分类和翻页时重复执行的全局聚合。没有改变查询接口、每页 50 条、搜索匹配方式或数据迁移协议，也没有修改 Cloudflare Worker / 统计上报。
 
 ## 实现与一致性
 

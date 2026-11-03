@@ -73,7 +73,7 @@
 
 ## 数据结构与升级
 
-- 当前未发布源码为 schema 4。`store::open_with_recovery` 在写连接前只读检查：结构 2 可升级；结构 3 必须符合已知旧分支的六表、列类型 / 主键 / 非空、唯一索引、级联外键及逐项文件明细指纹，未知 3 / 未来版本拒绝。升级前保存一致恢复点，再事务转换并更新版本；保留 text/image/file 三个去重空间、旧 clip_files 顺序与类型、图片 / 身份 / 分组 / 隐私 / 偏好，叠加主线 rich/activity/FTS/来源信息。合法统计偏好仅归一化为 mode，revision 保留；损坏统计值保持原样、运行时停止，不阻断其它数据升级。失败回滚并报告快照位置；重开幂等。旧正式结构 2 与旧本地 3 的原创固定夹具已自动验证；本轮局部原生迁移验收及重开场景见 [验证记录](../../../../docs/verification.md)，不能扩大为真实用户数据或所有原生平台已验收。
+- 0.2.4 已发布，使用 schema 4。`store::open_with_recovery` 在写连接前只读检查：结构 2 可升级；结构 3 必须符合已知旧分支的六表、列类型 / 主键 / 非空、唯一索引、级联外键及逐项文件明细指纹，未知 3 / 未来版本拒绝。升级前保存一致恢复点，再事务转换并更新版本；保留 text/image/file 三个去重空间、旧 clip_files 顺序与类型、图片 / 身份 / 分组 / 隐私 / 偏好，叠加主线 rich/activity/FTS/来源信息。合法统计偏好仅归一化为 mode，revision 保留；损坏统计值保持原样、运行时停止，不阻断其它数据升级。失败回滚并报告快照位置；重开幂等。旧正式结构 2 与旧本地 3 的原创固定夹具已自动验证；本轮局部原生迁移验收及重开场景见 [验证记录](../../../../docs/verification.md)，不能扩大为真实用户数据或所有原生平台已验收。
 - 完整快照、迁移与恢复均包含 fonts/renderers/旧 papers 缓存；不含 papers 的旧恢复点仍可读。恢复列表对 schema 3 也做只读指纹识别，未知项标为不兼容并保留错误，不影响其它点。受管文件禁止符号链接；清单上限 2 MiB、托管文件上限 10000。恢复前和复制后均验证摘要；损坏恢复点列表保留错误项，不影响其它点。恢复点不能直接选作可写数据目录。目录外 renderer 不复制，保留告警。
 - 下载与安装分离：官方插件 `download()` 验证包签名和绑定版本后，已验证 bytes 仅存在本次会话并进入 `ready`；此时不安装 / 不冻结，可以稍后。确认安装只能取同版本 ready 包一次，重新检查 / 失败清缓存；退出后需重新下载。确认后生成 `before-update` 恢复点并备份旧应用，任何备份失败阻止安装；插件 `install()` 再次验签。安装冻结期间采集与所有写操作被后端拦截，保留原暂停偏好；正常退出也受安装阶段保护。`restart_app` 先释放目录锁；macOS 自 `22480ca` 使用 `request_restart()` 返回并经正常退出清理单实例状态，再由 Tauri 拉起新进程，避免直接重启跳过清理导致新实例被截获。完整原生证据见 [macOS 更新验收](../../../../docs/verification.md#macos-应用内更新完整链路)。
 - 检查更新的失败提示由 `updater.rs::check_error_message` 按插件错误枚举生成中文并标识 GitHub，不拼接英文原始错误。当前插件2.14.0的 `ReleaseNotFound` 丢失具体非成功HTTP状态，不能推断为断网或404；提示链接访问失败或更新文件未发布的可能。见2026-10-27验证记录和固定错误分类测试。
@@ -92,18 +92,18 @@
 
 ## 星迹统计（本地活动计数）
 
-- 未发布、源码已实现：`src-tauri/src/clip_stats.rs` 管理 `clip_activity`（15 分钟时段 × kind × new/repeat/reuse 的次数与大小），`store::capture_text` / `capture_image` 只供 `desktop/` 采集循环调用，与写入同事务计数；`mark_copied` 计 reuse。`add` / `add_protected` / `add_image` / 导入 / 保存代码不计数。
-- 原因：历史去重只更新 `updated_at`、清理会删行，每日次数不能从 `clips` 倒推。表用 `CREATE TABLE IF NOT EXISTS` 在 `from_connection` 两条路径补建，不提升 `SCHEMA_VERSION`，旧版可打开。
+- 已随 0.2.4 发布：`src-tauri/src/clip_stats.rs` 管理 `clip_activity`（15 分钟时段 × kind × new/repeat/reuse 的次数与大小），`store::capture_text` / `capture_image` 只供 `desktop/` 采集循环调用，与写入同事务计数；`mark_copied` 计 reuse。`add` / `add_protected` / `add_image` / 导入 / 保存代码不计数。
+- 原因：历史去重只更新 `updated_at`、清理会删行，每日次数不能从 `clips` 倒推。活动表用 `CREATE TABLE IF NOT EXISTS` 在 `from_connection` 两条路径补建；整体库的可打开范围仍按 0.2.4 的结构 4 校验。
 - 不存正文 / 标题 / 域名 / 记录 ID；保留 400 天；不进 JSON 备份与可选统计；随目录迁移和恢复点。`get_clip_stats(days ≤ 366, utcOffsetMinutes 为 15 的倍数)` 与 `clear_clip_stats` 仅主窗。常见域名排除隐私记录（`PRIVATE_PREDICATE` 与历史筛选共用）。
-- 界面 `src/components/ClipStatsPanel.vue`、`src/clip-stats.ts`（浏览器演示为固定原创数据）；用户说明见 [星迹统计](../../../docs/clip-insights.md)。原生桌面验收待做。
+- 界面 `src/components/ClipStatsPanel.vue`、`src/clip-stats.ts`（浏览器演示为固定原创数据）；用户说明见 [星迹统计](../../../../docs/clip-insights.md)。macOS 原生已核对历史 123 / 采集 0 的展示，实际采集 / 复制计数仍未原生验收。
 
 ## 可选统计
 
 2026-10-28 用户已授权云端配置与入库验证，随后明确仅使用免费服务：当前方案为 GA4 标准版 + Cloudflare Workers Free，不开通 Azure、不绑卡、不升级付费计划；软件发布仍须用户明确确认。微软通道保留为默认关闭的可选模板，只有 `ENABLE_APPLICATION_INSIGHTS=true` 才校验并启用；未设置或为 `false` 时不请求 Azure，残留连接字符串不启用它。
 
-当前未发布源码使用 off / session / installation 三档；缺省为 session，必须配置 HTTPS 接收端且模式允许才计数。显式旧 mode 原样保留；旧布尔 enabled=true 迁为 session、false 迁为 off，保留 revision。两套历史布尔语义无法仅凭偏好区分，不用侧文件猜测持续跟踪授权；原未发布布尔用户需主动选择 installation；损坏偏好或读取错误停止发送并保留已有身份，不能据此推定用户主动撤销。9 种固定功能计数可在 session / installation 发送，只有 installation 生成每日 app_active 与每小时 app_running；不测量实际使用时长。设备字段仍为白名单系统 / 架构 / 通用机型，不含剪贴内容、图片、搜索、标题、来源、路径、原始错误、真实账号、序列号、主机名、用户名或硬件身份。
+0.2.4 已发布 off / session / installation 三档；缺省为 session，必须配置 HTTPS 接收端且模式允许才计数。显式旧 mode 原样保留；旧布尔 enabled=true 迁为 session、false 迁为 off，保留 revision。两套历史布尔语义无法仅凭偏好区分，不用侧文件猜测持续跟踪授权；原未发布主线的布尔用户需主动选择 installation；损坏偏好或读取错误停止发送并保留已有身份，不能据此推定用户主动撤销。9 种固定功能计数可在 session / installation 发送，只有 installation 生成每日 app_active 与每小时 app_running；不测量实际使用时长。设备字段仍为白名单系统 / 架构 / 通用机型，不含剪贴内容、图片、搜索、标题、来源、路径、原始错误、真实账号、序列号、主机名、用户名或硬件身份。
 
-installation 的随机 128 位编号存于默认应用目录 usage-install.json，兼容旧 usage-identity.json；文件有版本、大小、原子写 / 权限和符号链接保护，不进入历史 JSON、恢复点或数据目录迁移。两种有效身份冲突时停止发送并提示，不静默覆盖；旧身份没有创建时间就不发送虚构首次日期。显式关闭或切换模式会清空旧计数、轮换会话并按约定删除安装编号；重置清空待发和在途 generation，删除失败保持可见并可重试。未配置预览不触统计侧文件。当前发送协议 v4，Worker 源码精确兼容 v1/v2 与两种历史 v3，须按 [接入说明](../../../../docs/telemetry.md) 单独核对部署和 GA 入库。
+installation 的随机 128 位编号存于默认应用目录 usage-install.json，兼容旧 usage-identity.json；文件有版本、大小、原子写 / 权限和符号链接保护，不进入历史 JSON、恢复点或数据目录迁移。两种有效身份冲突时停止发送并提示，不静默覆盖；旧身份没有创建时间就不发送虚构首次日期。显式关闭或切换模式会清空旧计数、轮换会话并按约定删除安装编号；重置清空待发和在途 generation，删除失败保持可见并可重试。未配置预览不触统计侧文件。0.2.4 发送协议为 v4，生产 Worker 已兼容 v1/v2、两种历史 v3 与 v4；Rust 两模式事件已在 GA 实时明细核对，v4 首次日期独立归属、历史汇总与跨天留存仍未验收，见 [接入说明](../../../../docs/telemetry.md)。
 
 发送成功与网络失败均静默。当前 usage-counts.json 为缓存格式 3，2 KiB 上限、每项最多 100 次、TTL 72 小时，以固定事件名计数并绑定 mode 与身份 SHA-256 指纹；不含设备或明文统计编号。旧数组缓存无法确认身份归属时舍弃，不跨模式 / 身份恢复；同模式、同身份、同应用版本的有效缓存可恢复。心跳不入缓存、不回放；checkpoint / 发送与退出仍可能漏计或重复，网络退避为 1 / 5 / 15 / 60 分钟。模式切换、关闭和重置增加 generation 隔离旧回调，已发出的请求不能撤回；用户清空 / 关闭时的身份或缓存删除失败通过 identityError / cacheError 持续可见，不能把残留缓存报告成已清除。
 
@@ -116,9 +116,9 @@ installation 的随机 128 位编号存于默认应用目录 usage-install.json�
 
 2026-10-29 补充完成两个独立验收：GA4 私有探索「星笺功能使用次数（验收）」核对 2026-10-01 至 2026-10-28 的 9 种固定事件，事件数 14、`Usage count` 合计 22；其中 `studio_opened` 为 3 条 / 9 次，`font_downloaded` 为 2 条 / 4 次，明确区分事件条目与计数总和。完整固定表格见 [统计说明](../../../../docs/telemetry.md)，证据为忽略的 `artifacts/acceptance.noindex/ga4-standard-count-evidence.json`，不复制账号、属性编号或完整探索网址入 Git。该固定日期范围已核对，不代表长期持续观察已完成。
 
-独立 `com.starclip.acceptance20261029` 使用新空库、全程暂停；以 `sandbox-exec` 仅限制该进程网络出站，首次离线缓存 `app_started=1` / `studio_opened=1`，86 字节且无身份 / 设备信息。正常退出后再次断网启动，分钟 checkpoint 后核对恢复为 2 / 1；再次正常退出并移除出站限制后启动，自动发送后缓存被删除、界面无待发事件且无成功 / 错误 toast。这只确认 macOS 进程级断网、正常退出 / 重启恢复与恢复联网后的静默补报，不扩大为系统 Wi-Fi 切换、所有网络条件或 Windows 原生断网。验收包在字体展示文案修改前构建，统计代码未更改，不作为最新字体的原生验证。长期持续观察、Windows 原生断网仍未完成，软件未发布，发布须用户明确确认。
+独立 `com.starclip.acceptance20261029` 使用新空库、全程暂停；以 `sandbox-exec` 仅限制该进程网络出站，首次离线缓存 `app_started=1` / `studio_opened=1`，86 字节且无身份 / 设备信息。正常退出后再次断网启动，分钟 checkpoint 后核对恢复为 2 / 1；再次正常退出并移除出站限制后启动，自动发送后缓存被删除、界面无待发事件且无成功 / 错误 toast。这只确认 macOS 进程级断网、正常退出 / 重启恢复与恢复联网后的静默补报，不扩大为系统 Wi-Fi 切换、所有网络条件或 Windows 原生断网。验收包在字体展示文案修改前构建，统计代码未更改，不作为最新字体的原生验证。长期持续观察、Windows 原生断网仍未完成。该次 2026-10-29 隔离验收时尚未发布，随后随 0.2.3 正式发布；不扩大为协议 4 已重新通过同一原生断网验收。
 
-## 复制上下文、富文本与搜索索引（2026-10-31，未发布）
+## 复制上下文、富文本与搜索索引（2026-10-31 实现，随 0.2.4 发布）
 
 - 隐私元数据新增 `appTags`、`originUrl`、`originSources`、`originHosts`，重扫保留；敏感标记写入 `privacyReasons`（「复制来源标记为敏感内容」），只加不减，解除仍需本机复核。来源页面只存协议 + 域名 + 路径，AI 的 `sources` 字段仍只给正文链接。依据：`privacy.rs`、`store/clips.rs::apply_capture`。
 - `clip_rich(clip_id, html)` 随记录级联删除，单条 ≤256 KiB；最新一次复制决定是否保留格式。JSON 备份不导出 HTML，完整数据目录迁移 / 快照保留。文件记录只存路径，不读取文件内容。

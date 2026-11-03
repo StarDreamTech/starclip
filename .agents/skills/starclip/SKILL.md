@@ -5,7 +5,7 @@ description: 星笺 Starclip 项目共享知识库。处理本仓库的功能开
 
 # 星笺 Starclip
 
-独立、本地优先的桌面剪贴板与代码收藏工作台，技术栈为 Rust / Tauri 2 / SQLite / Vue 3 / TypeScript / Vite。核心流程是复制、搜索、星标或分组，再进入星绘坊制作本地分享图片；无需账户、剪贴内容本地保存；0.2.3 提供可随时关闭、未配置时不采集的可选功能统计；当前未发布源码采用默认临时编号的三档统计模式，见 [接入说明](../../../docs/telemetry.md)。
+独立、本地优先的桌面剪贴板与代码收藏工作台，技术栈为 Rust / Tauri 2 / SQLite / Vue 3 / TypeScript / Vite。核心流程是复制、搜索、星标或分组，再进入星绘坊制作本地分享图片；无需账户、剪贴内容本地保存；0.2.4 提供可随时关闭、未配置时不采集的三档可选功能统计，默认每次运行临时编号，见 [接入说明](../../../docs/telemetry.md)。
 
 ## 关键约定
 
@@ -17,17 +17,17 @@ description: 星笺 Starclip 项目共享知识库。处理本仓库的功能开
 
 ## 当前交接（截至 2026-11-03）
 
-- 0.2.3 已于 2026-10-29 正式发布为 latest，Homebrew 已同步；签名 tag 固定为 `45ffe25`。2026-10-31 只读核对正式安装 `Info.plist` 的版本文字已为 0.2.3，尚未核对其二进制来源，本轮未替换；不再沿用发布当时本机 0.2.2 的现状描述。真实旧版升级与产物证据见 [开发验证](references/development.md)；macOS 0.2.2 这次升级需手动重开，新版修复在后续升级生效。
-- 用户已明确授权并完成本轮 0.2.3 发布与 Homebrew 同步，该授权不扩张为本机安装或后续发版。当前仅采用免费 GA4 + Cloudflare Workers，Azure 开通已取消。2026-10-30 用户要求独立项目暂不处理，名称仍待商榷；「星随」仅作讨论称呼，未授权抽离。
+- 上一版 0.2.3 已于 2026-10-29 正式发布并曾设为 latest，Homebrew 已同步；签名 tag 固定为 `45ffe25`。2026-10-31 只读核对正式安装 `Info.plist` 的版本文字已为 0.2.3，尚未核对其二进制来源，本轮未替换；不再沿用发布当时本机 0.2.2 的现状描述。真实旧版升级与产物证据见 [开发验证](references/development.md)；macOS 0.2.2 这次升级需手动重开，新版修复在后续升级生效。
+- 2026-10-29 用户已明确授权并完成 0.2.3 发布与 Homebrew 同步，那次授权不扩张为本机安装或后续发版；0.2.4 已于 2026-11-03 获得单独发布授权。当前仅采用免费 GA4 + Cloudflare Workers，Azure 开通已取消。2026-10-30 用户要求独立项目暂不处理，名称仍待商榷；「星随」仅作讨论称呼，未授权抽离。
 - 最新源码与原生证据入口为 [开发验证](references/development.md)；动画星伴仍未达到用户期望的几十 MiB。更新 skill 只维护知识，不顺带安装、发版或操作云服务。
 - 2026-11-02 [PR #14](https://github.com/cpython666/starclip/pull/14) 已合入 main（`509ec71`）：移植字体下载进度（`handwriting-font-progress`）与 `npm run build:preview:mac`，打包最后一行输出可复制的 `open` 命令，同时保留 #12 的 `npm run app`。#1–#14 的合并提交均在 main 历史中；旧实现存档 `wip/local-20261101` 与历史验收分支保留，不回灌重复实现。预览采用 Starclip Preview / `com.starclip.preview`、独立数据目录、无线上统计与更新源，不触发 Release / Brew；验证与限制见 [开发验证](references/development.md) 和 [合并记录](../../../docs/verification.md#本地工作区并入-main2026-11-01-至-11-02)。
-- 同日跨分支审计确认：PR 已合并不等于旧本地数据与统计语义兼容。main schema 2 与本地 schema 3 在文件去重 / 明细、AI 边界、旧 JSON v4 和纸张恢复上存在缺口；统计的同名 v3 协议也有两种不兼容形状。生产 Worker 只读核实仍为正式 v1/v2，会拒绝 main 新 v3。随后 [PR #15](https://github.com/cpython666/starclip/pull/15) 已合入 main（`e987256`），统一 schema 4 / JSON 4、文件明细保留与 AI 排除、papers 恢复，独立 macOS 原创旧 3 升级及重开核对通过。统计偏好保留显式三档、旧布尔 true 保守转 session，支持旧身份 / 缓存隔离与 HTTP 4；生产 Worker 已更新为兼容 v1/v2、两种历史 v3 及新 v4，GA 维度及 Rust 两模式、新日活 / 心跳已在实时明细核对；日期卡片未隔离历史 v3 样例，v4 首次日期独立归属、历史汇总与跨天留存仍待验证，客户端尚未正式发布。最终业务 head `7b1e845` 的 push / PR 两组均 7/7 成功，包含两平台构建和 fresh / upgrade 安装；本地 main 已同步，未替换正式安装。实现与证据见 [跨分支审计](../../../docs/verification.md#数据结构与统计跨分支审计2026-11-02) 和 [统计部署核对](../../../docs/telemetry.md#跨分支兼容与生产部署核对2026-11-02)。
+- 同日跨分支审计确认：PR 已合并不等于旧本地数据与统计语义兼容。main schema 2 与本地 schema 3 在文件去重 / 明细、AI 边界、旧 JSON v4 和纸张恢复上存在缺口；统计的同名 v3 协议也有两种不兼容形状。生产 Worker 只读核实仍为正式 v1/v2，会拒绝 main 新 v3。随后 [PR #15](https://github.com/cpython666/starclip/pull/15) 已合入 main（`e987256`），统一 schema 4 / JSON 4、文件明细保留与 AI 排除、papers 恢复，独立 macOS 原创旧 3 升级及重开核对通过。统计偏好保留显式三档、旧布尔 true 保守转 session，支持旧身份 / 缓存隔离与 HTTP 4；生产 Worker 已更新为兼容 v1/v2、两种历史 v3 及新 v4，GA 维度及 Rust 两模式、新日活 / 心跳已在实时明细核对；日期卡片未隔离历史 v3 样例，v4 首次日期独立归属、历史汇总与跨天留存仍待验证，该轮结束时客户端尚未发布，现已随 0.2.4 发布。最终业务 head `7b1e845` 的 push / PR 两组均 7/7 成功，包含两平台构建和 fresh / upgrade 安装；本地 main 已同步，未替换正式安装。实现与证据见 [跨分支审计](../../../docs/verification.md#数据结构与统计跨分支审计2026-11-02) 和 [统计部署核对](../../../docs/telemetry.md#跨分支兼容与生产部署核对2026-11-02)。
 
 - 同日 [PR #16](https://github.com/cpython666/starclip/pull/16) 已合入 main（`f7255ff`）：星伴图库手动点选立即保存并同步已开启浮窗，关闭不唤醒；巡游 / 分类仍仅预览。已核对 macOS 原生点选 / 重启、5 项组件回归及完整 7 项 PR CI，Windows 点选 GUI 未单独实测；见 [验证记录](../../../docs/verification.md#星伴表情点选同步2026-11-02)。
 
-- 同日 [PR #17](https://github.com/cpython666/starclip/pull/17) 已合入 main（`b61206b`），查询性能第一轮实现 Store 全局数量 / 筛选选项缓存，联合按本连接变更、外部提交与 DDL 失效；事务 / 活动游标不复用，记录与隐私 / AI 权限仍实时查询，结构保持 4。原创两版完整查询基准、正确性与剩余扫描边界见 [查询性能](../../../docs/query-performance.md)；精确业务 head `2bcef07` 的 push / PR 两组均 7/7 通过，包含双平台构建与 fresh / upgrade，未单独做 GUI / IPC 延迟测量；正式客户端尚未发布。
+- 同日 [PR #17](https://github.com/cpython666/starclip/pull/17) 已合入 main（`b61206b`），查询性能第一轮实现 Store 全局数量 / 筛选选项缓存，联合按本连接变更、外部提交与 DDL 失效；事务 / 活动游标不复用，记录与隐私 / AI 权限仍实时查询，结构保持 4。原创两版完整查询基准、正确性与剩余扫描边界见 [查询性能](../../../docs/query-performance.md)；精确业务 head `2bcef07` 的 push / PR 两组均 7/7 通过，包含双平台构建与 fresh / upgrade，未单独做 GUI / IPC 延迟测量；该轮未发布的客户端改动现已随 0.2.4 发布。
 
-- 2026-11-03 用户明确授权本地测试通过后发布下一版并同步 Homebrew；当前准备 0.2.4，本地独立 schema 3 → 4 / 123 条、查询与标签失效、表情即时同步与重开、自动 Python 识别及两类 PNG 导出已通过，详见 [发布前验收](../../../docs/verification.md#024-本地发布前验收2026-11-03)。新版签名草稿和真实公开 0.2.3 升级验收尚待完成，不能据本地隔离包推定正式发布。
+- 2026-11-03 [0.2.4](https://github.com/cpython666/starclip/releases/tag/v0.2.4) 已按用户本轮授权公开为 latest，tag `6d83640`，[签名流水线](https://github.com/cpython666/starclip/actions/runs/41579229975) 8/8、真实公开 0.2.3 → 0.2.4 双平台自动重启 / 数据与快照保留均通过。本地独立旧 3 → 4 / 123 条、查询与标签失效、表情同步重开、Python 识别及两类 PNG 导出已通过。DMG 8.18 MB，分享改为约 8 MB；正式包未安装到本机。8 个匿名公开附件和稳定 latest 已核对与草稿完全相同，[Homebrew 41580841113](https://github.com/cpython666/starclip/actions/runs/41580841113) 2/2 及远端 0.2.4 Cask / DMG SHA 已核对，完整证据及限制见 [发布与升级验收](../../../docs/verification.md#024-正式发布与原生升级验收)。
 
 ## 按需阅读
 
