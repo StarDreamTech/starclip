@@ -793,6 +793,8 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 - 规则与隐私页显示三档统计，选中 off，接收端未配置时其它模式禁用；星迹统计显示历史 123、采集 0。最终只读核对结构 4、记录仍 123、暂停版本 7、off、文件 entries / PNG 哈希 / 固定偏好保留，标签只增加原创验收项，活动表仍 0，恰好一个 before-migration 快照，无统计身份或队列。未读取真实剪贴板或正式数据，未替换 `/Applications` 应用。
 - 产物与原始日志在忽略的 `artifacts/release-0.2.4.noindex/`：各测试 / 构建日志、`native-before.json`、`native-acceptance.json`、`native-curious.png`、`native-restart-curious.png`、两张原创导出 PNG、统计设置与星迹 AX 记录。原生应用正常退出，后续读界面可能重新唤起，不用于后台内存测量。
 
+发布准备首轮 head `dc25da816b331dbb9d767a5fabb4dcfe3d8bcf13` 的 [push 41576356823](https://github.com/cpython666/starclip/actions/runs/41576356823) 与 [PR 41576409073](https://github.com/cpython666/starclip/actions/runs/41576409073) 均 7/7 成功，含双平台构建和两平台 fresh / upgrade。该普通 Verify 的 DMG 实测 8,192,597 B，SHA-256 `9b63e2b2325fb92b4c6baea79059f8b51b7de4ae94c5834933d5336cd47481c9`，已超过 8 MB；据此将当前分享文案改为「约 8 MB」，仅重制中英总览图，十图总计 805,527 B，其余八图 SHA 未变。两图以既有 HTML 在 Ego 1080×1440 / DPR1 渲染，压缩后目视核对；该包非最终签名目标，最终附件须重测。先前本地功能原生验收在这次素材调整前完成，不扩大为新总览图已逐图原生保存。CHANGELOG 同时补齐已实现的月光笺 11 种纸张与双栏布局，发布状态仍待签名和升级门禁。
+
 升级验收工具现默认真实公开 0.2.3，保留显式 0.2.2 与 macOS source-comparison；`updater_baselines.py` 固定公开包大小 / SHA，macOS 还核对归档内版本和主程序 SHA，Windows 验原安装器与安装后内部版本。0.2.3 必须自动重启，只有真实旧 0.2.2 可显式记手动恢复；7 项原创夹具、Python 编译和两个 workflow 的 actionlint 静态检查通过，不等同签名目标原生升级已经完成。
 
 本次待办核对没有发现近期已授权功能落在主线外。动画星伴几十 MiB 仍是未达成目标；查询第二轮、GA 日期归属 / 历史汇总 / 跨天留存及各平台原生专项仍待推进。独立星伴项目此前明确暂缓；OCR / GIF / 云同步 / 规则试跑等为未排期方向，不能列作本次已完成或发布承诺。参考对照中标签、文件、JSON、自启动及快选的过时状态已修正。

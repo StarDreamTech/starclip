@@ -111,7 +111,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
 
 ## 产品分享验证边界
 
-当前分享入口为设置 → 分享；源码 `ProductShare.vue`、`product-share.ts`、`share.rs` 实现固定文案 / 图片复制及专用保存命令。中英文各有两类文案、五个图片主题，10 张 1080 × 1440 索引 PNG 合计 805,747 字节；素材源、重制和压缩流程见 [分享说明](../../../../docs/product-share.md)。Python / Pillow 仅用于制作素材，不增加运行或正常构建依赖。最新候选原生代表图保存 / 取消见本页快照；下段保留历史版本证据，不能代替当前素材验收。
+当前分享入口为设置 → 分享；源码 `ProductShare.vue`、`product-share.ts`、`share.rs` 实现固定文案 / 图片复制及专用保存命令。中英文各有两类文案、五个图片主题，10 张 1080 × 1440 索引 PNG 在 0.2.4 候选中合计 805,527 字节（2026-11-03 按实际候选包校准「约 8 MB」口径，只改中英总览）；素材源、重制和压缩流程见 [分享说明](../../../../docs/product-share.md)。Python / Pillow 仅用于制作素材，不增加运行或正常构建依赖。最新候选原生代表图保存 / 取消见本页快照；下段保留历史版本证据，不能代替当前素材验收。
 
 Rust 纯目录 / PNG 校验、模拟成功 / 失败写入的自采集抑制、生成后的窗口 ACL 已检查；浏览器复制测试采用模拟接口，不读取真实剪贴板。不要把模拟复制成功写成系统剪贴板 / 第三方粘贴实测。2026-10-26 独立 `com.starclip.share-verify` 原生实测保存实际路径与取消，保存 PNG 摘要与源文件一致；Node 58 / Rust core 54 / desktop lib 58 项通过（Rust 各 1 项忽略）。最终分享版 app / DMG / 签名 updater 归档位于忽略的 `artifacts/product-share-0.2.0/`，本地 app / DMG 内应用及更新签名核验通过，未替换正式安装。具体结果与边界由 [验证记录](../../../../docs/verification.md) 维护，不沿用此前升级版验收。
 
