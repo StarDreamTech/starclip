@@ -5,16 +5,22 @@ These checks simulate harness phases only, not application migrations or GUI.
 """
 from contextlib import closing
 import importlib.util
+import hashlib
+import io
 import json
 from pathlib import Path
 import shutil
 import sqlite3
+import plistlib
 import subprocess
 import sys
 import tempfile
+import tarfile
 import unittest
+from unittest.mock import patch
 
 from fixture_schema import source_schema
+from updater_baselines import download_package, public_baseline, verify_package
 
 SCRIPTS = Path(__file__).resolve().parent
 
@@ -50,6 +56,79 @@ def installer(path, mode, schema):
 
 
 class FixtureSchemaTests(unittest.TestCase):
+    def test_public_baseline_selection_and_restart_requirements(self):
+        for version in ("0.2.2", "0.2.3"):
+            origin = "public-" + version
+            for platform in ("darwin-aarch64", "windows-x86_64"):
+                expected = public_baseline(origin, platform)
+                self.assertEqual((expected["version"], expected["schema"]), (version, 2))
+                self.assertTrue(expected["url"].endswith("/v" + version + "/" + expected["filename"]))
+                self.assertRegex(expected["sha256"], r"^[a-f0-9]{64}$")
+            self.assertEqual(MAC.baseline_comparison(origin, 2, 4, release_mode=True, allow_manual_recovery=False), version)
+            with self.assertRaises(AssertionError):
+                MAC.baseline_comparison(origin, 4, 4, release_mode=True, allow_manual_recovery=False)
+        self.assertEqual(MAC.baseline_comparison("public-0.2.2", 2, 4, release_mode=True, allow_manual_recovery=True), "0.2.2")
+        for origin, schema in (("public-0.2.3", 2), ("source-comparison", 4)):
+            with self.assertRaisesRegex(AssertionError, "Manual recovery"):
+                MAC.baseline_comparison(origin, schema, 4, release_mode=True, allow_manual_recovery=True)
+        self.assertEqual(MAC.baseline_comparison("source-comparison", 4, 4, release_mode=True, allow_manual_recovery=False), "0.2.2")
+        self.assertEqual(MAC.baseline_comparison("source-comparison", 2, 2, release_mode=False, allow_manual_recovery=False), "0.2.1")
+        metadata = subprocess.run([sys.executable, str(SCRIPTS / "updater_baselines.py"), "metadata", "--platform", "windows-x86_64"],
+                                  check=True, capture_output=True, text=True, timeout=15)
+        self.assertEqual(json.loads(metadata.stdout)["origin"], "public-0.2.3")
+
+    def test_pinned_public_package_rejects_bytes_and_wrong_internal_version(self):
+        binary = b"Starclip original synthetic executable; never run."
+        with tempfile.TemporaryDirectory() as temp:
+            package = Path(temp) / "original.tar.gz"
+            expected = public_baseline("public-0.2.3", "darwin-aarch64")
+            expected["executableSha256"] = hashlib.sha256(binary).hexdigest()
+
+            def archive(version):
+                with tarfile.open(package, "w:gz") as bundle:
+                    for name, contents in (
+                        ("Contents/Info.plist", plistlib.dumps(dict(CFBundleIdentifier="com.starclip.desktop", CFBundleShortVersionString=version,
+                                                                 CFBundleVersion=version, CFBundleExecutable="starclip"))),
+                        ("Contents/MacOS/starclip", binary),
+                    ):
+                        member = tarfile.TarInfo("Starclip.app/" + name)
+                        member.size = len(contents)
+                        bundle.addfile(member, io.BytesIO(contents))
+                expected.update(size=package.stat().st_size, sha256=hashlib.sha256(package.read_bytes()).hexdigest())
+
+            archive("0.2.3")
+            verify_package(package, expected)
+            for changed in (dict(size=expected["size"] + 1), dict(sha256="0" * 64)):
+                with self.assertRaisesRegex(ValueError, "size/SHA-256"):
+                    verify_package(package, dict(expected, **changed))
+            with self.assertRaisesRegex(ValueError, "executable"):
+                verify_package(package, dict(expected, executableSha256="0" * 64))
+            archive("0.2.2")
+            with self.assertRaisesRegex(ValueError, "internal version"):
+                verify_package(package, expected)
+            with patch("updater_baselines.urllib.request.urlopen", return_value=io.BytesIO(package.read_bytes())):
+                output = Path(temp) / "verified.tar.gz"
+                with self.assertRaises(ValueError):
+                    download_package(output, expected)
+                self.assertFalse(output.exists(), "Invalid downloads must never become baseline packages")
+            archive("0.2.3")
+            with patch("updater_baselines.urllib.request.urlopen", return_value=io.BytesIO(package.read_bytes())):
+                download_package(output, expected)
+            verify_package(output, expected)
+            with self.assertRaises(FileExistsError):
+                download_package(output, expected)
+
+    def test_updater_workflows_keep_public_three_default_and_manual_two_explicit(self):
+        workflows = SCRIPTS.parent / ".github/workflows"
+        for name in ("macos-updater-acceptance.yml", "windows-updater-acceptance.yml"):
+            text = (workflows / name).read_text(encoding="utf-8")
+            self.assertIn("default: public-0.2.3", text)
+            self.assertIn("public-0.2.3, public-0.2.2", text)
+            self.assertIn("scripts/updater_baselines.py download", text)
+        text = (workflows / "macos-updater-acceptance.yml").read_text(encoding="utf-8")
+        self.assertIn('if [ "$BASELINE" = public-0.2.2 ]; then\n            flags=(--allow-manual-recovery)', text)
+        self.assertIn("source-comparison", text)
+
     def test_target_schema_is_exact_source_not_installed_database(self):
         self.assertEqual(source_schema(SCRIPTS.parent), 4)
         with tempfile.TemporaryDirectory() as temp:

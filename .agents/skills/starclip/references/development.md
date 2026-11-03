@@ -20,6 +20,10 @@
 
 - 2026-10-29 先前工作区 release 模式测量：Apple Silicon DMG 6,978,352 B（6.98 MB）、app 文件 15,013,697 B（15.01 MB）；独立测量 ID，不运行、不安装、不发布，深度 / 严格 ad-hoc 验签通过，不能等同公证或 updater 签名。字体缓存 / 用户数据另计，47 MiB 调试包不能作为正式模式包体积。测量 app 已注销后移入废纸篓，DMG 和结果在 `artifacts/package-size-20261029.noindex/`；Windows 新候选 NSIS 构建已通过，本条未核对其包体字节数，见验证记录。
 
+## 0.2.4 发布准备（2026-11-03）
+
+用户已授权本地验证通过后正式发布与同步 Homebrew。本地隔离验收和待办核对见 [验证记录](../../../../docs/verification.md#024-本地发布前验收2026-11-03)，后续签名升级结果另记。两平台 updater workflow 默认真实 public-0.2.3，包与内部版本由 `scripts/updater_baselines.py` 固定；保留显式 public-0.2.2，macOS 仅该旧基线允许手动重开，0.2.3 必须自动重启。更新 helper 时保留目标 tag / release run / source SHA 绑定，不使用比较版本实验代替真实旧版。
+
 ## 环境与检查
 
 历史查询基准使用 `node scripts/benchmark-history.mjs --stage compile`，本地重构建结束后运行同命令的 `--stage measure`；真实旧提交与优化版的固定原创 1 万 / 5 万 / 10 万条数据、完整结果指纹及来源校验见 [查询性能](../../../../docs/query-performance.md)。默认忽略的 Rust benchmark 不是常规测试，不能在其它本地重负载下采样；全局 SQL 诊断与完整链路计时分别解释，不把存储基准称为 GUI / IPC / 锁等待测量。
@@ -107,7 +111,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
 
 ## 产品分享验证边界
 
-当前分享入口为设置 → 分享；源码 `ProductShare.vue`、`product-share.ts`、`share.rs` 实现固定文案 / 图片复制及专用保存命令。中英文各有两类文案、五个图片主题，10 张 1080 × 1440 索引 PNG 合计 805,747 字节；素材源、重制和压缩流程见 [分享说明](../../../../docs/product-share.md)。Python / Pillow 仅用于制作素材，不增加运行或正常构建依赖。最新候选原生代表图保存 / 取消见本页快照；下段保留历史版本证据，不能代替当前素材验收。
+当前分享入口为设置 → 分享；源码 `ProductShare.vue`、`product-share.ts`、`share.rs` 实现固定文案 / 图片复制及专用保存命令。中英文各有两类文案、五个图片主题，10 张 1080 × 1440 索引 PNG 在 0.2.4 候选中合计 805,527 字节（2026-11-03 按实际候选包校准「约 8 MB」口径，只改中英总览）；素材源、重制和压缩流程见 [分享说明](../../../../docs/product-share.md)。Python / Pillow 仅用于制作素材，不增加运行或正常构建依赖。最新候选原生代表图保存 / 取消见本页快照；下段保留历史版本证据，不能代替当前素材验收。
 
 Rust 纯目录 / PNG 校验、模拟成功 / 失败写入的自采集抑制、生成后的窗口 ACL 已检查；浏览器复制测试采用模拟接口，不读取真实剪贴板。不要把模拟复制成功写成系统剪贴板 / 第三方粘贴实测。2026-10-26 独立 `com.starclip.share-verify` 原生实测保存实际路径与取消，保存 PNG 摘要与源文件一致；Node 58 / Rust core 54 / desktop lib 58 项通过（Rust 各 1 项忽略）。最终分享版 app / DMG / 签名 updater 归档位于忽略的 `artifacts/product-share-0.2.0/`，本地 app / DMG 内应用及更新签名核验通过，未替换正式安装。具体结果与边界由 [验证记录](../../../../docs/verification.md) 维护，不沿用此前升级版验收。
 

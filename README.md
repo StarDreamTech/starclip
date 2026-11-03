@@ -172,7 +172,7 @@ Apple Silicon macOS 和 Windows x64 已可从 [0.2.3 GitHub Release](https://git
 
 0.2.3 在「偏好设置 → 分享」提供独立素材页，打开即可选择简短推荐或产品介绍，一键复制文案；也可预览、复制或保存产品总览、数据自主、星伴陪伴、创作图片、AI 接入与授权五个主题的 PNG。素材默认跟随界面语言，也可手选简体中文 / English；共 4 段文案、10 张图片，预览、复制与保存使用同一语言版本。软件不自动发布到社交平台。
 
-十张图均为 1080×1440，使用原创样例和星芽形象，不含个人记录；宣传先说明剪贴板用途，再介绍卡片创作与可选 AI 授权。不到 8 MB 仅指 macOS 安装包大小，随版本变化；23 个字体选项按需下载，不代表低运行内存或全部功能离线。素材随应用提供，保存保留压缩 PNG；剪贴板传递像素，接收软件可能重新编码。浏览器复制受权限与格式支持限制，macOS 英文代表图原生保存与取消已验收，跨应用粘贴和 Windows 原生分享仍待验证。
+十张图均为 1080×1440，使用原创样例和星芽形象，不含个人记录；宣传先说明剪贴板用途，再介绍卡片创作与可选 AI 授权。约 8 MB 仅指 macOS 安装包大小，随版本变化；23 个字体选项按需下载，不代表低运行内存或全部功能离线。素材随应用提供，保存保留压缩 PNG；剪贴板传递像素，接收软件可能重新编码。浏览器复制受权限与格式支持限制，macOS 英文代表图原生保存与取消已验收，跨应用粘贴和 Windows 原生分享仍待验证。
 
 直接查看：产品总览 [中文](public/share/overview.png) / [English](public/share/overview-en.png) · 数据自主 [中文](public/share/workflow.png) / [English](public/share/workflow-en.png) · 星伴陪伴 [中文](public/share/companion.png) / [English](public/share/companion-en.png) · 创作图片 [中文](public/share/creation.png) / [English](public/share/creation-en.png) · AI 接入与授权 [中文](public/share/ai.png) / [English](public/share/ai-en.png)。素材体积、重制方法和验证边界见 [分享素材说明](docs/product-share.md)。
 

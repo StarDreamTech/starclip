@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Real updater UI on a disposable GitHub macOS ARM runner, never a user Mac.
 
-Release mode upgrades the actual public 0.2.2, or tag source with comparison
-metadata 0.2.2, to authentic signed draft artifacts over a runner-local trusted
-HTTPS fixture. Historical 0.2.2 may require explicitly recorded manual recovery;
+Release mode defaults to genuine public 0.2.3. Public 0.2.2 and tag source with
+comparison metadata 0.2.2 remain explicit baselines for signed draft artifacts
+over a runner-local trusted HTTPS fixture. Historical 0.2.2 may require explicitly recorded manual recovery;
 that never counts as an automatic restart pass or public GitHub delivery test.
 Without --fixture, retain the legacy comparison-0.2.1 to public-0.2.2 experiment.
 """
@@ -24,6 +24,8 @@ import sys
 import tarfile
 import tempfile
 import time
+
+from updater_baselines import PUBLIC_BASELINES, public_baseline
 
 
 IDENTIFIER = "com.starclip.desktop"
@@ -104,6 +106,20 @@ def verify_app(app, version):
     assert command("lipo", "-archs", str(binary), capture_output=True, text=True).stdout.split() == ["arm64"]
     command("codesign", "--verify", "--deep", "--strict", str(app))
     return digest(binary)
+
+
+def baseline_comparison(origin, baseline_schema, target_schema, *, release_mode, allow_manual_recovery):
+    if origin in PUBLIC_BASELINES:
+        assert release_mode, "Public baselines require an authentic signed release fixture"
+        expected = public_baseline(origin, "darwin-aarch64")
+        assert baseline_schema == expected["schema"], "The immutable public baseline schema changed"
+        comparison = expected["version"]
+    else:
+        assert origin == "source-comparison"
+        assert baseline_schema == (target_schema if release_mode else 2), "Source-comparison baseline must use the exact source schema"
+        comparison = "0.2.2" if release_mode else "0.2.1"
+    assert not allow_manual_recovery or (release_mode and origin == "public-0.2.2"), "Manual recovery is only allowed for the historical public 0.2.2 baseline"
+    return comparison
 
 
 @contextlib.contextmanager
@@ -248,10 +264,11 @@ def main():
     parser.add_argument("--app", type=Path)
     parser.add_argument("--inspector", type=Path)
     parser.add_argument("--fixture", type=Path)
-    parser.add_argument("--baseline-origin", choices=("source-comparison", "public-0.2.2"), default="source-comparison")
-    parser.add_argument("--baseline-schema", type=int, default=2, help="Exact baseline schema; genuine public 0.2.2 is 2")
+    parser.add_argument("--baseline-origin", choices=("source-comparison", *PUBLIC_BASELINES))
+    parser.add_argument("--baseline-schema", type=int, default=2, help="Exact baseline schema; genuine public 0.2.2 and 0.2.3 are 2")
     parser.add_argument("--allow-manual-recovery", action="store_true")
     args = parser.parse_args()
+    args.baseline_origin = args.baseline_origin or ("public-0.2.3" if args.fixture else "source-comparison")
     runner_temp, data = fresh_runner()
     if args.preflight:
         print("Disposable runner and absent Starclip profile verified")
@@ -265,19 +282,17 @@ def main():
         release_fixture = json.loads((args.fixture / "fixture.json").read_text())
         assert release_fixture["platform"] == "darwin-aarch64" and release_fixture["publicKey"] == PUBLIC_KEY
         assert release_fixture["endpoint"] == ENDPOINT
-        COMPARISON, TARGET = "0.2.2", release_fixture["targetVersion"]
+        TARGET = release_fixture["targetVersion"]
         MANIFEST_HASH = release_fixture["latestManifestSha256"]
         TARGET_URL, TARGET_HASH = release_fixture["targetUrl"], release_fixture["targetSha256"]
     baseline_schema = args.baseline_schema
     target_schema = release_fixture["targetSchema"] if release_fixture else 2
     assert type(target_schema) is int and target_schema > 0 and baseline_schema > 0
-    if args.baseline_origin == "public-0.2.2":
-        assert baseline_schema == 2, "The immutable public 0.2.2 baseline is schema 2"
-    elif release_fixture:
-        assert baseline_schema == target_schema, "Source-comparison baseline uses the exact tag schema"
-    if not release_fixture:
-        assert baseline_schema == 2, "The historical public-0.2.2 experiment requires its schema-2 baseline"
-    assert not args.allow_manual_recovery or (release_fixture and args.baseline_origin == "public-0.2.2")
+    COMPARISON = baseline_comparison(args.baseline_origin, baseline_schema, target_schema,
+                                     release_mode=bool(release_fixture), allow_manual_recovery=args.allow_manual_recovery)
+    assert tuple(map(int, TARGET.split("."))) > tuple(map(int, COMPARISON.split("."))), "The signed target must be newer than the selected baseline"
+    baseline_package = (public_baseline(args.baseline_origin, "darwin-aarch64")
+                        if args.baseline_origin in PUBLIC_BASELINES else None)
     inspector = args.inspector.resolve(strict=True)
     assert inspector.is_relative_to(runner_temp), "UI helper must be runner-owned"
     command(str(inspector), "preflight")
@@ -405,8 +420,8 @@ def main():
         verify_app(args.app.resolve(strict=True), COMPARISON)
         command("ditto", str(args.app), str(installation))
         baseline_hash = verify_app(installation, COMPARISON)
-        if args.baseline_origin == "public-0.2.2":
-            assert baseline_hash == "ec6d08edf90f2d51b1cb75cf9271103b82f3e68763f1d94931a8e66ae94fe40f", "Baseline is not the actual public macOS 0.2.2 executable"
+        if baseline_package:
+            assert baseline_hash == baseline_package["executableSha256"], "Baseline is not the selected genuine public macOS executable"
         start()
         time.sleep(2)
         command("python3", str(Path(__file__).with_name("installer-fixture.py")), str(database), "fresh", str(baseline_schema))
@@ -477,6 +492,7 @@ def main():
         fixture("after-install")
         write("result.json", dict(result="passed" if restart_mode == "automatic" else "passed-with-manual-recovery",
                                   restartMode=restart_mode, baselineOrigin=args.baseline_origin,
+                                  baselinePackage=baseline_package,
                                   sourceCommit=release_fixture["sourceHeadSha"] if release_fixture else os.environ["GITHUB_SHA"], comparisonVersion=COMPARISON,
                                   targetVersion=TARGET, manifestSha256=MANIFEST_HASH, targetArchiveSha256=TARGET_HASH,
                                   originalPid=original_pid, restartedPid=restarted_pid,

@@ -7,16 +7,16 @@ on:
         required: true
         type: string
       source_ref:
-        description: 'Existing release tag, for example v0.2.3'
+        description: 'Existing release tag, for example v0.2.4'
         required: true
-        default: 'v0.2.3'
+        default: 'v0.2.4'
         type: string
       baseline:
-        description: 'Actual public 0.2.2, or tag source with comparison metadata 0.2.2'
+        description: 'Genuine public baseline; source-comparison rebuilds target source as 0.2.2'
         required: true
-        default: public-0.2.2
+        default: public-0.2.3
         type: choice
-        options: [public-0.2.2, source-comparison]
+        options: [public-0.2.3, public-0.2.2, source-comparison]
 permissions:
   contents: read
   actions: read
@@ -96,11 +96,12 @@ jobs:
           await mkdir(evidence, {recursive: true});
           await writeFile(join(evidence, 'signature-positive-negative.json'), JSON.stringify({version, results}, null, 2) + '\n');
           JS
-      - name: Download and pin the actual public macOS 0.2.2 baseline
-        if: inputs.baseline == 'public-0.2.2'
+      - name: Download and verify the selected genuine public macOS baseline
+        if: inputs.baseline != 'source-comparison'
+        env:
+          BASELINE: ${{ inputs.baseline }}
         run: |
-          curl --fail --location --retry 3 --output "$RUNNER_TEMP/starclip-baseline.tar.gz" https://github.com/cpython666/starclip/releases/download/v0.2.2/Starclip_0.2.2_aarch64.app.tar.gz
-          printf '%s  %s\n' '83113a8c37739335cbc11d905c5b3bc089bba4aa0ad9b380a5d39199b63d224e' "$RUNNER_TEMP/starclip-baseline.tar.gz" | shasum --algorithm 256 --check
+          python3 scripts/updater_baselines.py download --origin "$BASELINE" --platform darwin-aarch64 --package "$RUNNER_TEMP/starclip-baseline.tar.gz"
           mkdir "$RUNNER_TEMP/starclip-public-baseline"
           tar -xzf "$RUNNER_TEMP/starclip-baseline.tar.gz" -C "$RUNNER_TEMP/starclip-public-baseline"
       - uses: dtolnay/rust-toolchain@1.90.0
@@ -134,11 +135,13 @@ jobs:
           BASELINE: ${{ inputs.baseline }}
         run: |
           baseline="$RUNNER_TEMP/starclip-public-baseline/Starclip.app"
-          flags=(--allow-manual-recovery)
-          baseline_schema=2 # Immutable genuine public 0.2.2.
+          flags=()
+          baseline_schema=2 # Both immutable genuine public baselines use schema 2.
+          if [ "$BASELINE" = public-0.2.2 ]; then
+            flags=(--allow-manual-recovery)
+          fi
           if [ "$BASELINE" = source-comparison ]; then
             baseline="$PWD/release-source/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Starclip.app"
-            flags=()
             baseline_schema=$(python3 scripts/fixture_schema.py "$PWD/release-source")
           fi
           python3 scripts/macos-updater-acceptance.py --app "$baseline" --inspector "$RUNNER_TEMP/starclip-updater-ui" --fixture "$RUNNER_TEMP/starclip-private-updater-fixture" --baseline-origin "$BASELINE" --baseline-schema "$baseline_schema" "${flags[@]}"

@@ -31,13 +31,13 @@ poster.className = id + (english ? ' en' : '');
 
 if (id === 'overview') {
   poster.innerHTML = top + heading(
-    pick('macOS 安装包不到 8 MB · 收好每一次复制', 'macOS INSTALLER UNDER 8 MB · KEEP EVERY SPARK'),
+    pick('macOS 安装包约 8 MB · 收好每一次复制', 'macOS INSTALLER ABOUT 8 MB · KEEP EVERY SPARK'),
     pick('你的剪贴板，<br><em>不止记住上一次。</em>', 'Your clipboard.<br><em>Beyond the last copy.</em>'),
     pick('复制过的文字、图片和代码，一搜就能再次复制。', 'Find the text, images and code you copied.<br>Copy them again whenever you need them.')
   ) + `<div class="mock"><div class="mockbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><b>${pick('星笺 · 剪贴板历史', 'STARCLIP · CLIPBOARD HISTORY')}</b></div><div class="workspace"><div class="sidebar"><strong>${pick('剪贴板历史', 'Clipboard history')}</strong><div class="chosen">${pick('全部记录', 'All clips')}</div><div>✦ ${pick('星标收藏', 'Starred')}</div><div>⌘ ${pick('星码集', 'Starcode')}</div><div>${pick('工作资料', 'Work notes')}</div><div>${pick('常用片段', 'Useful snippets')}</div></div><div class="samples"><h2>${pick('刚刚复制的内容，都在这里', 'Keep your ideas within reach')}</h2><div class="search">⌕ ${pick('搜索文字、标题或代码…', 'Search text, titles or code…')}</div><div class="samplegrid"><article class="sample"><label>${pick('文字 · 刚刚', 'TEXT · JUST NOW')}</label><h3>${pick('周五灵感讨论', 'Friday idea session')}</h3><p>${pick('时间：下午 3 点<br>主题：一起做个小工具', 'Time: 3 pm<br>Let’s make a small tool.')}</p><span class="copy-chip">${pick('再次复制 ↗', 'Copy again ↗')}</span></article><article class="sample"><label>${pick('代码 · JAVASCRIPT', 'CODE · JAVASCRIPT')}</label><h3>${pick('常用代码片段', 'A useful snippet')}</h3><code>const idea =<br>  'Hello, star!';</code><span class="copy-chip">✦ ${pick('星标收藏', 'Star this clip')}</span></article></div></div></div><div class="sample-ribbon">${pick('功能示意 · 原创样例', 'Illustration · Original sample content')}</div></div>` + features(pick(
     [['找回复制历史', '搜索后再次复制<br>少一次反复查找'], ['收好重要内容', '星标、分组与代码收藏<br>需要的内容永久保留'], ['数据由你管理', '本地保存，JSON 导出<br>无需账户，按需开启']],
     [['Find earlier copies', 'Search your history.<br>Copy what you need again.'], ['Keep what matters', 'Star, group and save code.<br>Keep important clips forever.'], ['Your data, your choice', 'Local storage and JSON export.<br>No account required.']]
-  )) + `<p class="size-note">${pick('macOS 安装包不到 8 MB · 完整字体按需下载 · 实际大小随版本变化', 'macOS installer under 8 MB · Fonts download as needed · Size varies by release')}</p>` + footer(pick('首次使用默认暂停记录，由你决定何时开启', 'Recording starts paused. Turn it on when you are ready.'));
+  )) + `<p class="size-note">${pick('macOS 安装包约 8 MB · 完整字体按需下载 · 实际大小随版本变化', 'macOS installer about 8 MB · Fonts download as needed · Size varies by release')}</p>` + footer(pick('首次使用默认暂停记录，由你决定何时开启', 'Recording starts paused. Turn it on when you are ready.'));
 }
 
 if (id === 'workflow') {

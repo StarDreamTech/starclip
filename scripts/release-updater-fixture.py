@@ -194,7 +194,7 @@ def serve(directory, temporary):
 
 
 def preferences_for_schema(expected_schema):
-    # The genuine public 0.2.2 baseline used the boolean shape. The schema-4
+    # Genuine public 0.2.2 and 0.2.3 used the boolean shape. The schema-4
     # migration normalizes it to mode without changing the explicit opt-out.
     values = dict(PREFERENCES)
     if expected_schema >= 3:
