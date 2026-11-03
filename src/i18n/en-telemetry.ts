@@ -65,5 +65,5 @@ export const enTelemetry: Record<string, string> = {
   "会话模式的待发计数仅归属本次运行，重启不跨会话补报。": "Session-mode counts belong to this run only and are not resent under a different session after restarting.",
   "统计偏好未能读取，已停止统计；原标识与缓存已保留，请重新选择统计模式。": "Statistics preferences could not be read. Reporting has stopped and the original IDs and cache were kept. Choose a statistics mode to continue.",
   "重试清空统计缓存": "Retry clearing statistics cache",
-  "旧版只有开关的统计设置升级为每次运行随机编号；如需按安装统计，请明确选择本机固定编号。": "Legacy on/off statistics settings migrate to a per-run random ID. Explicitly choose the local installation ID if you want installation-based reporting."
+  "旧版已开启的统计设置升级为每次运行随机编号，已关闭的保持关闭；如需按安装统计，请明确选择本机固定编号。": "Previously enabled statistics migrate to a per-run random ID; disabled statistics stay off. Explicitly choose the local installation ID if you want installation-based reporting."
 };

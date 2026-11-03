@@ -20,6 +20,10 @@
 
 - 2026-10-29 先前工作区 release 模式测量：Apple Silicon DMG 6,978,352 B（6.98 MB）、app 文件 15,013,697 B（15.01 MB）；独立测量 ID，不运行、不安装、不发布，深度 / 严格 ad-hoc 验签通过，不能等同公证或 updater 签名。字体缓存 / 用户数据另计，47 MiB 调试包不能作为正式模式包体积。测量 app 已注销后移入废纸篓，DMG 和结果在 `artifacts/package-size-20261029.noindex/`；Windows 新候选 NSIS 构建已通过，本条未核对其包体字节数，见验证记录。
 
+## 0.2.4 发布准备（2026-11-03）
+
+用户已授权本地验证通过后正式发布与同步 Homebrew。本地隔离验收和待办核对见 [验证记录](../../../../docs/verification.md#024-本地发布前验收2026-11-03)，后续签名升级结果另记。两平台 updater workflow 默认真实 public-0.2.3，包与内部版本由 `scripts/updater_baselines.py` 固定；保留显式 public-0.2.2，macOS 仅该旧基线允许手动重开，0.2.3 必须自动重启。更新 helper 时保留目标 tag / release run / source SHA 绑定，不使用比较版本实验代替真实旧版。
+
 ## 环境与检查
 
 历史查询基准使用 `node scripts/benchmark-history.mjs --stage compile`，本地重构建结束后运行同命令的 `--stage measure`；真实旧提交与优化版的固定原创 1 万 / 5 万 / 10 万条数据、完整结果指纹及来源校验见 [查询性能](../../../../docs/query-performance.md)。默认忽略的 Rust benchmark 不是常规测试，不能在其它本地重负载下采样；全局 SQL 诊断与完整链路计时分别解释，不把存储基准称为 GUI / IPC / 锁等待测量。

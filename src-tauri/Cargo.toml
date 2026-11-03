@@ -1,6 +1,6 @@
 [package]
 name = "starclip"
-version = "0.2.3"
+version = "0.2.4"
 description = "星笺 Starclip — a local-first clipboard manager"
 authors = ["Starclip contributors"]
 edition = "2021"

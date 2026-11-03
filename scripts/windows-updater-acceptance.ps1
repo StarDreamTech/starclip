@@ -1,12 +1,13 @@
 param(
   [Parameter(Mandatory)][string]$BaselineInstaller,
+  [ValidateSet('public-0.2.3', 'public-0.2.2')][string]$BaselineOrigin = 'public-0.2.3',
   [Parameter(Mandatory)][string]$FixtureDirectory,
   [Parameter(Mandatory)][string]$RepositoryRoot,
   [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{40}$')][string]$SourceHeadSha,
   [Parameter(Mandatory)][ValidatePattern('^[1-9][0-9]*$')][string]$ReleaseRunId
 )
 
-# Genuine public 0.2.2 -> exact signed draft target on a disposable Windows VM.
+# Selected genuine public baseline -> signed draft target on a disposable VM.
 # The private HTTPS fixture retains production URLs and signature verification.
 # Never run on a user PC; neither package nor product configuration is modified.
 $ErrorActionPreference = 'Stop'
@@ -25,12 +26,15 @@ if (!$FixtureDirectory.StartsWith([IO.Path]::GetFullPath($env:RUNNER_TEMP) + [IO
   throw 'The HTTPS fixture must belong to this disposable runner.'
 }
 $helper = Join-Path $RepositoryRoot 'scripts/release-updater-fixture.py'
+$baseline = & python (Join-Path $RepositoryRoot 'scripts/updater_baselines.py') metadata --origin $BaselineOrigin --platform windows-x86_64 | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the pinned genuine public baseline metadata.' }
+$baselineVersion = [string]$baseline.version
 $fixture = Get-Content -LiteralPath (Join-Path $FixtureDirectory 'fixture.json') -Raw | ConvertFrom-Json
 if ($fixture.platform -ne 'windows-x86_64' -or $fixture.sourceHeadSha -ne $SourceHeadSha -or
     [string]$fixture.releaseRunId -ne $ReleaseRunId -or $fixture.sourceRef -ne "v$($fixture.targetVersion)" -or
-    [version]$fixture.targetVersion -le [version]'0.2.2') { throw 'The signed fixture provenance or version does not match this run.' }
+    [version]$fixture.targetVersion -le [version]$baselineVersion) { throw 'The signed fixture provenance or version does not match this run.' }
 $targetVersion = [string]$fixture.targetVersion
-$baselineSchema = 2 # Immutable genuine public 0.2.2.
+$baselineSchema = [int]$baseline.schema
 $targetSchema = [int]$fixture.targetSchema
 if ($targetSchema -lt 1) { throw 'The signed target schema is missing or invalid.' }
 $endpoint = 'https://github.com/cpython666/starclip/releases/latest/download/latest.json'
@@ -38,11 +42,11 @@ $targetUrl = "https://github.com/cpython666/starclip/releases/download/v$targetV
 if ($fixture.targetUrl -ne $targetUrl -or $fixture.targetFilename -ne "Starclip_${targetVersion}_x64-setup.exe") {
   throw 'Unexpected production update package URL or filename.'
 }
-$baselineInstallerHash = '5974a9d4584045c571f51e08657cfd228fd38bee87a9a7169392d924f1309bdd'
-if ((Get-Item -LiteralPath $BaselineInstaller).Length -ne 5139609 -or
+$baselineInstallerHash = [string]$baseline.sha256
+if ((Get-Item -LiteralPath $BaselineInstaller).Length -ne $baseline.size -or
     (Get-FileHash -LiteralPath $BaselineInstaller -Algorithm SHA256).Hash.ToLowerInvariant() -ne $baselineInstallerHash -or
-    [Diagnostics.FileVersionInfo]::GetVersionInfo($BaselineInstaller).ProductVersion -ne '0.2.2') {
-  throw 'The baseline must be the exact genuine public 0.2.2 installer.'
+    [Diagnostics.FileVersionInfo]::GetVersionInfo($BaselineInstaller).ProductVersion -ne $baselineVersion) {
+  throw 'The baseline must be the exact selected genuine public installer, with its original internal version.'
 }
 $dataDir = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'com.starclip.desktop'
 $webviewDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'com.starclip.desktop'
@@ -209,7 +213,7 @@ function Check-UpdaterFixture([string]$Mode) {
     & python $helper verify-data --database (Join-Path $points[0].DirectoryName 'starclip.sqlite3') --expected-schema $baselineSchema
     if ($LASTEXITCODE -ne 0) { throw 'The before-update snapshot lost fixed data.' }
     $oldApp = Join-Path $dataDir "application-backups/$($snapshot.id)/starclip.exe"
-    if ((Get-FileHash -LiteralPath $oldApp -Algorithm SHA256).Hash.ToLowerInvariant() -ne $baselineHash) { throw 'The old application backup differs from genuine 0.2.2.' }
+    if ((Get-FileHash -LiteralPath $oldApp -Algorithm SHA256).Hash.ToLowerInvariant() -ne $baselineHash) { throw 'The old application backup differs from the selected genuine public baseline.' }
   } elseif ($points.Count) { throw 'A before-update recovery point was created before explicit confirmation.' }
   @{ stage=$Mode; paused=$true; recoveryPoints=$points.Count; fixedDataVerified=$true } | ConvertTo-Json |
     Set-Content -LiteralPath (Join-Path $evidence "$Mode.json") -Encoding utf8
@@ -230,7 +234,7 @@ try {
   Set-FixedClipboard
   $installation = Start-Process -FilePath $BaselineInstaller -ArgumentList "/S /NS /D=$installDir" -PassThru
   if (!$installation.WaitForExit(180000) -or $installation.ExitCode -ne 0) { throw 'The genuine baseline installation failed.' }
-  if ([Diagnostics.FileVersionInfo]::GetVersionInfo($exe).ProductVersion -ne '0.2.2') { throw 'The installed baseline is not genuine 0.2.2.' }
+  if ([Diagnostics.FileVersionInfo]::GetVersionInfo($exe).ProductVersion -ne $baselineVersion) { throw 'The installed baseline internal version differs from the selected genuine public release.' }
   $baselineHash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
   Start-And-AssertPaused
   Set-FixedClipboard
@@ -332,12 +336,13 @@ try {
   for ($i = 0; $i -lt 3; $i++) { Start-Sleep -Seconds 1; Check-UpdaterFixture 'after-install' }
   Stop-OwnedApplication
   Check-UpdaterFixture 'after-install'
-  @{ result='passed'; sourceHeadSha=$SourceHeadSha; releaseRunId=$ReleaseRunId; baselineVersion='0.2.2'; targetVersion=$targetVersion;
+  @{ result='passed'; sourceHeadSha=$SourceHeadSha; releaseRunId=$ReleaseRunId; baselineOrigin=$BaselineOrigin; baselineVersion=$baselineVersion; targetVersion=$targetVersion;
+    baselineInstallerSize=$baseline.size; baselineInstallerUrl=$baseline.url;
     baselineInstallerSha256=$baselineInstallerHash; targetInstallerSha256=$fixture.targetSha256; manifestSha256=$fixture.latestManifestSha256;
     originalPid=$originalPid; originalExeSha256=$baselineHash; installedExeSha256=$installedHash; restartMode='automatic';
     transport='runner-only trusted HTTPS fixture retaining production URLs and signed bytes'; publicDownloadVerified=$false } |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'result.json') -Encoding utf8
-  '- Windows genuine public 0.2.2 -> exact signed target passed: native check, verified download, Later, explicit confirmation, automatic restart, paused fixed data and recovery copies.' >> $env:GITHUB_STEP_SUMMARY
+  "- Windows genuine public $baselineVersion -> exact signed target passed: native check, verified download, Later, explicit confirmation, automatic restart, paused fixed data and recovery copies." >> $env:GITHUB_STEP_SUMMARY
   '- Transport used a disposable runner HTTPS fixture with a temporary trusted CA and unchanged production URLs/packages. This is pre-publication package acceptance, not a public GitHub/CDN download test.' >> $env:GITHUB_STEP_SUMMARY
 } catch {
   @{ result='failed'; stage=$stage; message=$_.Exception.Message } | ConvertTo-Json |

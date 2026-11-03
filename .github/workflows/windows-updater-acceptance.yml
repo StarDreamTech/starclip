@@ -5,12 +5,18 @@ on:
       tag:
         description: 'Existing signed target tag (the release may remain a draft)'
         required: true
-        default: v0.2.3
+        default: v0.2.4
         type: string
       release-run-id:
         description: 'Successful Build signed release draft run for that exact tag/head'
         required: true
         type: string
+      baseline:
+        description: 'Genuine public Windows baseline'
+        required: true
+        default: public-0.2.3
+        type: choice
+        options: [public-0.2.3, public-0.2.2]
 permissions:
   contents: read
   actions: read
@@ -60,14 +66,13 @@ jobs:
           run-id: ${{ steps.target.outputs.run-id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/starclip-signed-target
-      - name: Download the genuine public 0.2.2 baseline before isolating HTTPS
+      - name: Download and pin the selected genuine public baseline before isolating HTTPS
         shell: pwsh
+        env:
+          BASELINE: ${{ inputs.baseline }}
         run: |
-          $path = Join-Path $env:RUNNER_TEMP 'Starclip_0.2.2_x64-setup.exe'
-          Invoke-WebRequest -Uri 'https://github.com/cpython666/starclip/releases/download/v0.2.2/Starclip_0.2.2_x64-setup.exe' -OutFile $path -TimeoutSec 180
-          if ((Get-Item -LiteralPath $path).Length -ne 5139609 -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne '5974a9d4584045c571f51e08657cfd228fd38bee87a9a7169392d924f1309bdd') {
-            throw 'The public 0.2.2 baseline differs from the reviewed release asset.'
-          }
+          python scripts/updater_baselines.py download --origin $env:BASELINE --platform windows-x86_64 --package "$env:RUNNER_TEMP/starclip-baseline-setup.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'The genuine public baseline download or pinned digest check failed.' }
       - name: Prepare the private HTTPS fixture without changing signed package bytes
         shell: pwsh
         env:
@@ -86,14 +91,15 @@ jobs:
           }
           python scripts/release-updater-fixture.py prepare --assets "$env:RUNNER_TEMP/starclip-signed-target" --output "$env:RUNNER_TEMP/starclip-updater-private" --version $env:TARGET_VERSION --source-ref $env:TARGET_TAG --release-run-id $env:RELEASE_RUN_ID --source-head-sha $env:TARGET_HEAD --platform windows-x86_64 --source-directory "$env:GITHUB_WORKSPACE/release-source"
           if ($LASTEXITCODE -ne 0) { throw 'Signed update fixture preparation failed.' }
-      - name: Exercise real 0.2.2 to signed target through native UI and trusted HTTPS
+      - name: Exercise the genuine public baseline to signed target through native UI and trusted HTTPS
         timeout-minutes: 12
         shell: pwsh
         env:
           TARGET_HEAD: ${{ steps.target.outputs.head-sha }}
           RELEASE_RUN_ID: ${{ steps.target.outputs.run-id }}
+          BASELINE: ${{ inputs.baseline }}
         run: |
-          ./scripts/windows-updater-acceptance.ps1 -BaselineInstaller "$env:RUNNER_TEMP/Starclip_0.2.2_x64-setup.exe" -FixtureDirectory "$env:RUNNER_TEMP/starclip-updater-private" -RepositoryRoot $env:GITHUB_WORKSPACE -SourceHeadSha $env:TARGET_HEAD -ReleaseRunId $env:RELEASE_RUN_ID
+          ./scripts/windows-updater-acceptance.ps1 -BaselineInstaller "$env:RUNNER_TEMP/starclip-baseline-setup.exe" -BaselineOrigin $env:BASELINE -FixtureDirectory "$env:RUNNER_TEMP/starclip-updater-private" -RepositoryRoot $env:GITHUB_WORKSPACE -SourceHeadSha $env:TARGET_HEAD -ReleaseRunId $env:RELEASE_RUN_ID
       - name: Retain only synthetic acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
