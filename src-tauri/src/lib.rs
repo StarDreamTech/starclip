@@ -8,6 +8,7 @@ mod clipboard_source;
 #[cfg(feature = "desktop")]
 mod desktop;
 pub mod handwriting;
+pub mod image_transfer;
 pub mod images;
 pub mod privacy;
 pub mod search_index;
@@ -83,6 +84,10 @@ mod capability_tests {
             .iter()
             .any(|command| command == "open_project_link"));
         for command in [
+            "prepare_image_transfer",
+            "copy_image_files",
+            "export_image_files",
+            "drag_image_files",
             "get_startup_preferences",
             "set_startup_preferences",
             "quit_starclip",

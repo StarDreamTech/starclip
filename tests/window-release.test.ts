@@ -39,6 +39,29 @@ const renderer = createRenderer<object, object>({
   parentNode: () => null, nextSibling: () => null,
 });
 let sequence = 0;
+test('image checkboxes reflect selection, reject overflow and never invoke single-copy shortcuts', async () => {
+  const fixture = await mount();
+  try {
+    const vm = fixture.vm;
+    const clip = { id: 91, kind: 'image', title: 'Original image check' };
+    vm.imageSelectMode = true;
+    vm.state.clips = [clip];
+    const input = { checked: false };
+    vm.checkImage(clip, { shiftKey: false, currentTarget: input });
+    assert.equal(input.checked, true);
+    assert.deepEqual([...vm.imageSelection], [91]);
+    vm.checkImage(clip, { shiftKey: false, currentTarget: input });
+    assert.equal(input.checked, false);
+    vm.imageSelection = Array.from({ length: 50 }, (_, i) => i + 1);
+    input.checked = true;
+    vm.checkImage(clip, { shiftKey: false, currentTarget: input });
+    assert.equal(input.checked, false);
+    assert.equal(vm.imageSelection.length, 50);
+    await vm.copy(clip);
+    assert.deepEqual(fixture.copiedIds, []);
+  } finally { fixture.cleanup(); }
+});
+
 async function mount(options: { delayedRead?: boolean; delayedCloseListener?: boolean; initialCloseRequest?: number; delayedCloseQuery?: boolean } = {}) {
   const state: AppState = {
     onboardingCompleted: true, clips: [], groups: [],
@@ -86,6 +109,7 @@ async function mount(options: { delayedRead?: boolean; delayedCloseListener?: bo
     .replaceAll("'@tauri-apps/api/event'", `'${mockUrl}'`)
     .replaceAll("'./appearance'", `'${new URL('../src/appearance.ts', import.meta.url).href}'`)
     .replaceAll("'./privacy'", `'${new URL('../src/privacy.ts', import.meta.url).href}'`)
+    .replaceAll("'./clip-selection'", `'${new URL('../src/clip-selection.ts', import.meta.url).href}'`)
     .replaceAll("'./theme'", `'${new URL('../src/theme.ts', import.meta.url).href}'`).replaceAll("'../i18n'", `'${new URL('../src/i18n/index.ts', import.meta.url).href}'`).replaceAll("'./i18n'", `'${new URL('../src/i18n/index.ts', import.meta.url).href}'`);
   const component = await import(moduleUrl(source));
   const app = renderer.createApp({ ...component.default, render() { return null; } });
