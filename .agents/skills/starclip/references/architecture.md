@@ -73,7 +73,7 @@ SQLite 已发布 0.2.4 为结构 4，当前开发分支为 5，主要表为 `cli
 
 历史分页由 `store::history_page(HistoryQuery)` 在 SQLite 执行搜索、分类 / 分组、标签、来源与隐私筛选，每页固定 50 条，按更新时间和 ID 稳定排序；`get_state` / `api.getState` 返回当前页正文及 `HistorySummary`。全库分类 / 分组数量、标签与来源选项单独聚合，不从当前页推算；浏览器演示返回同样形状。`App.vue` 换页替换列表，`AiSettings.vue` 独立用 `aiEligible` 分页搜索并保留跨页勾选（最多现有授权上限 500 条）；创建连接仍走后端权限校验。分页限制常驻列表正文，不声称全进程只保留 50 条对象或达到固定内存量。
 
-开发分支收藏分类额外支持 `HistoryQuery.sort` 的 updated / created / copies / manual，统一先按 `on_top DESC` 再所选字段和稳定 ID 排序；其他分类仍按更新时间。`clip_favorites` 首次创建 / 回填原子完成，星标触发器兼容旧写入路径；位置间隔 1024、必要时只重排同一置顶区域，移动只读取收藏 ID / 位置。JSON 备份对相同位置按 ID 次序规范化，避免导入重新分配 ID 后顺序变化；详情见 [数据边界](data-safety.md#收藏顺序与图片查看2026-11-05开发分支未发布)。
+0.2.5 收藏分类额外支持 `HistoryQuery.sort` 的 updated / created / copies / manual，统一先按 `on_top DESC` 再所选字段和稳定 ID 排序；其他分类仍按更新时间。`clip_favorites` 首次创建 / 回填原子完成，星标触发器兼容旧写入路径；位置间隔 1024、必要时只重排同一置顶区域，移动只读取收藏 ID / 位置。JSON 备份对相同位置按 ID 次序规范化，避免导入重新分配 ID 后顺序变化；详情见 [数据边界](data-safety.md#收藏顺序与图片查看2026-11-05开发分支未发布)。
 
 2026-11-02 查询性能第一轮：`history_cache.rs` 在单个 Store 内复用全局 counts / group_counts / sources / hosts / tags，按 `total_changes()`、`PRAGMA data_version`、`PRAGMA schema_version` 联合失效；仅 data_version 不会发现本连接写入。显式事务与活动 Rows 游标绕过并清除缓存，冷聚合使用一个读事务，结束后重查版本才发布，避免回滚或旧 WAL 快照污染。估算保留预算 4 MiB，超出仍完整返回但不保留，不是进程内存上限。无搜索、来源、标签、隐私或 AI 限制的分类 / 分组可复用总数，其余匹配 COUNT 与所有页记录实时查询。未修改结构 4、接口、隐私或 AI 授权边界；新开 / 迁移 / 恢复后的 Store 缓存为空。依据 `store/history.rs`、`history_cache.rs` 和 5 项缓存回归。
 

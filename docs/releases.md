@@ -4,7 +4,7 @@
 
 ## 用户升级
 
-- **已有 0.1.0**：该版本没有更新器。升级到 0.2.4 时，退出星笺；macOS 将新的 `Starclip.app` 覆盖到原安装位置，Windows 运行新版安装包。保留数据目录和应用标识 `com.starclip.desktop`。
+- **已有 0.1.0**：该版本没有更新器。升级到 0.2.5 时，退出星笺；macOS 将新的 `Starclip.app` 覆盖到原安装位置，Windows 运行新版安装包。保留数据目录和应用标识 `com.starclip.desktop`。
 - **0.2.0 及以后**：在设置中检查更新、阅读发布说明，再选择「下载更新」。HTTPS 下载并通过应用内置公钥及签名版本校验后，弹出「安装并重启」；可选「稍后再说」继续使用，已下载包保留到本次应用退出或再次手动检查更新。只有确认安装才保存当前数据恢复点和旧应用副本；0.2.3 的 macOS 重启流程会先完成正常退出清理，Windows 由安装器退出、替换并重新打开应用；从旧版升级的重启边界见下一条。
 - **macOS 0.2.2 升级到 0.2.3**：旧版可能在安装完成后退出而未自动重新打开。请从「应用程序」重新打开星笺一次，不必卸载或删除数据；本次真实旧版验收已确认新包替换、手动重开和数据保留。0.2.3 中的修复不能追溯改变旧进程的重启行为，该次验收不计为自动重启通过。
 - 更新服务不可达、尚无公开版本、签名不符或恢复点创建失败都会报告错误；不会把失败显示成已完成。GitHub 上的草稿对普通客户端不可见。
@@ -18,9 +18,9 @@
 
 当前正式通道只接受 `X.Y.Z` 稳定版本，排除预发布标记及 `alpha` / `beta` / `rc` 等版本；Homebrew 同步仍只跟随公开 latest 稳定版。预览通道尚未开放。LTS 表示对某个版本提供长期维护，不等于稳定版的另一个名称；项目目前没有承诺维护期限或独立 LTS 分支，因此界面使用「稳定版」。
 
-开发分支新增[自动恢复点保留策略](recovery-retention.md)，按用户 2026-11-04 要求，在新版正常启动并校验当前库后清理旧应用版本或旧结构的自动快照；同版本自动点保留最近 3 份及 7 天内副本，历史手动点保留，不再提供创建 / 还原入口；0.2.4 已发布客户端尚不包含此策略。
+0.2.5 新增[自动恢复点保留策略](recovery-retention.md)，按用户 2026-11-04 要求，在新版正常启动并校验当前库后清理旧应用版本或旧结构的自动快照；同版本自动点保留最近 3 份及 7 天内副本，历史手动点保留，不再提供创建 / 还原入口；历史 0.2.4 客户端不包含此策略。
 
-2026-11-05 开发分支将恢复点收为内部升级备份，移除恢复点界面、手动创建 / 还原接口和启动时恢复点选择。正常更新操作只涉及检查、下载、确认安装和重启，普通 JSON 导入导出仍可用；已发布 0.2.4 尚不包含该调整。
+0.2.5 将恢复点收为内部升级备份，移除恢复点界面、手动创建 / 还原接口和启动时恢复点选择。正常更新操作只涉及检查、下载、确认安装和重启，普通 JSON 导入导出仍可用；历史 0.2.4 不包含该调整。
 
 ## Homebrew 安装源
 
@@ -33,13 +33,13 @@ brew update
 brew upgrade --cask cpython666/tap/starclip
 ```
 
-[0.2.4 已公开为最新稳定版](https://github.com/cpython666/starclip/releases/tag/v0.2.4)；[Homebrew 同步](https://github.com/cpython666/starclip/actions/runs/41580841113) 已完成，当前 Cask 为 **0.2.4**。流水线核对公开 DMG、应用签名 / 版本 / 架构及 Homebrew 在线审计，并通过[机器人提交](https://github.com/cpython666/homebrew-tap/commit/2c961507eea106de52b9e667ba029cc39826ab0f)更新 Tap；真实远端 Cask 的 SHA-256 与公开 DMG 一致。历史 alpha.1 / alpha.2 附件保留；0.2.1 因发布门禁失败未公开。程序具有 Tauri 更新签名，macOS 为 ad-hoc，仍无 Apple Developer 公证或 Windows 发行者证书，本地验签不等于 Gatekeeper 首启验收。
+[0.2.5 已公开为最新稳定版](https://github.com/cpython666/starclip/releases/tag/v0.2.5)；[Homebrew 同步](https://github.com/cpython666/starclip/actions/runs/42861273222) 两个 job 已完成，当前 Cask 为 **0.2.5**。公开 DMG、应用身份 / 版本 / 架构及 Homebrew 在线审计通过，[机器人提交](https://github.com/cpython666/homebrew-tap/commit/52a9d65d938742c2188f15f9f12fc2ec0a842005) 和远端 Cask 的 SHA-256 已回读核对。更新包有 Tauri 签名，macOS 为 ad-hoc，仍无 Apple Developer 公证或 Windows 发行者证书。
 
 如果较新 Homebrew 提示该 Cask 尚未受信任，执行 `brew trust --cask cpython666/tap/starclip` 后重试；这只信任星笺这一项，不需要信任整个 Tap。
 
 已有手动安装或较新本地开发版时，不用 `--force` 覆盖或降级。此 Cask 没有 `zap` 或删除数据脚本，普通升级 / 卸载只管理程序文件；程序内部的数据迁移边界仍由相应版本决定。自有 Tap 不代表 Homebrew 官方主仓收录；WinGet 尚未接入。
 
-正式 Release 发布后的 Tap 同步由 `.github/workflows/homebrew.yml` 承担：只处理公开、非预发布且为 latest 的 `vX.Y.Z`，重新下载 DMG 核对摘要、签名、应用身份 / 版本 / 架构并完成 Homebrew 检查后，才更新 Cask 的版本与 SHA-256。失败保留原 Cask；旧任务不得降级，同版本换摘要会被拒绝。0.2.2 已完成首次完整自动同步；没有把历史 alpha 改标为稳定版或覆盖其附件。配置、重试与预演见 [Homebrew 发布自动化](homebrew-release.md)。0.2.4 已完成双平台签名、全新 / 旧版覆盖安装、真实公开 0.2.3 应用内升级和匿名公开附件验收；详细证据见下方「当前验证边界」。
+正式 Release 发布后的 Tap 同步由 `.github/workflows/homebrew.yml` 承担：只处理公开、非预发布且为 latest 的 `vX.Y.Z`，重新下载 DMG 核对摘要、签名、应用身份 / 版本 / 架构并完成 Homebrew 检查后，才更新 Cask 的版本与 SHA-256。失败保留原 Cask；旧任务不得降级，同版本换摘要会被拒绝。0.2.2 已完成首次完整自动同步；没有把历史 alpha 改标为稳定版或覆盖其附件。配置、重试与预演见 [Homebrew 发布自动化](homebrew-release.md)。0.2.5 已完成双平台签名、全新 / 旧版覆盖安装、真实公开 0.2.4 应用内升级和匿名公开附件验收；详细证据见下方「当前验证边界」。
 
 ## 版本与发布说明
 
@@ -101,7 +101,7 @@ npm run tauri -- signer generate -w /private/path/starclip-updater.key
 
 - **下载/签名/备份失败**：保留现有程序并显示错误，修复网络、空间或发布产物后重试。不要通过关闭签名校验解决。
 - **新版本发布后发现问题**：先停止推广该版本，修复后发布更高版本。把 GitHub 的 latest 指回旧版本不会使已升级客户端自动降级，默认更新比较器只接受更高版本。
-- **需要处理升级失败的数据**：保留当前目录与未清理的升级前备份，由维护者先核对版本和摘要；开发分支不提供用户手动恢复入口，正常使用不需要管理内部备份。内部恢复代码不会合并备份之后新增的记录。
+- **需要处理升级失败的数据**：保留当前目录与未清理的升级前备份，由维护者先核对版本和摘要；0.2.5 不提供用户手动恢复入口，正常使用不需要管理内部备份。内部恢复代码不会合并备份之后新增的记录。
 - **确需退回旧程序**：同时准备与旧程序兼容的数据库副本，退出所有星笺进程后操作；不能让旧版直接打开结构更高的数据。0.2.0 起会拒绝高于自身支持范围的 schema，但 0.1.0 本身没有这道保护，不能依赖它识别新数据库。优先使用向前修复版本。
 - **迁移失败**：启动保持错误信息和选择已有目录的入口，数据库迁移事务会撤回，迁移前恢复点仍保留。不应绕过错误新建空库，从而掩盖旧数据位置。
 
@@ -109,7 +109,7 @@ npm run tauri -- signer generate -w /private/path/starclip-updater.key
 
 ## 当前验证边界
 
-0.2.4 已于 2026-11-03 按用户授权正式发布，tag 固定 `6d83640`，[签名构建 41579229975](https://github.com/cpython666/starclip/actions/runs/41579229975) 8/8；真实公开 0.2.3 → 此精确签名目标的 [macOS 41580453911](https://github.com/cpython666/starclip/actions/runs/41580453911) / [Windows 41580457922](https://github.com/cpython666/starclip/actions/runs/41580457922) 均自动重启及原创数据 / PNG / 偏好 / 成长 / 暂停 / 统计关闭与恢复副本保留通过。原生 UI 使用一次性 runner 临时可信 HTTPS 服务，保留正式 URL 与签名包原始字节；匿名公开 8 附件及 latest 的完整字节另已核对一致，不扩大为公网 CDN 原生更新 GUI 验收。本机正式应用未替换。完整摘要、清理与证据见 [0.2.4 发布与升级](verification.md#024-正式发布与原生升级验收)。
+**0.2.5 已于 2026-11-11 00:42:14（北京时间，UTC 2026-11-10 16:42:14） 正式发布为 latest**，提供 Apple Silicon macOS 和 Windows x64 安装包与签名更新清单；[签名发布流水线](https://github.com/cpython666/starclip/actions/runs/42848254909) 8 项检查通过。真实公开 0.2.4 → 0.2.5 的 [macOS](https://github.com/cpython666/starclip/actions/runs/42856720920) 与 [Windows](https://github.com/cpython666/starclip/actions/runs/42851606421) 均通过自动重启、原创固定数据 / PNG / 偏好保留、结构 4 → 5 和旧自动快照清理；旧应用副本保留。原生升级使用一次性 runner 的临时受信任 HTTPS 服务；8 个匿名公开附件及稳定 latest 的字节另已核对，不扩大为公网 GitHub / CDN 原生更新验收。本机正式安装未替换。完整摘要与证据见 [0.2.5 发布与升级](verification.md#025-正式发布与原生升级验收)。历史 0.2.4 证据见 [对应记录](verification.md#024-正式发布与原生升级验收)。
 
 0.2.5 发布准备已将 updater workflow 默认改为真实 `public-0.2.4`，包大小 / SHA / 内部版本由 `scripts/updater_baselines.py` 固定；SQLite 基线为 4，由元数据读取。0.2.4 必须自动重启，显式旧 0.2.2 仍可记录历史手动恢复，macOS source-comparison 实验保留并单独标明。下次发布应先更新并核对当时的真实公开基线，不以比较版本实验替代。
 
