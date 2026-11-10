@@ -1,6 +1,32 @@
 use super::*;
 
 impl Store {
+    pub fn stage_images(
+        &self,
+        root: &std::path::Path,
+        ids: &[i64],
+        allow_private: bool,
+    ) -> Result<crate::image_transfer::Batch> {
+        let tx = self.conn.unchecked_transaction().map_err(sql_error)?;
+        crate::image_transfer::validate(self, ids, allow_private)?;
+        let mut bytes = 0usize;
+        for id in ids {
+            let length: usize = tx
+                .query_row(
+                    "SELECT length(png) FROM clip_images WHERE clip_id=?1",
+                    [id],
+                    |row| row.get(0),
+                )
+                .map_err(sql_error)?;
+            bytes = bytes.saturating_add(length);
+        }
+        if bytes > crate::image_transfer::MAX_BYTES {
+            return Err("所选图片总大小超过 100 MiB，请分批操作。".into());
+        }
+        let result = crate::image_transfer::stage(self, root, ids, allow_private);
+        tx.commit().map_err(sql_error)?;
+        result
+    }
     pub fn add(&self, content: &str, title: &str, group_id: Option<i64>) -> Result<Clip> {
         self.add_protected(content, title, group_id, false)
     }

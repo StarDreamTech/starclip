@@ -211,6 +211,10 @@ export const api = {
     if (requiredClip(id).kind !== 'image') throw new Error('这条记录不是图片');
     return demoImage;
   },
+  async prepareImageTransfer(ids: number[], allowPrivate: boolean): Promise<string> { return invoke('prepare_image_transfer', { ids, allowPrivate }); },
+  async copyImageFiles(ids: number[], allowPrivate: boolean): Promise<void> { return invoke('copy_image_files', { ids, allowPrivate }); },
+  async exportImageFiles(ids: number[], allowPrivate: boolean): Promise<string | null> { return invoke('export_image_files', { ids, allowPrivate }); },
+  async dragImageFiles(token: string): Promise<boolean> { return invoke('drag_image_files', { token }); },
   async addClip(content: string, title: string, groupId: number | null, keepForever = false): Promise<Clip> {
     if (isDesktop) return invoke('add_clip', { content, title, groupId, keepForever });
     validateContent(content);

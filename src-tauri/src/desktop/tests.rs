@@ -30,6 +30,7 @@ fn startup_native_operations_release_storage_and_rollback_after_update_freeze() 
             shortcut_error: Mutex::new(None),
             window_error: Mutex::new(None),
             cleanup: Mutex::new(None),
+            image_transfer: Mutex::new(None),
             starpet_operation: Mutex::new(()),
             startup_operation: Mutex::new(()),
             tray_items: OnceLock::new(),
@@ -277,6 +278,7 @@ fn ai_broker_checks_privacy_revoke_freeze_and_concurrent_changes() {
         shortcut_error: Mutex::new(None),
         window_error: Mutex::new(None),
         cleanup: Mutex::new(None),
+        image_transfer: Mutex::new(None),
         starpet_operation: Mutex::new(()),
         startup_operation: Mutex::new(()),
         tray_items: OnceLock::new(),
@@ -470,6 +472,11 @@ fn shared_clipboard_writer_suppresses_only_successful_own_writes() {
     assert!(capture.needs_capture(&Some(image.clone())));
     write_and_suppress(&mut capture, image.clone(), || Ok(())).unwrap();
     assert!(!capture.needs_capture(&Some(image)));
+    let files = CaptureKey::Files(
+        "/original-fixture/Starclip-01.png\n/original-fixture/Starclip-02.png".into(),
+    );
+    write_and_suppress(&mut capture, files.clone(), || Ok(())).unwrap();
+    assert!(!capture.needs_capture(&Some(files)));
     assert!(capture.needs_capture(&Some(CaptureKey::Text("later external text".into()))));
 }
 

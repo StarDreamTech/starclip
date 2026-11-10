@@ -46,6 +46,7 @@ struct Context {
     shortcut_error: Mutex<Option<String>>,
     window_error: Mutex<Option<String>>,
     cleanup: Mutex<Option<CleanupSnapshot>>,
+    image_transfer: Mutex<Option<crate::image_transfer::Batch>>,
     starpet_operation: Mutex<()>,
     startup_operation: Mutex<()>,
     tray_items: OnceLock<TrayItems>,
@@ -2474,6 +2475,7 @@ pub fn run() {
                 shortcut_error: Mutex::new(shortcut_error),
                 window_error: Mutex::new(window_error),
                 cleanup: Mutex::new(None),
+                image_transfer: Mutex::new(None),
                 starpet_operation: Mutex::new(()),
                 startup_operation: Mutex::new(()),
                 tray_items: OnceLock::new(),
@@ -2636,6 +2638,10 @@ pub fn run() {
             save_code,
             delete_clip,
             copy_clip,
+            image_transfer::prepare_image_transfer,
+            image_transfer::copy_image_files,
+            image_transfer::export_image_files,
+            image_transfer::drag_image_files,
             copy_product_share_text,
             copy_product_share_image,
             save_product_share_image,
@@ -2723,6 +2729,7 @@ pub fn run() {
 
 mod ai_broker;
 mod clipboard;
+mod image_transfer;
 use ai_broker::*;
 use clipboard::*;
 

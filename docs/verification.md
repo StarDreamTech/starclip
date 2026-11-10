@@ -830,3 +830,17 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 - 没有 Apple Developer 公证或 Windows 代码签名；分发包为开发预览版。
 
 图片仅包含原创示例，没有发布真实剪贴历史、数据库、账号或个人文件。
+
+## 批量图片传出（2026-11-03）
+
+当前 `codex/multi-image-transfer` 开发分支实现 Issue #18 的多选图片、文件列表复制、目录导出兜底和原生拖出入口，尚未发布。数据库结构仍为 4；不改 Cloudflare Worker 或统计协议。Issue #19 的混合多选批量整理与拼接文字不在本轮范围。
+
+- Node 全部 219 项通过（含真实 App 勾选状态 / 数量上限与单条复制隔离、跨页 / Shift 选择、批量栏的隐私确认 / 顺序 / 取消 / 失败恢复）；`npm run build` 通过。
+- Rust 无 desktop 154 项通过、4 ignored；desktop 单元 170 项通过、4 ignored，真实主程序 CLI / MCP stdio 1 项通过。新增存储回归覆盖原 PNG 字节与顺序、永久保留与隐私保留、无确认拒绝、记录删除 / 临时文件缺失、重复 / 非图片 / 数量与实际 BLOB 大小限制、失败批次清理和过期缓存 / symlink 边界；文件列表复制的自身捕获抑制使用 mock，不读真实剪贴板。
+- 本机 macOS 独立调试应用 `com.starclip.imagebatchverify20261103` 构建 / 本地签名通过。测试目录在忽略的 `artifacts/image-batch-check.noindex/`；只生成三张原创 160×100 PNG，首次空库、全程记录暂停、统计 off、无更新源；未替换正式安装。
+- 原生「复制为图片文件」选择两图后，在 Finder 专用空目录粘贴得到两个独立 PNG；目录选择器导出到另一个专用空目录的新子目录也得到相同两图。两类结果均逐字节比对原创原图一致，选择顺序保留。原始三图及永久保留标记未改变。
+- 原生检查发现并修正 checkbox 的默认事件回滚显示问题，加入真实 App setup 回归；拖动快速松开时可能迟到的 IPC 现先确认左键状态，避免开始悬挂的 AppKit 会话。拖出采用仅 Copy 的原生文件列表；OS 的 Dropped 只说明目标接收手势，不能据此报告文件已正确保存。
+- 最终业务提交 `8617a99` 的 [push 流水线 41609745952](https://github.com/cpython666/starclip/actions/runs/41609745952) 与 [PR 流水线 41610355122](https://github.com/cpython666/starclip/actions/runs/41610355122) 均 7/7 成功，包含 macOS / Windows 构建、desktop / CLI 单元、23 款字体实际下载 / 离线渲染及两平台 fresh / upgrade 安装检查；[草稿 PR #28](https://github.com/cpython666/starclip/pull/28) 保留拖放验收边界。最终本机验证包另复核 checkbox 两项 Value=1、`final-copy-target/` 两个 PNG 与 `final-export-target/` 新子目录两个 PNG，逐字节与原创原图相同，摘要保存在忽略的 `artifacts/image-batch-check.noindex/verification.json`；测试应用已退出并注销 LaunchServices，原始三图 / 永久保留、暂停与统计 off 保留。
+- **验收边界**：macOS 两图最终拖放到文件夹、Windows 原生文件列表粘贴 / 拖放 / 目录选择器尚未完成完整 GUI 验收。双平台构建与安装自动检查不能替代这些 GUI 场景；不据一次 Dropped 回调关闭 #18，也不声称任意聊天 / 编辑应用支持一次粘贴多张图片。
+
+明文缓存位于应用 cache 的 `image-transfers/`；24 小时后在下次图片准备 / 复制时清理、约 512 MiB 上限。已复制 / 拖出的副本退出后保留到期，用户导出的目录不自动清理。使用说明与单批限制见 README。

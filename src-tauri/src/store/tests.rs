@@ -1,5 +1,130 @@
 use super::*;
 
+#[test]
+fn image_batch_preserves_originals_and_protection_and_revalidates_before_drag() {
+    let db = store();
+    let scratch = Scratch::new();
+    let first = images::prepare_rgba(2, 1, &[40, 90, 170, 255, 25, 55, 95, 90]).unwrap();
+    let second = images::prepare_rgba(1, 1, &[180, 90, 30, 255]).unwrap();
+    let a = db.add_image(&first, "original A", None, true).unwrap();
+    let b = db.add_image(&second, "original B", None, false).unwrap();
+    let batch = db.stage_images(&scratch.0, &[b.id, a.id], false).unwrap();
+    assert_eq!(fs::read(&batch.paths[0]).unwrap(), second.png);
+    assert_eq!(fs::read(&batch.paths[1]).unwrap(), first.png);
+    assert!(batch
+        .paths
+        .iter()
+        .all(|p| p.is_absolute() && p.extension().unwrap() == "png"));
+    batch.revalidate(&db).unwrap();
+    assert!(db.clip(a.id).unwrap().keep_forever);
+    assert_eq!(db.clip(a.id).unwrap().copy_count, 0);
+    let original_count = fs::read_dir(&scratch.0).unwrap().count();
+    for ids in [vec![], vec![a.id, a.id], vec![a.id; 51], vec![a.id, 999999]] {
+        assert!(db.stage_images(&scratch.0, &ids, false).is_err());
+    }
+    let text = db.add("original batch text", "", None).unwrap();
+    assert!(db
+        .stage_images(&scratch.0, &[a.id, text.id], false)
+        .is_err());
+    db.set_clip_privacy(a.id, true, false).unwrap();
+    assert!(db.stage_images(&scratch.0, &[a.id, b.id], false).is_err());
+    assert!(batch.revalidate(&db).is_err());
+    let allowed = db.stage_images(&scratch.0, &[a.id, b.id], true).unwrap();
+    allowed.revalidate(&db).unwrap();
+    assert_eq!(
+        fs::read_dir(&scratch.0).unwrap().count(),
+        original_count + 1
+    );
+    assert!(!allowed.paths[0].to_string_lossy().contains("original A"));
+    fs::remove_file(&allowed.paths[0]).unwrap();
+    assert!(allowed.revalidate(&db).is_err());
+    assert_eq!(db.image_png(a.id, false).unwrap(), first.png);
+    assert!(db.clip(a.id).unwrap().is_private);
+}
+
+#[test]
+fn image_batch_rolls_back_invalid_payload_and_limits_bytes_before_writing() {
+    let db = store();
+    let scratch = Scratch::new();
+    let mut ids = Vec::new();
+    for i in 0..6 {
+        let image = images::prepare_rgba(1, 1, &[i, 70, 120, 255]).unwrap();
+        ids.push(
+            db.add_image(&image, "original size test", None, false)
+                .unwrap()
+                .id,
+        );
+    }
+    db.conn
+        .execute(
+            "UPDATE clip_images SET png=x'00' WHERE clip_id=?1",
+            [ids[1]],
+        )
+        .unwrap();
+    assert!(db.stage_images(&scratch.0, &ids[..2], false).is_err());
+    assert_eq!(
+        fs::read_dir(&scratch.0).unwrap().count(),
+        0,
+        "partial batch must be removed"
+    );
+    db.conn
+        .execute("UPDATE clip_images SET png=zeroblob(18000000)", [])
+        .unwrap();
+    let error = db.stage_images(&scratch.0, &ids, false).err().unwrap();
+    assert!(
+        error.contains("100 MiB"),
+        "preflight actual blob lengths before decoding: {error}"
+    );
+    assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 0);
+}
+
+#[test]
+fn image_transfer_cache_cleans_only_expired_managed_batches() {
+    use std::fs::{File, FileTimes};
+    use std::time::{Duration, SystemTime};
+    let scratch = Scratch::new();
+    let root = scratch.0.join("transfers");
+    crate::image_transfer::cache_root(&root).unwrap();
+    let old = root.join(format!("Starclip-images-{}", "a".repeat(32)));
+    let fresh = root.join(format!("Starclip-images-{}", "b".repeat(32)));
+    let unrelated = root.join("user-files");
+    for path in [&old, &fresh, &unrelated] {
+        fs::create_dir(path).unwrap();
+        fs::write(path.join("fixture.png"), b"original cache fixture").unwrap();
+    }
+    #[cfg(not(windows))]
+    let old_directory = File::open(&old).unwrap();
+    #[cfg(windows)]
+    let old_directory = {
+        use std::os::windows::fs::OpenOptionsExt;
+        fs::OpenOptions::new()
+            .access_mode(0x100)
+            .custom_flags(0x02000000)
+            .open(&old)
+            .unwrap()
+    };
+    old_directory
+        .set_times(FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(90000)))
+        .unwrap();
+    drop(old_directory);
+    crate::image_transfer::cache_root(&root).unwrap();
+    assert!(!old.exists());
+    assert!(fresh.join("fixture.png").exists());
+    assert!(unrelated.join("fixture.png").exists());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        assert_eq!(
+            fs::metadata(&root).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        let link = root.join(format!("Starclip-images-{}", "c".repeat(32)));
+        symlink(&unrelated, &link).unwrap();
+        crate::image_transfer::cache_root(&root).unwrap();
+        assert!(unrelated.join("fixture.png").exists());
+    }
+}
+
 fn emulate_legacy_three(conn: &Connection) {
     conn.execute_batch("DROP TRIGGER IF EXISTS clips_fts_insert; DROP TRIGGER IF EXISTS clips_fts_update; DROP TRIGGER IF EXISTS clips_fts_delete; DROP TABLE IF EXISTS clips_fts; DROP TABLE IF EXISTS clip_rich; DROP TABLE IF EXISTS clip_activity; PRAGMA user_version=3;").unwrap();
 }
