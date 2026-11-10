@@ -967,3 +967,5 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 自动备份 PR #29 的最终 head `5b6b20a` 在 [42813992247](https://github.com/cpython666/starclip/actions/runs/42813992247) 7/7 成功，包含双平台构建、原生测试和 fresh / 真实旧版覆盖升级，随后 merge 合入 main（`e39f9f8`）。此 CI 不代替应用内签名更新或真实用户数据验证。
 
 安装夹具已适配自动备份清理，并修正 Windows 新增源码读取的 UTF-8 编码。导航记忆加入后，Windows 从设置退出、隐藏冷启动、第二次打开会恢复设置页；脚本改为先核对恢复的使用习惯控件，再关闭弹窗检查暂停状态。跳过教程后等待异步关闭完成，仍核对 HWND 真正销毁与第二实例重建。[图集 PR 检查 42833729688](https://github.com/cpython666/starclip/actions/runs/42833729688) 的 Windows fresh / upgrade 已实际通过，包含上述流程、登录项启停与外部禁用回读、托盘偏好持久化、显式退出，以及固定数据 / 分组 / 设置和旧自动快照清理。此结果不扩大为真实注销重登、Markdown 原生导出或多图粘贴 / 拖放验收。
+
+最终业务 head `5f4e5da` 的 [PR #33 流水线 42833791956](https://github.com/cpython666/starclip/actions/runs/42833791956) 7/7 成功，包含双平台构建、原生单元 / 权限 / CLI、字体实际下载与离线渲染及两平台 fresh / 真实旧版 upgrade。#28–#33 已按顺序合入，main `e3bca33` 与该已验证 head 的完整树一致。分组检查的排队任务与证据复用边界见 [分支记录](development-branches.md)，不将排队或取消算作成功。最终文档 PR 只调整说明和知识库，不重复运行产品全量平台构建。
