@@ -244,5 +244,8 @@ Windows 与 macOS 桌面版共用 `store::export/import` 的 JSON 格式与导�
 
 这里只借鉴工作流。品牌、文案与视觉资产原创，不承诺与参考产品全部功能等价。
 
+## Markdown 转图片（开发分支，未发布）
 
+星绘坊新增 Markdown 排版标签，三款主题与 PNG 导出；范围、来源、上限和待验收项见 [Markdown 转图片](markdown-images.md)。
 
+创作入口已简化为主界面并列的 Markdown 图片、代码卡片、手写纸笺，直接打开对应模式；Markdown 主题直接点选。
