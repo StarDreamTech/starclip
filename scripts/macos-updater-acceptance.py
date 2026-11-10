@@ -164,10 +164,9 @@ def fixture_transport(directory, temporary):
         transport_command("map-host", "sudo", "-n", "cp", str(mapped), str(hosts))
         changed_hosts = True
         transport_command("flush-dns-cache", "sudo", "-n", "dscacheutil", "-flushcache")
-        event("signal-dns-responder")
-        subprocess.run(["sudo", "-n", "killall", "-HUP", "mDNSResponder"], check=False, capture_output=True, timeout=30)
+        transport_command("restart-dns-responder", "sudo", "-n", "killall", "mDNSResponder")
         event("system-host-resolution", addresses=sorted({item[4][0] for item in socket.getaddrinfo("github.com", 443, type=socket.SOCK_STREAM)}),
-              curlConfigPresent=(Path.home() / ".curlrc").is_file(),
+              curlConfigPresent=(Path.home() / ".curlrc").is_file(), hostsFile=str(hosts.resolve()), hostsMode=oct(hosts.stat().st_mode & 0o777),
               curlVersion=command("/usr/bin/curl", "-q", "--version", capture_output=True, text=True).stdout.splitlines()[0])
         event("probe-trusted-https", serverPid=server.pid)
         deadline = time.monotonic() + 20
