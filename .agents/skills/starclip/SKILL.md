@@ -60,3 +60,5 @@ description: 星笺 Starclip 项目共享知识库。处理本仓库的功能开
 图集、严格图片去重、收藏排序与历史浏览已整理为依赖自动备份清理的集成分支，源码及兼容边界见 [图文组合](../../../docs/image-collections.md) 与 [数据迁移](../../../docs/data-migrations.md)，平台实测以本轮 CI / 验证记录为准。
 
 Markdown 图片已整理为独立集成分支：主界面并列入口、三款本地主题与 PNG 导出；许可和原生平台未验证边界见 [Markdown 图片](../../../docs/markdown-images.md)。
+
+实时桌面预览入口已整理为独立集成分支：`npm run app` / `启动实时预览.command` 使用 `com.starclip.livepreview` 与 1422 端口，禁用线上统计及更新源；配置检查和源码证据见 `scripts/dev-preview.mjs`，不等同热更新交互实测。
