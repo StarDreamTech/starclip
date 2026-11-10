@@ -36,22 +36,11 @@ export async function onUpdatePreferencesChanged(callback: (value: UpdatePrefere
   if (!updateDesktopAvailable) return () => {};
   return (await import('@tauri-apps/api/event')).listen<UpdatePreferences>('starclip-update-preferences', event => callback(event.payload));
 }
-export type RecoveryPoint = {
-  id: string;
-  createdAt: number;
-  appVersion: string;
-  schemaVersion: number;
-  reason: string;
-  totalBytes: number;
-  path: string;
-  warnings: string[];
-  compatible: boolean;
-};
 export function initialUpdateStatus(): UpdateStatus {
   return { revision: 0, currentVersion: appVersion, configured: false, phase: 'idle', downloaded: 0 };
 }
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  if (!updateDesktopAvailable) throw new Error('软件更新与恢复需要在星笺桌面版使用。');
+  if (!updateDesktopAvailable) throw new Error('软件更新需要在星笺桌面版使用。');
   return (await import('@tauri-apps/api/core')).invoke<T>(command, args);
 }
 
@@ -88,10 +77,7 @@ export function watchStarclipUpdates(onChange: (state: UpdateStatus) => void) {
     dispose() { disposed = true; unsubscribe?.(); unsubscribe = undefined; },
   };
 }
-export function listRecoveryPoints(): Promise<RecoveryPoint[]> { return invoke('list_recovery_points'); }
-export function createRecoveryPoint(): Promise<RecoveryPoint> { return invoke('create_recovery_point'); }
-export function restoreRecoveryPoint(id: string): Promise<RecoveryPoint> { return invoke('restore_recovery_point', { id }); }
-export async function recoveryPendingPath(): Promise<string | null> {
+export async function pendingDataDirectory(): Promise<string | null> {
   const value = await invoke<{ pendingPath?: string | null }>('get_data_location');
   return value.pendingPath ?? null;
 }

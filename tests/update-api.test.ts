@@ -105,7 +105,7 @@ test('subscription errors allow reconnecting; browser mode never invokes native 
   await demo.read(); await demo.check(); await demo.download('0.3.0'); await demo.install('0.3.0');
   assert.deepEqual(seen, []); assert.equal(calls, 1); assert.equal(listens, 2);
   assert.equal(browser.initialUpdateStatus().phase, 'idle');
-  await assert.rejects(browser.createRecoveryPoint(), /桌面版/);
+  await assert.rejects(browser.setAutoUpdateCheck(true), /桌面版/);
   demo.dispose();
 });
 
@@ -128,4 +128,14 @@ test('update preferences use dedicated native commands and the browser stays off
   await assert.rejects(browser.setAutoUpdateCheck(false), /桌面版/);
   await assert.rejects(browser.skipUpdateVersion('0.3.0'), /桌面版/);
   assert.equal(commands.length, 3); assert.equal(stops, 1);
+});
+
+
+test('manual recovery commands are absent from the frontend API and window permissions', async () => {
+  const api = await loadApi();
+  for (const name of ['listRecoveryPoints', 'createRecoveryPoint', 'restoreRecoveryPoint']) assert.equal(name in api, false);
+  const permissions = JSON.parse(fs.readFileSync(new URL('../src-tauri/permissions/windows.json', import.meta.url), 'utf8'));
+  for (const permission of permissions.permission) {
+    for (const command of ['list_recovery_points', 'create_recovery_point', 'restore_recovery_point']) assert(!permission.commands.allow.includes(command));
+  }
 });

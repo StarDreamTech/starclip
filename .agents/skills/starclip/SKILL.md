@@ -54,3 +54,5 @@ description: 星笺 Starclip 项目共享知识库。处理本仓库的功能开
 | 选检查命令、做桌面验收、理解踩坑与待办 | [开发验证与已知限制](references/development.md) |
 
 完整资料：[产品范围](../../../docs/product.md)、[星尘整理](../../../docs/cleanup.md)、[星伴](../../../docs/starpet.md)、[星芽设计](../../../docs/starpet-design.md)、[验证记录](../../../docs/verification.md)、[参考体验对照](../../../docs/reference-comparison.md)。
+
+自动备份内部化与保留策略已整理进独立合并分支，平台检查结果以对应 PR 为准；实现及边界见 [保留策略](../../../docs/recovery-retention.md)。

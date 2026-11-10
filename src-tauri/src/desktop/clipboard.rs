@@ -134,6 +134,7 @@ pub(super) fn read_clipboard(
 pub(super) fn monitor(app: AppHandle, context: Arc<Context>) {
     thread::spawn(move || {
         let mut maintenance_at = Instant::now() + Duration::from_secs(60);
+        let mut recovery_cleanup_at = Instant::now();
         let mut update_check_at = Instant::now() + Duration::from_secs(20);
         let mut telemetry_at = Instant::now() + Duration::from_secs(60);
         loop {
@@ -148,11 +149,17 @@ pub(super) fn monitor(app: AppHandle, context: Arc<Context>) {
             }
             // Every mutation takes this gate before reader/store locks. A completed
             // migration leaves it paused until restart, including scheduled cleanup.
-            let Ok(storage) = lock(&context.storage) else {
+            let Ok(mut storage) = lock(&context.storage) else {
                 continue;
             };
             if storage.restart_pending() {
                 continue;
+            }
+            if Instant::now() >= recovery_cleanup_at {
+                recovery_cleanup_at = Instant::now() + Duration::from_secs(24 * 60 * 60);
+                // Context exists only after Store opened successfully. Never prune on failed
+                // migrations or while an update/directory switch is waiting for restart.
+                let _ = storage.cleanup_automatic_recovery_points(unix_millis());
             }
             if Instant::now() >= maintenance_at {
                 maintenance_at = Instant::now() + Duration::from_secs(60);

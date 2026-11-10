@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import { compileScript, parse } from '@vue/compiler-sfc';
 import { createRenderer, markRaw, nextTick } from 'vue';
-import type { RecoveryPoint, UpdatePreferences, UpdateStatus } from '../src/update-api.ts';
+import type { UpdatePreferences, UpdateStatus } from '../src/update-api.ts';
 
 // Render the actual Vue panel in memory; no WebView, clipboard or user data is touched.
 type TestNode = { type: string; text: string; props: Record<string, any>; children: TestNode[]; focus: () => void; open: boolean; showModal: () => void; close: () => void; parent?: TestNode };
@@ -19,7 +19,6 @@ const renderer = createRenderer<TestNode, TestNode>({
 });
 const base: UpdateStatus = { revision: 0, currentVersion: '0.2.0', configured: true, phase: 'idle', downloaded: 0 };
 const defaultPreferences: UpdatePreferences = { revision: 0, autoCheck: true, skippedVersion: null, lastCheckAt: null };
-const point: RecoveryPoint = { id: 'fixed-test-point', createdAt: 1760000000000, appVersion: '0.2.0', schemaVersion: 3, reason: 'manual', totalBytes: 1024, path: '/test-only/snapshot', warnings: [], compatible: true };
 function nodes(root: TestNode): TestNode[] { return [root, ...root.children.flatMap(nodes)]; }
 function text(root: TestNode): string { return root.type === '#comment' ? '' : root.text + root.children.map(text).join(''); }
 function button(root: TestNode, label: string): TestNode { const found = nodes(root).find(item => item.type === 'button' && text(item) === label); assert(found, `missing button: ${label}`); return found; }
@@ -27,7 +26,7 @@ async function flush() { await new Promise(resolve => setImmediate(resolve)); aw
 let moduleNumber = 0;
 async function mount(mock: Record<string, unknown>, props: Record<string, unknown> = {}, name = 'UpdateSettings') {
   Object.assign(globalThis, { updatePanelMock: mock });
-  const api = `const api = globalThis.updatePanelMock; export const { updateDesktopAvailable, initialUpdateStatus, initialUpdatePreferences, getUpdatePreferences, setAutoUpdateCheck, skipUpdateVersion, onUpdatePreferencesChanged, watchStarclipUpdates, listRecoveryPoints, recoveryPendingPath, createRecoveryPoint, restoreRecoveryPoint, restartAfterUpdate } = api;`;
+  const api = `const api = globalThis.updatePanelMock; export const { updateDesktopAvailable, initialUpdateStatus, initialUpdatePreferences, getUpdatePreferences, setAutoUpdateCheck, skipUpdateVersion, onUpdatePreferencesChanged, watchStarclipUpdates, pendingDataDirectory, restartAfterUpdate } = api;`;
   const apiUrl = 'data:text/javascript;base64,' + Buffer.from(api + `\n// ${moduleNumber++}`).toString('base64');
   const source = fs.readFileSync(new URL(`../src/components/${name}.vue`, import.meta.url), 'utf8');
   const { descriptor } = parse(source);
@@ -68,8 +67,7 @@ function nativeMock(initial: UpdateStatus = base) {
         dispose() { calls.push('dispose'); },
       };
     },
-    async listRecoveryPoints() { return [point]; }, async recoveryPendingPath(): Promise<string | null> { return null; },
-    async createRecoveryPoint() { return point; }, async restoreRecoveryPoint(id: string) { calls.push(`restore:${id}`); return point; },
+    async pendingDataDirectory(): Promise<string | null> { return null; },
     async restartAfterUpdate() { calls.push('restart'); },
   };
   return mock;
@@ -97,24 +95,28 @@ test('download opens a ready dialog without installing; later preserves the pack
   dialog = nodes(root).find(item => item.type === 'dialog')!;
   await button(dialog, '安装并重启').props.onClick(); await flush();
   assert(mock.calls.includes('install:0.3.0'), 'installation uses the version the user confirmed');
-  assert.equal(busy.at(-1), true); assert.equal(button(root, '保存当前恢复点').props.disabled, true);
+  assert.equal(busy.at(-1), true); assert.equal(button(root, '刷新状态').props.disabled, true);
   assert.deepEqual(mock.calls.slice(-2), ['install:0.3.0', 'restart'], 'confirmed installation restarts automatically');
   app.unmount(); assert.equal(busy.at(-1), false); assert(mock.calls.includes('dispose'));
 });
 
-test('restore confirmation names old data; lost restore response still freezes if the directory switch committed', async () => {
-  const mock = nativeMock(); let committed = false; const busy: boolean[] = [];
-  mock.restoreRecoveryPoint = async () => { committed = true; throw new Error('测试响应中断'); };
-  mock.recoveryPendingPath = async () => committed ? '/test-only/restored-directory' : null;
-  const { root, app } = await mount(mock, { onBusy: (value: boolean) => busy.push(value) });
-  await button(root, '恢复此时数据').props.onClick(); await flush();
-  assert.match(text(root), /旧历史、旧偏好与旧星伴成长/); assert.match(text(root), /不会合并/);
-  await button(root, '取消').props.onClick(); await flush(); assert.equal(committed, false);
-  await button(root, '恢复此时数据').props.onClick(); await flush();
-  await button(root, '确认恢复旧数据').props.onClick(); await flush();
-  assert.equal(busy.at(-1), true); assert.match(text(root), /\/test-only\/restored-directory/); assert.match(text(root), /测试响应中断/);
-  assert.equal(button(root, '恢复此时数据').props.disabled, true);
+test('updates expose no recovery controls or calls and pending directory changes still require restart', async () => {
+  const mock = nativeMock();
+  const forbidden = () => { mock.calls.push('unexpected-recovery-call'); throw new Error('Recovery controls must remain internal'); };
+  const { root, app } = await mount({ ...mock, listRecoveryPoints: forbidden, createRecoveryPoint: forbidden, restoreRecoveryPoint: forbidden });
+  assert.doesNotMatch(text(root), /恢复点|恢复此时数据|保存当前恢复点/);
+  assert.match(text(root), /软件更新/);
+  assert.deepEqual(mock.calls, ['read']);
   app.unmount();
+  const pending = nativeMock(); pending.pendingDataDirectory = async () => '/test-only/pending-directory';
+  const busy: boolean[] = [];
+  const mounted = await mount(pending, { onBusy: (value: boolean) => busy.push(value) });
+  assert.equal(busy.at(-1), true);
+  assert.match(text(mounted.root), /数据位置已变更，重启后继续/);
+  assert.equal(button(mounted.root, '刷新状态').props.disabled, true);
+  await button(mounted.root, '重启星笺').props.onClick(); await flush();
+  assert(pending.calls.includes('restart'));
+  mounted.app.unmount();
 });
 
 test('ready state survives reopening settings; Escape and backdrop dismiss only its dialog; unsaved preferences block installation', async () => {
@@ -180,7 +182,7 @@ test('lost install response recovers installed state; automatic restart failure 
   const dialog = nodes(root).find(item => item.type === 'dialog')!;
   await button(dialog, '安装并重启').props.onClick(); await flush();
   assert.match(text(root), /自动重启未完成.*再次点击/); assert.match(text(root), /固定测试重启失败/);
-  assert.equal(busy.at(-1), true); assert.equal(button(root, '保存当前恢复点').props.disabled, true);
+  assert.equal(busy.at(-1), true); assert.equal(button(root, '刷新状态').props.disabled, true);
   restartFails = false;
   await button(root, '重启星笺').props.onClick(); await flush();
   assert.equal(mock.calls.filter(call => call === 'restart').length, 2);
@@ -199,13 +201,10 @@ test('browser preview is explicit and never reads native state', async () => {
 
 test('installer launch failure keeps editing frozen and requests restart without claiming success', async () => {
   const mock = nativeMock(); const busy: boolean[] = [];
-  mock.listRecoveryPoints = async () => [{ ...point, createdAt: 0, appVersion: 'unknown', compatible: false, warnings: ['固定测试：恢复点清单损坏'] }];
   const { root, app } = await mount(mock, { onBusy: (value: boolean) => busy.push(value) });
-  assert.match(text(root), /时间未知/); assert.match(text(root), /数据损坏或版本不兼容/);
-  assert.equal(button(root, '恢复此时数据').props.disabled, true);
   mock.send({ ...base, revision: 4, phase: 'restart-required', error: '固定测试：安装器未启动，请先重启' }); await flush();
   assert.equal(busy.at(-1), true); assert.match(text(root), /安装未完成，请先重启星笺/);
-  assert.doesNotMatch(text(root), /新版已安装/); assert.equal(button(root, '保存当前恢复点').props.disabled, true);
+  assert.doesNotMatch(text(root), /新版已安装/); assert.equal(button(root, '刷新状态').props.disabled, true);
   await button(root, '重启星笺').props.onClick(); await flush(); assert(mock.calls.includes('restart'));
   app.unmount();
 });
