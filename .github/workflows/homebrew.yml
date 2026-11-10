@@ -118,8 +118,8 @@ jobs:
           node scripts/homebrew-release.mjs cask evidence.json "$tap_path/Casks/starclip.rb"
           brew style --cask cpython666/tap/starclip
           brew trust --cask cpython666/tap/starclip
-          brew audit --cask --strict --online --arch=arm64 cpython666/tap/starclip
-          brew fetch --cask --arch=arm64 cpython666/tap/starclip
+          brew audit --cask --strict --online --arch=arm cpython666/tap/starclip
+          brew fetch --cask --arch=arm cpython666/tap/starclip
           cp "$tap_path/Casks/starclip.rb" starclip.rb
       - uses: actions/upload-artifact@v4
         if: steps.plan.outputs.skip != 'true'
