@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory)][string]$BaselineInstaller,
-  [ValidateSet('public-0.2.3', 'public-0.2.2')][string]$BaselineOrigin = 'public-0.2.3',
+  [ValidateSet('public-0.2.4', 'public-0.2.3', 'public-0.2.2')][string]$BaselineOrigin = 'public-0.2.4',
   [Parameter(Mandatory)][string]$FixtureDirectory,
   [Parameter(Mandatory)][string]$RepositoryRoot,
   [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{40}$')][string]$SourceHeadSha,

@@ -9,14 +9,14 @@ on:
       source_ref:
         description: 'Existing release tag, for example v0.2.4'
         required: true
-        default: 'v0.2.4'
+        default: 'v0.2.5'
         type: string
       baseline:
         description: 'Genuine public baseline; source-comparison rebuilds target source as 0.2.2'
         required: true
-        default: public-0.2.3
+        default: public-0.2.4
         type: choice
-        options: [public-0.2.3, public-0.2.2, source-comparison]
+        options: [public-0.2.4, public-0.2.3, public-0.2.2, source-comparison]
 permissions:
   contents: read
   actions: read
@@ -136,7 +136,10 @@ jobs:
         run: |
           baseline="$RUNNER_TEMP/starclip-public-baseline/Starclip.app"
           flags=()
-          baseline_schema=2 # Both immutable genuine public baselines use schema 2.
+          baseline_schema=2
+          if [ "$BASELINE" != source-comparison ]; then
+            baseline_schema=$(python3 scripts/updater_baselines.py metadata --origin "$BASELINE" --platform darwin-aarch64 | python3 -c 'import json,sys; print(json.load(sys.stdin)["schema"])')
+          fi
           if [ "$BASELINE" = public-0.2.2 ]; then
             flags=(--allow-manual-recovery)
           fi

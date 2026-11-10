@@ -5,7 +5,7 @@ on:
       tag:
         description: 'Existing signed target tag (the release may remain a draft)'
         required: true
-        default: v0.2.4
+        default: v0.2.5
         type: string
       release-run-id:
         description: 'Successful Build signed release draft run for that exact tag/head'
@@ -14,9 +14,9 @@ on:
       baseline:
         description: 'Genuine public Windows baseline'
         required: true
-        default: public-0.2.3
+        default: public-0.2.4
         type: choice
-        options: [public-0.2.3, public-0.2.2]
+        options: [public-0.2.4, public-0.2.3, public-0.2.2]
 permissions:
   contents: read
   actions: read
