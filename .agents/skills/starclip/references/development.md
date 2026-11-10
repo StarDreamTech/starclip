@@ -154,3 +154,7 @@ Tauri 资产解析器在正式包中读取嵌入资产，在带 `devUrl` 的开�
 实现入口与保留边界见 [保留策略](../../../../docs/recovery-retention.md)，3 项原创文件系统定向回归、24 项既有存储检查、Node 19 项及 Web / macOS desktop 编译证据见 [验证记录](../../../../docs/verification.md#自动恢复点保留2026-11-03开发分支未发布)。未对正式快照执行删除；不将编译或文件系统夹具测试扩写成定时器 / Windows GUI 已实测。
 
 2026-11-05 开发分支将恢复点收为内部机制，撤下用户控件、三项 API / 命令 / 权限和启动失败的恢复点选择，保留自动备份与校验后清理。定向 Node 37、Rust recovery 10 / migration 10（部分重叠）与 share 2、Python 夹具 8、Web 构建及 macOS desktop 编译通过；中英文两张数据图已同步，见 [验证记录](../../../../docs/verification.md#恢复点收为内部升级备份2026-11-05开发分支未发布)。两平台升级验收脚本对结构 ≥5 目标等待旧自动快照清理，旧应用副本仍独立核对；结构 ≤4 保留历史断言。新增 macOS 脚本分支夹具已运行，Windows PowerShell 本机不可用；实际签名目标的双平台 GUI 升级与首次后台清理仍待发版验收。
+
+## 逐项集成时的安装夹具修正（2026-11-10）
+
+本轮平台构建期间确认两个验收问题并修正：`installer-fixture.py` 原先硬性要求迁移后仍有快照，与已实现自动清理冲突；现由 macOS / Windows smoke 根据候选源码是否有自动清理模块选择旧保留或新清理断言，当前数据 / 偏好检查不放宽。新增的 Python 夹具在 Windows 实际因 cp1252 读取中文源码失败，`test-fixture-schema.py` 改用显式 UTF-8。Python 9 项通过；服务器的重跑结果、合并状态和未验收原生场景见 [分支记录](../../../../docs/development-branches.md)。
