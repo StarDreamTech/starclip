@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { errorText, t } from '../i18n';
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { defineAsyncComponent, computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';
 import typescript from 'highlight.js/lib/languages/typescript';
@@ -14,6 +14,7 @@ import sql from 'highlight.js/lib/languages/sql';
 import markdown from 'highlight.js/lib/languages/markdown';
 import go from 'highlight.js/lib/languages/go';
 import java from 'highlight.js/lib/languages/java';
+const MarkdownPanel = defineAsyncComponent(() => import('./MarkdownPanel.vue'));
 import HandwritingPanel from './HandwritingPanel.vue';
 import UiSelect from './UiSelect.vue';
 import UiColor from './UiColor.vue';
@@ -24,13 +25,13 @@ import { detectLanguage } from '../code-language';
 import { defaultCodeCardStyle, renderCodeCard } from '../code-card';
 
 Object.entries({ javascript, typescript, python, rust, json, html: xml, css, bash, sql, markdown, go, java }).forEach(([name, definition]) => hljs.registerLanguage(name, definition));
-const props = withDefaults(defineProps<{ clip: Clip | null; groups: Group[]; initialMode?: 'code' | 'handwriting' }>(), { initialMode: 'code' });
+const props = withDefaults(defineProps<{ clip: Clip | null; groups: Group[]; initialMode?: 'code' | 'handwriting' | 'markdown' }>(), { initialMode: 'code' });
 const emit = defineEmits<{ saved: []; close: [] }>();
 const dialog = ref<HTMLDialogElement>();
-const mode = ref<'code' | 'handwriting'>(props.initialMode);
-const title = ref(props.clip?.title || (props.initialMode === 'handwriting' ? t('写给星空的信') : t('一页星码')));
+const mode = ref<'code' | 'handwriting' | 'markdown'>(props.initialMode);
+const title = ref(props.clip?.title ?? (props.initialMode === 'markdown' ? '' : props.initialMode === 'handwriting' ? t('写给星空的信') : t('一页星码')));
 // Switching modes shares the user's original text; neither tab replaces or rewrites it.
-const content = ref(props.clip?.content ?? (props.initialMode === 'handwriting' ? t('让散落的灵感，\n在这里连成星座。') : 'fn main() {\n    println!("Hello, stars. ✦");\n}'));
+const content = ref(props.clip?.content ?? (props.initialMode === 'markdown' ? t('# 星空笔记\n\n在这里写下你的正文。') : props.initialMode === 'handwriting' ? t('让散落的灵感，\n在这里连成星座。') : 'fn main() {\n    println!("Hello, stars. ✦");\n}'));
 // Auto stays on until the user picks a language; a saved, specific language is kept as chosen.
 const autoLanguage = ref(!props.clip?.language || props.clip.language === 'plaintext');
 const pickedLanguage = ref(props.clip?.language || 'plaintext');
@@ -110,13 +111,14 @@ function exportImage() {
 <template>
   <dialog ref="dialog" class="code-studio" @cancel.prevent="!busy && emit('close')" @click="event => { if (!busy && event.target === dialog) emit('close'); }" @keydown.meta.s.prevent="save" @keydown.ctrl.s.prevent="save">
     <div class="studio-heading"><div><span class="studio-eyebrow">A LITTLE PIECE OF YOUR UNIVERSE</span><h2>{{ t('星绘坊') }} <span>✦</span></h2><p>{{ t('让代码有星光，让文字有温度。') }}</p></div><button class="studio-close" :aria-label="t('关闭星绘坊')" :disabled="busy" @click="emit('close')">×</button></div>
-    <div class="studio-tabs" role="tablist" :aria-label="t('卡片类型')"><button id="code-tab" role="tab" :aria-selected="mode === 'code'" aria-controls="studio-workspace" :class="{ active: mode === 'code' }" :disabled="busy" @click="mode = 'code'"><span aria-hidden="true">〈/〉</span>{{ t('星码卡') }}<em>{{ t('代码卡片') }}</em></button><button id="handwriting-tab" role="tab" :aria-selected="mode === 'handwriting'" aria-controls="studio-workspace" :class="{ active: mode === 'handwriting' }" :disabled="busy" @click="mode = 'handwriting'"><span aria-hidden="true">✎</span>{{ t('月光笺') }}<em>{{ t('手写纸笺') }}</em></button><small>{{ t('切换样式，正文保留') }}</small></div>
-    <div id="studio-workspace" role="tabpanel" :aria-labelledby="mode === 'code' ? 'code-tab' : 'handwriting-tab'">
-      <div class="studio-meta" :class="{ 'handwriting-meta': mode === 'handwriting' }"><label>{{ t('标题') }}<input v-model="title" maxlength="200" :aria-label="t('卡片标题')" /></label><template v-if="mode === 'code'"><div class="studio-field"><span>{{ t('语言') }}</span><UiSelect v-model="languageChoice" :options="languageOptions" :label="t('代码语言')" :disabled="busy" /></div><div class="studio-field"><span>{{ t('分组') }}</span><UiSelect v-model="groupId" :options="groupOptions" :label="t('代码分组')" :disabled="busy" /></div></template><p v-else>{{ t('把文字变成一张纸笺。选择字体与纸张，预览会自动更新。') }}</p></div>
+    <div class="studio-tabs" role="tablist" :aria-label="t('卡片类型')"><button id="code-tab" role="tab" :aria-selected="mode === 'code'" aria-controls="studio-workspace" :class="{ active: mode === 'code' }" :disabled="busy" @click="mode = 'code'"><span aria-hidden="true">〈/〉</span>{{ t('星码卡') }}<em>{{ t('代码卡片') }}</em></button><button id="handwriting-tab" role="tab" :aria-selected="mode === 'handwriting'" aria-controls="studio-workspace" :class="{ active: mode === 'handwriting' }" :disabled="busy" @click="mode = 'handwriting'"><span aria-hidden="true">✎</span>{{ t('月光笺') }}<em>{{ t('手写纸笺') }}</em></button><button id="markdown-tab" role="tab" :aria-selected="mode === 'markdown'" aria-controls="studio-workspace" :class="{ active: mode === 'markdown' }" :disabled="busy" @click="mode = 'markdown'">{{ t('Markdown 排版') }}<em>{{ t('文章图片') }}</em></button><small>{{ t('切换样式，正文保留') }}</small></div>
+    <div id="studio-workspace" role="tabpanel" :aria-labelledby="`${mode}-tab`">
+      <div class="studio-meta" :class="{ 'handwriting-meta': mode === 'handwriting' }"><label>{{ mode === 'markdown' ? t('标题（选填）') : t('标题') }}<input v-model="title" :disabled="busy" maxlength="200" :aria-label="t('卡片标题')" /></label><template v-if="mode === 'code'"><div class="studio-field"><span>{{ t('语言') }}</span><UiSelect v-model="languageChoice" :options="languageOptions" :label="t('代码语言')" :disabled="busy" /></div><div class="studio-field"><span>{{ t('分组') }}</span><UiSelect v-model="groupId" :options="groupOptions" :label="t('代码分组')" :disabled="busy" /></div></template><p v-else-if="mode === 'handwriting'">{{ t('把文字变成一张纸笺。选择字体与纸张，预览会自动更新。') }}</p></div>
       <div v-if="mode === 'code'" class="studio-panels">
         <section class="studio-editor"><div class="studio-panel-label">{{ t('编辑代码') }}<button v-if="language === 'json'" @click="format">{{ t('格式化 JSON') }}</button><span v-else>{{ content.split('\n').length }} {{ t('行 ·') }} {{ [...content].length }} {{ t('字符') }}</span></div><textarea v-model="content" :aria-label="t('代码内容')" spellcheck="false" autocomplete="off" autocapitalize="off" @keydown="insertTab" /><p class="editor-note">{{ t('Tab 插入两个空格 · 原文只在本机处理') }}</p></section>
         <section class="studio-preview"><div class="studio-panel-label">{{ t('导出效果预览') }} <span v-if="preview">{{ preview.width }} × {{ preview.height }}</span></div><div class="canvas-preview"><img v-if="preview" :src="preview.url" :alt="t('{title}，星码卡导出预览', { title })" /><div v-else class="preview-placeholder"><span>✦</span><p>{{ previewError || t('正在点亮这张卡片…') }}</p></div></div><p class="preview-note">{{ style.widthMode === 'fixed' ? t('长行软换行，原文与行号保留 · PNG 以 2 倍分辨率生成') : t('预览即导出 · PNG 以 2 倍分辨率生成') }}</p></section>
       </div>
+      <MarkdownPanel v-else-if="mode === 'markdown'" v-model:text="content" :title="title" @busy="busy = $event" />
       <HandwritingPanel v-else :text="content" :title="title">
         <template #editor><section class="studio-editor"><div class="studio-panel-label">{{ t('纸笺正文') }}<span>{{ content.split('\n').length }} {{ t('行 ·') }} {{ [...content].length }} {{ t('字符') }}</span></div><textarea v-model="content" :aria-label="t('纸笺正文')" class="handwriting-text" spellcheck="false" autocomplete="off" autocapitalize="off" /><p class="editor-note">{{ t('切换卡片类型不会改写正文，也不会保存为代码。') }}</p></section></template>
       </HandwritingPanel>

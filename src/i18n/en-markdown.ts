@@ -1,0 +1,20 @@
+export const enMarkdown: Record<string, string> = {
+  "Markdown 图片": "Markdown image",
+  "标题（选填）": "Title (optional)",
+  "# 星空笔记\n\n在这里写下你的正文。": "# Starry notes\n\nWrite your text here.",
+  "主题来源与许可": "Theme source and license",
+  "Markdown 排版": "Markdown layout",
+  "文章图片": "Article image",
+  "文章主题": "Article theme",
+  "素纸": "Paper",
+  "星紫": "Violet",
+  "深夜": "Midnight",
+  "图片宽度": "Image width",
+  "Markdown 正文": "Markdown content",
+  "主题来源：Drake / MIT · 已适配星笺": "Theme source: Drake / MIT · Adapted for Starclip",
+  "本地排版 · 支持标题、列表、引用、表格与代码块；图片显示替代文字，HTML 按原文显示。": "Local rendering · Headings, lists, quotes, tables and code blocks. Images use alt text; HTML is displayed as text.",
+  "导出 Markdown 图片": "Export Markdown image",
+  "Markdown 图片已导出": "Markdown image exported",
+  "Markdown 最多 30,000 字符": "Markdown supports up to 30,000 characters",
+  "内容过长，请拆分后导出": "Content is too long. Split it before exporting."
+};

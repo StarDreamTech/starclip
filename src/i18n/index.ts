@@ -8,6 +8,7 @@ import { enUpdates } from './en-updates.ts'
 import { enPrivacy } from './en-privacy.ts'
 import { enHandwriting } from './en-handwriting.ts'
 import { enTelemetry } from './en-telemetry.ts'
+import { enMarkdown } from './en-markdown.ts'
 import { enStats } from './en-stats.ts'
 import { backendEn, backendPatterns } from './backend.ts'
 
@@ -78,7 +79,7 @@ export function relativeTime(time: number, now = Date.now()): string {
   return formatDate(time, { month: 'short', day: 'numeric' })
 }
 
-const catalog: Record<string, string> = { ...en, ...enMore, ...enMore2, ...enMore3, ...enData, ...enUpdates, ...enPrivacy, ...enHandwriting, ...enTelemetry, ...enStats, ...backendEn }
+const catalog: Record<string, string> = { ...en, ...enMore, ...enMore2, ...enMore3, ...enData, ...enUpdates, ...enPrivacy, ...enHandwriting, ...enTelemetry, ...enStats, ...enMarkdown, ...backendEn }
 function lookup(source: string): string {
   return catalog[source] ?? source
 }

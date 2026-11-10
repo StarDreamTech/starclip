@@ -266,3 +266,5 @@ MIT License.
 验证详情见 [首版验证记录](docs/verification.md)。
 
 升级前自动备份作为内部保护；旧自动副本仅在当前库通过校验后按保留策略清理，历史手动副本保留。详见 [自动备份保留策略](docs/recovery-retention.md)。
+
+星绘坊新增「Markdown 图片」直接入口，内置素纸 / 星紫 / 深夜三种主题并导出 PNG。主题许可、格式支持与当前平台验证边界见 [Markdown 图片](docs/markdown-images.md)。
