@@ -219,7 +219,7 @@ class FixtureSchemaTests(unittest.TestCase):
 
     def test_macos_updater_checks_cleanup_for_development_targets_and_keeps_legacy_contract(self):
         # Exercise the actual nested harness check with disposable files, without running an app.
-        tree = ast.parse((SCRIPTS / 'macos-updater-acceptance.py').read_text())
+        tree = ast.parse((SCRIPTS / 'macos-updater-acceptance.py').read_text(encoding='utf-8'))
         check = next(item for item in ast.walk(tree) if isinstance(item, ast.FunctionDef) and item.name == 'fixture')
         with tempfile.TemporaryDirectory() as temp:
             data = Path(temp)
