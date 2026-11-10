@@ -170,6 +170,20 @@ class FixtureSchemaTests(unittest.TestCase):
             self.assertEqual(installer(path, 'upgrade', 4).returncode, 0)
             self.assertNotEqual(installer(path, 'upgrade', 2).returncode, 0)
 
+    def test_installer_cleanup_mode_requires_intact_current_data_and_no_old_migration_point(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path = root / 'upgrade.sqlite3'
+            database(path, 0)
+            self.assertEqual(installer(path, 'seed', 0).returncode, 0)
+            with closing(sqlite3.connect(path)) as db, db:
+                db.execute('PRAGMA user_version=4')
+            self.assertEqual(installer(path, 'upgrade-cleaned', 4).returncode, 0)
+            self.assertNotEqual(installer(path, 'upgrade', 4).returncode, 0)
+            with closing(sqlite3.connect(path)) as db, db:
+                db.execute("UPDATE clips SET title='damaged original fixture'")
+            self.assertNotEqual(installer(path, 'upgrade-cleaned', 4).returncode, 0)
+
     def test_release_baseline_two_and_target_four_are_strict_and_keep_opt_out(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
