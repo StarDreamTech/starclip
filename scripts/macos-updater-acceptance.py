@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real updater UI on a disposable GitHub macOS ARM runner, never a user Mac.
 
-Release mode defaults to genuine public 0.2.3. Public 0.2.2 and tag source with
+Release mode defaults to genuine public 0.2.4. Older public packages and tag source with
 comparison metadata 0.2.2 remain explicit baselines for signed draft artifacts
 over a runner-local trusted HTTPS fixture. Historical 0.2.2 may require explicitly recorded manual recovery;
 that never counts as an automatic restart pass or public GitHub delivery test.
@@ -172,7 +172,7 @@ def fixture_transport(directory, temporary):
             if server.poll() is not None:
                 raise RuntimeError("Runner-local HTTPS fixture exited during startup")
             probe = subprocess.run(["/usr/bin/curl", "--fail", "--silent", "--show-error", "--max-time", "2",
-                                    "--resolve", "github.com:443:127.0.0.1", "--noproxy", "github.com",
+                                    "--noproxy", "github.com",
                                     "--write-out", "%{stderr}\nhttp_status=%{http_code} remote_ip=%{remote_ip}\n",
                                     ENDPOINT], capture_output=True, timeout=5)
             last_probe = dict(returncode=probe.returncode, responseSha256=hashlib.sha256(probe.stdout).hexdigest(),
@@ -316,7 +316,7 @@ def main():
         (evidence / name).write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
 
     def pinned_manifest():
-        raw = command("/usr/bin/curl", "--fail", "--silent", "--show-error", "--location", "--retry", "3", "--max-time", "60", ENDPOINT, capture_output=True).stdout
+        raw = command("/usr/bin/curl", "--fail", "--silent", "--show-error", "--location", "--retry", "3", "--max-time", "60", "--noproxy", "github.com", ENDPOINT, capture_output=True).stdout
         assert hashlib.sha256(raw).hexdigest() == MANIFEST_HASH, "Update manifest differs from the pinned acceptance target"
         manifest = json.loads(raw)
         assert manifest["version"] == TARGET
@@ -432,7 +432,7 @@ def main():
         pinned_manifest()
         # Independently pin the expected installed executable. This does not
         # replace the updater's real HTTPS download or its signature checks.
-        archive = command("/usr/bin/curl", "--fail", "--silent", "--show-error", "--location", "--retry", "3", "--max-time", "60", TARGET_URL, capture_output=True).stdout
+        archive = command("/usr/bin/curl", "--fail", "--silent", "--show-error", "--location", "--retry", "3", "--max-time", "60", "--noproxy", "github.com", TARGET_URL, capture_output=True).stdout
         assert hashlib.sha256(archive).hexdigest() == TARGET_HASH
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
             members = [m for m in bundle if m.name.endswith("/Contents/MacOS/starclip") and m.isfile()]
