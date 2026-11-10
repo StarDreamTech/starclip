@@ -3,11 +3,14 @@ export interface Clip {
   id: number;
   content: string;
   title: string;
-  kind: 'text' | 'link' | 'code' | 'color' | 'image' | 'file';
+  kind: 'text' | 'link' | 'code' | 'color' | 'image' | 'file' | 'bundle';
   entries?: FileEntry[] | null;
   image?: { width: number; height: number; bytes: number } | null;
+  images?: Array<{ width: number; height: number; bytes: number }>;
   language: string | null;
   pinned: boolean;
+  onTop?: boolean;
+  favoritePosition?: number;
   keepForever: boolean;
   groupId: number | null;
   createdAt: number;
@@ -46,6 +49,7 @@ export interface Settings {
   shortcut: string;
 }
 export interface HistoryQuery {
+  sort?: 'updated' | 'created' | 'copies' | 'manual';
   page?: number;
   filter?: string;
   query?: string;
@@ -139,7 +143,7 @@ export interface DataDirectoryPlan {
 export interface CleanupFilter {
   minBytes: number;
   olderThanDays: number;
-  kind: 'all' | Clip['kind'];
+  kind: 'all' | Exclude<Clip['kind'], 'bundle'>;
   includeGrouped: boolean;
 }
 export interface CleanupPreview {

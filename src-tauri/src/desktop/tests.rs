@@ -2,6 +2,39 @@ use super::{project_link, write_and_suppress};
 use crate::capture::{CaptureKey, CaptureState};
 
 #[test]
+fn tray_click_opens_main_window_only_on_left_release() {
+    use super::{tray_opens_main_window, MouseButton, MouseButtonState, TrayIconEvent};
+
+    for button in [MouseButton::Left, MouseButton::Right, MouseButton::Middle] {
+        for button_state in [MouseButtonState::Down, MouseButtonState::Up] {
+            let event = TrayIconEvent::Click {
+                id: "main-tray".into(),
+                position: Default::default(),
+                rect: Default::default(),
+                button,
+                button_state,
+            };
+            assert_eq!(
+                tray_opens_main_window(&event),
+                button == MouseButton::Left && button_state == MouseButtonState::Up,
+                "{event:?}"
+            );
+        }
+        assert!(!tray_opens_main_window(&TrayIconEvent::DoubleClick {
+            id: "main-tray".into(),
+            position: Default::default(),
+            rect: Default::default(),
+            button,
+        }));
+    }
+    assert!(!tray_opens_main_window(&TrayIconEvent::Move {
+        id: "main-tray".into(),
+        position: Default::default(),
+        rect: Default::default(),
+    }));
+}
+
+#[test]
 fn startup_native_operations_release_storage_and_rollback_after_update_freeze() {
     use super::*;
     use std::cell::{Cell, RefCell};
@@ -25,6 +58,10 @@ fn startup_native_operations_release_storage_and_rollback_after_update_freeze() 
             reader: Mutex::new(Reader {
                 clipboard: None,
                 capture: CaptureState::default(),
+                last_image_id: None,
+                last_bundle_id: None,
+                copy_image_png: None,
+                own_bundle: None,
             }),
             clipboard_error: Mutex::new(None),
             shortcut_error: Mutex::new(None),
@@ -273,6 +310,10 @@ fn ai_broker_checks_privacy_revoke_freeze_and_concurrent_changes() {
         reader: Mutex::new(Reader {
             clipboard: None,
             capture: CaptureState::default(),
+            last_image_id: None,
+            last_bundle_id: None,
+            copy_image_png: None,
+            own_bundle: None,
         }),
         clipboard_error: Mutex::new(None),
         shortcut_error: Mutex::new(None),

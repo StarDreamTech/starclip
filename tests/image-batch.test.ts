@@ -30,6 +30,7 @@ test('batch UI requires private consent, retains original order, invalidates pre
       async copyImageFiles(ids: number[], allow: boolean) { if (fail) throw new Error('original fixed failure'); writes.push(['copy', ids, allow]) },
       async prepareImageTransfer(ids: number[], allow: boolean) { writes.push(['prepare', ids, allow]); return 'original-token' },
       async dragImageFiles(token: string) { writes.push(['drag', token]); return false },
+      async createBundle(ids: number[], text: string, title: string, allow: boolean) { writes.push(['collect',ids,text,title,allow]);return {id:20,kind:'bundle'}; },
       async exportImageFiles(ids: number[], allow: boolean) { writes.push(['export', ids, allow]); return null },
     },
   } });
@@ -48,7 +49,7 @@ test('batch UI requires private consent, retains original order, invalidates pre
   const button = (label: string) => { const b = nodes(root).find(n => n.type === 'button' && text(n) === label); assert(b, label); return b };
   await button('复制为图片文件').props.onClick(); await flush();
   assert.deepEqual(writes, [], 'private images cannot transfer before explicit consent');
-  const checkbox = nodes(root).find(n => n.type === 'input'); assert(checkbox);
+  const checkbox = nodes(root).find(n => n.type === 'input' && n.props.type === 'checkbox'); assert(checkbox);
   checkbox.props.onChange({ target: { checked: true } }); await flush();
   await button('复制为图片文件').props.onClick(); await flush();
   assert.deepEqual(writes.pop(), ['copy', [3, 1], true]);
@@ -58,11 +59,17 @@ test('batch UI requires private consent, retains original order, invalidates pre
   assert.deepEqual(writes.pop(), ['drag', 'original-token']);
   assert(text(root).includes('已取消拖出'));
   props.ids = [1]; privateImage = false; await flush();
-  assert(!nodes(root).some(n => n.type === 'input'));
+  assert(!nodes(root).some(n => n.type === 'input' && n.props.type === 'checkbox'));
   assert(button('准备拖出'));
   await button('导出到文件夹').props.onClick(); await flush();
   assert.deepEqual(writes.pop(), ['export', [1], false]);
   assert(text(root).includes('已取消导出'));
+  const caption=nodes(root).find(n=>n.type==='textarea')!;
+  caption.props.onInput({target:{value:'Original caption'}});
+  const title=nodes(root).find(n=>n.type==='input'&&n.props.type!=='checkbox')!;
+  title.props.onInput({target:{value:'Original album'}});await flush();
+  await button('保存图集并星标收藏').props.onClick();await flush();
+  assert.deepEqual(writes.pop(),['collect',[1],'Original caption','Original album',false]);
   fail = true;
   await button('复制为图片文件').props.onClick(); await flush();
   assert(text(root).includes('original fixed failure'));

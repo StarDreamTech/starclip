@@ -24,7 +24,7 @@ const canRelease = computed(() => !!state.value && !busy.value && !recordLoading
 defineExpose({ canRelease })
 const fieldChoices = computed(() => [{ key: 'title', label: t('标题') }, { key: 'content', label: t('正文') }, { key: 'tags', label: t('普通标签') }, { key: 'sources', label: t('来源域名') }])
 const groupOptions = computed(() => [{ value: null as number | null, label: t('全部分组') }, ...props.groups.map(item => ({ value: item.id, label: item.name }))])
-const eligible = computed(() => (props.loadHistory ? records.value : props.clips).filter(clip => !protectedClip(clip) && !pendingClip(clip, props.revision) && clip.kind !== 'image' && clip.kind !== 'file'))
+const eligible = computed(() => (props.loadHistory ? records.value : props.clips).filter(clip => !protectedClip(clip) && !pendingClip(clip, props.revision) && clip.kind !== 'image' && clip.kind !== 'file' && clip.kind !== 'bundle'))
 const available = computed(() => (recordLoading.value || recordReadFailed.value) ? [] : props.loadHistory ? eligible.value : eligible.value.filter(clip => (group.value === null || clip.groupId === group.value) && (!search.value.trim() || `${clip.title}\n${clip.content}\n${clip.tags?.join(' ')}`.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase()))))
 const chosen = computed(() => selectedRecords.value.filter(clip => selected.value.includes(clip.id)))
 const previewClips = computed(() => preview.value ? selectedRecords.value.filter(clip => preview.value!.clipIds.includes(clip.id)) : [])
@@ -46,7 +46,7 @@ async function loadRecords() {
     records.value = result.clips; history.value = result.history; recordPage.value = result.history?.page ?? 1
     if (selectedDetails) {
       const requested = new Set(selectedIds)
-      const current = new Map(selectedDetails.filter(clip => !protectedClip(clip) && !pendingClip(clip, props.revision) && clip.kind !== 'image' && clip.kind !== 'file').map(clip => [clip.id, clip]))
+      const current = new Map(selectedDetails.filter(clip => !protectedClip(clip) && !pendingClip(clip, props.revision) && clip.kind !== 'image' && clip.kind !== 'file' && clip.kind !== 'bundle').map(clip => [clip.id, clip]))
       selectedRecords.value = selectedRecords.value.flatMap(clip => !requested.has(clip.id) ? [clip] : current.has(clip.id) ? [current.get(clip.id)!] : [])
       selected.value = selected.value.filter(id => !requested.has(id) || current.has(id))
     }

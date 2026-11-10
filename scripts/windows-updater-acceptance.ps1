@@ -200,9 +200,25 @@ function Check-UpdaterFixture([string]$Mode) {
   & python $helper verify-data --database $database --expected-schema $expectedSchema
   if ($LASTEXITCODE -ne 0) { throw 'Fixed data verification failed.' }
   $points = @(Get-ChildItem -LiteralPath (Join-Path $dataDir 'recovery') -Filter snapshot.json -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
-    (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).reason -eq 'before-update'
+    $json = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+    $json -and ($json | ConvertFrom-Json).reason -eq 'before-update'
   })
-  if ($Mode -eq 'after-install') {
+  if ($Mode -eq 'after-install' -and $targetSchema -ge 5) {
+    # Development schema 5 cleans obsolete automatic snapshots after validation.
+    $deadline = (Get-Date).AddSeconds(10)
+    do {
+      $points = @(Get-ChildItem -LiteralPath (Join-Path $dataDir 'recovery') -Filter snapshot.json -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+        $json = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+        $json -and ($json | ConvertFrom-Json).reason -in @('before-update', 'before-migration')
+      })
+      if (!$points.Count) { break }
+      Start-Sleep -Milliseconds 200
+    } while ((Get-Date) -lt $deadline)
+    if ($points.Count) { throw 'Validated upgrade left obsolete automatic data backups.' }
+    $backups = @(Get-ChildItem -LiteralPath (Join-Path $dataDir 'application-backups') -Filter starclip.exe -Recurse -File)
+    if ($backups.Count -ne 1) { throw 'Expected one independently preserved old application.' }
+    if ((Get-FileHash -LiteralPath $backups[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $baselineHash) { throw 'The old application backup differs from the selected genuine public baseline.' }
+  } elseif ($Mode -eq 'after-install') {
     if ($points.Count -ne 1) { throw 'Expected exactly one before-update recovery point.' }
     $snapshot = Get-Content -LiteralPath $points[0].FullName -Raw | ConvertFrom-Json
     if ($snapshot.schemaVersion -ne $baselineSchema) { throw 'Unexpected recovery schema.' }

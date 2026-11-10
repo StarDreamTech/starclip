@@ -4,6 +4,8 @@
 These checks simulate harness phases only, not application migrations or GUI.
 """
 from contextlib import closing
+import ast
+from types import SimpleNamespace
 import importlib.util
 import hashlib
 import io
@@ -130,7 +132,7 @@ class FixtureSchemaTests(unittest.TestCase):
         self.assertIn("source-comparison", text)
 
     def test_target_schema_is_exact_source_not_installed_database(self):
-        self.assertEqual(source_schema(SCRIPTS.parent), 4)
+        self.assertEqual(source_schema(SCRIPTS.parent), 5)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             old = root / 'src-tauri/src/store.rs'
@@ -199,6 +201,42 @@ class FixtureSchemaTests(unittest.TestCase):
             MAC.verify_database(path, 2)
             with self.assertRaises(AssertionError):
                 MAC.verify_database(path, 4)
+
+
+    def test_macos_updater_checks_cleanup_for_development_targets_and_keeps_legacy_contract(self):
+        # Exercise the actual nested harness check with disposable files, without running an app.
+        tree = ast.parse((SCRIPTS / 'macos-updater-acceptance.py').read_text())
+        check = next(item for item in ast.walk(tree) if isinstance(item, ast.FunctionDef) and item.name == 'fixture')
+        with tempfile.TemporaryDirectory() as temp:
+            data = Path(temp)
+            current = data / 'starclip.sqlite3'
+            current.write_bytes(b'original current database fixture')
+            old_app = data / 'application-backups' / 'fixed-point' / 'Starclip.app'
+            old_app.mkdir(parents=True)
+            output = []
+            context = dict(MAC.__dict__, data=data, database=current, release_fixture=False,
+                           target_schema=5, baseline_schema=2, baseline_hash='original-app', COMPARISON='0.2.3',
+                           verify_database=lambda path, schema: None, verify_app=lambda path, version: 'original-app',
+                           write=lambda name, value: output.append(value))
+            exec(compile(ast.Module(body=[check], type_ignores=[]), '<updater fixture>', 'exec'), context)
+            with patch('sys.stdout', io.StringIO()):
+                context['fixture']('after-install')
+            self.assertEqual(output[-1]['recoveryPoints'], 0)
+            point = data / 'recovery' / 'fixed-point'
+            point.mkdir(parents=True)
+            saved = point / 'starclip.sqlite3'
+            saved.write_bytes(b'original baseline database fixture')
+            (point / 'snapshot.json').write_text(json.dumps(dict(reason='before-update', schemaVersion=2,
+                id='fixed-point', files={'starclip.sqlite3': {'sha256': MAC.digest(saved)}})))
+            ticks = iter([0, 11])
+            context['time'] = SimpleNamespace(monotonic=lambda: next(ticks), sleep=lambda seconds: None)
+            with self.assertRaisesRegex(AssertionError, 'obsolete automatic data backups'):
+                context['fixture']('after-install')
+            context['target_schema'] = 4
+            with patch('sys.stdout', io.StringIO()):
+                context['fixture']('after-install')
+            self.assertEqual(output[-1]['recoveryPoints'], 1)
+            self.assertEqual(current.read_bytes(), b'original current database fixture')
 
 
 if __name__ == '__main__':

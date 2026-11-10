@@ -126,7 +126,8 @@ fn image_transfer_cache_cleans_only_expired_managed_batches() {
 }
 
 fn emulate_legacy_three(conn: &Connection) {
-    conn.execute_batch("DROP TRIGGER IF EXISTS clips_fts_insert; DROP TRIGGER IF EXISTS clips_fts_update; DROP TRIGGER IF EXISTS clips_fts_delete; DROP TABLE IF EXISTS clips_fts; DROP TABLE IF EXISTS clip_rich; DROP TABLE IF EXISTS clip_activity; PRAGMA user_version=3;").unwrap();
+    conn.execute_batch("DROP TRIGGER IF EXISTS clip_favorites_insert; DROP TRIGGER IF EXISTS clip_favorites_pin; DROP TRIGGER IF EXISTS clip_favorites_unpin; DROP TABLE IF EXISTS clip_favorites;").unwrap();
+    conn.execute_batch("DROP TRIGGER IF EXISTS clips_fts_insert; DROP TRIGGER IF EXISTS clips_fts_update; DROP TRIGGER IF EXISTS clips_fts_delete; DROP TABLE IF EXISTS clips_fts; DROP TABLE IF EXISTS clip_rich; DROP TABLE IF EXISTS clip_activity; DROP TRIGGER IF EXISTS bundle_images_cleanup; DROP TABLE IF EXISTS clip_bundle_items; DROP TABLE IF EXISTS clip_bundles; DROP TABLE IF EXISTS bundle_images; DROP INDEX clips_text_content; CREATE UNIQUE INDEX clips_text_content ON clips(content) WHERE kind NOT IN ('image','file'); DROP INDEX clips_image_content; CREATE UNIQUE INDEX clips_image_content ON clips(content) WHERE kind='image'; PRAGMA user_version=3;").unwrap();
 }
 
 #[test]
@@ -178,7 +179,7 @@ fn schema_four_migrates_known_three_without_merging_file_and_text_or_losing_meta
     drop(db);
     Store::validate_database(&path).unwrap();
     let upgraded = Store::open(&path).unwrap();
-    assert_eq!(upgraded.schema_version().unwrap(), 4);
+    assert_eq!(upgraded.schema_version().unwrap(), SCHEMA_VERSION);
     assert_eq!(upgraded.clips().unwrap().len(), 3);
     assert_eq!(upgraded.image_png(image.id, false).unwrap(), png);
     assert_eq!(upgraded.image_png(image.id, true).unwrap(), thumb);
@@ -296,7 +297,7 @@ fn schema_four_migrates_main_two_files_rich_activity_and_all_opaque_preferences(
     db.conn.execute("INSERT INTO preferences(key,value) VALUES('telemetry_preferences_v1','broken-original-value')", []).unwrap();
     drop(db);
     let upgraded = Store::open(&path).unwrap();
-    assert_eq!(upgraded.schema_version().unwrap(), 4);
+    assert_eq!(upgraded.schema_version().unwrap(), SCHEMA_VERSION);
     assert_eq!(
         upgraded.clip_html(text.id).unwrap().as_deref(),
         Some("<p>原创格式</p>")
@@ -413,7 +414,7 @@ fn file_backup_four_validates_portable_paths_and_preserves_order_and_kinds_atomi
     Store::put_file_entries(&db.conn, file.id, &entries).unwrap();
     db.add(&paths.join("\n"), "原创路径文本", None).unwrap();
     let value: serde_json::Value = serde_json::from_str(&db.export().unwrap()).unwrap();
-    assert_eq!(value["version"], 4);
+    assert_eq!(value["version"], 5);
     let mut restored = store();
     assert_eq!(restored.import(&value.to_string()).unwrap(), 2);
     assert_eq!(
@@ -828,9 +829,9 @@ fn all_cleanup() -> CleanupFilter {
 fn image_fixture(shade: u8) -> PreparedImage {
     images::prepare_rgba(2, 2, &[shade, 70, 180, 255].repeat(4)).unwrap()
 }
-struct Scratch(std::path::PathBuf);
+pub(super) struct Scratch(pub(super) std::path::PathBuf);
 impl Scratch {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
             "starclip-cleanup-test-{}-{}",
             std::process::id(),
@@ -1086,7 +1087,7 @@ fn privacy_backup_v3_roundtrip_reclassifies_and_keeps_imported_rules_disabled() 
     let json = source.export().unwrap();
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"],
-        4
+        5
     );
     let mut destination = store();
     destination.import(&json).unwrap();
@@ -2770,7 +2771,7 @@ fn image_migration_preserves_legacy_fields_and_separates_text_identity() {
     assert_eq!(legacy.title, "旧代码");
     assert!(legacy.image.is_none());
     let old_backup: serde_json::Value = serde_json::from_str(&db.export().unwrap()).unwrap();
-    assert_eq!(old_backup["version"], 4);
+    assert_eq!(old_backup["version"], 5);
     assert!(old_backup.get("images").is_none());
 
     let mut budget_clip = legacy.clone();
@@ -2833,7 +2834,7 @@ fn image_backup_roundtrip_validation_and_failure_are_atomic() {
     source.add(pixels.digest(), "相同标识的文本", None).unwrap();
     let json = source.export().unwrap();
     let backup: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(backup["version"], 4);
+    assert_eq!(backup["version"], 5);
     assert_eq!(
         STANDARD
             .decode(backup["images"][0]["png"].as_str().unwrap())

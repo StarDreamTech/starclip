@@ -1,6 +1,32 @@
 use super::*;
 
 impl Store {
+    pub(super) fn find_image(conn: &Connection, image: &PreparedImage) -> Result<Option<i64>> {
+        let mut statement = conn.prepare("SELECT c.id,i.width,i.height,i.png FROM clips c JOIN clip_images i ON i.clip_id=c.id WHERE c.kind='image' AND c.content=?1 AND length(i.png)<=?2 AND i.width=?3 AND i.height=?4 ORDER BY c.id").map_err(sql_error)?;
+        let mut rows = statement
+            .query(params![
+                image.digest(),
+                images::MAX_PNG_BYTES,
+                image.metadata().width,
+                image.metadata().height
+            ])
+            .map_err(sql_error)?;
+        while let Some(row) = rows.next().map_err(sql_error)? {
+            let png: Vec<u8> = row.get(3).map_err(sql_error)?;
+            if image.matches_png(
+                row.get(1).map_err(sql_error)?,
+                row.get(2).map_err(sql_error)?,
+                &png,
+            )? {
+                return row.get(0).map(Some).map_err(sql_error);
+            }
+        }
+        Ok(None)
+    }
+    pub(crate) fn image_record_id(&self, image: &PreparedImage) -> Result<Option<i64>> {
+        Self::find_image(&self.conn, image)
+    }
+
     pub fn stage_images(
         &self,
         root: &std::path::Path,
@@ -11,13 +37,7 @@ impl Store {
         crate::image_transfer::validate(self, ids, allow_private)?;
         let mut bytes = 0usize;
         for id in ids {
-            let length: usize = tx
-                .query_row(
-                    "SELECT length(png) FROM clip_images WHERE clip_id=?1",
-                    [id],
-                    |row| row.get(0),
-                )
-                .map_err(sql_error)?;
+            let length: usize = tx.query_row("SELECT CASE WHEN kind='image' THEN (SELECT length(png) FROM clip_images WHERE clip_id=?1) WHEN kind='bundle' THEN (SELECT COALESCE(SUM(length(i.png)),0) FROM bundle_images i JOIN clip_bundle_items b ON b.image_id=i.id WHERE b.clip_id=?1) ELSE 0 END FROM clips WHERE id=?1",[id],|r|r.get(0)).map_err(sql_error)?;
             bytes = bytes.saturating_add(length);
         }
         if bytes > crate::image_transfer::MAX_BYTES {
@@ -32,6 +52,26 @@ impl Store {
     }
 
     pub(super) fn put_image(conn: &Connection, id: i64, image: &PreparedImage) -> Result<()> {
+        if let Some((width, height, png)) = conn
+            .query_row(
+                "SELECT width,height,png FROM clip_images WHERE clip_id=?1",
+                [id],
+                |r| {
+                    Ok((
+                        r.get::<_, u32>(0)?,
+                        r.get::<_, u32>(1)?,
+                        r.get::<_, Vec<u8>>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(sql_error)?
+        {
+            if !image.matches_png(width, height, &png)? {
+                return Err("图片内容不同，未合并或覆盖原图。".into());
+            }
+            return Ok(());
+        }
         let metadata = image.metadata();
         conn.execute("INSERT INTO clip_images(clip_id,width,height,bytes,png,thumbnail) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(clip_id) DO NOTHING",
             params![id, metadata.width, metadata.height, metadata.bytes, image.png, image.thumbnail]).map_err(sql_error)?;
@@ -64,23 +104,20 @@ impl Store {
         validate_content(image.digest(), title)?;
         let timestamp = now();
         let tx = self.conn.unchecked_transaction().map_err(sql_error)?;
-        let existed = capture.is_some() && Self::content_exists(&tx, image.digest(), "image")?;
-        tx.execute("INSERT INTO clips(content,title,kind,group_id,created_at,updated_at,keep_forever) VALUES(?1,?2,'image',?3,?4,?4,?5)
-            ON CONFLICT(content) WHERE kind='image' DO UPDATE SET updated_at=excluded.updated_at,
-            title=CASE WHEN excluded.title<>'' THEN excluded.title ELSE clips.title END,
-            group_id=COALESCE(excluded.group_id,clips.group_id),keep_forever=MAX(clips.keep_forever,excluded.keep_forever)",
-            params![image.digest(), title.trim(), group_id, timestamp, keep_forever]).map_err(sql_error)?;
-        let id: i64 = tx
-            .query_row(
-                "SELECT id FROM clips WHERE content=?1 AND kind='image'",
-                [image.digest()],
-                |row| row.get(0),
-            )
-            .map_err(sql_error)?;
-        Self::put_image(&tx, id, image)?;
+        let existing = Self::find_image(&tx, image)?;
+        let id = if let Some(id) = existing {
+            tx.execute("UPDATE clips SET updated_at=?2,title=CASE WHEN ?3<>'' THEN ?3 ELSE title END,group_id=COALESCE(?4,group_id),keep_forever=MAX(keep_forever,?5) WHERE id=?1",params![id,timestamp,title.trim(),group_id,keep_forever]).map_err(sql_error)?;
+            id
+        } else {
+            tx.execute("INSERT INTO clips(content,title,kind,group_id,created_at,updated_at,keep_forever) VALUES(?1,?2,'image',?3,?4,?4,?5)", params![image.digest(),title.trim(),group_id,timestamp,keep_forever]).map_err(sql_error)?;
+            tx.last_insert_rowid()
+        };
+        if existing.is_none() {
+            Self::put_image(&tx, id, image)?;
+        }
         if let Some(context) = capture {
             Self::apply_capture(&tx, id, context)?;
-            let event = if existed {
+            let event = if existing.is_some() {
                 clip_stats::Event::Repeat
             } else {
                 clip_stats::Event::New
@@ -266,7 +303,7 @@ impl Store {
         let clip = match id {
             Some(id) => {
                 match self.clip(id)?.kind.as_str() {
-                    "image" => return Err("图片不能转换为代码，请新建代码片段。".into()),
+                    "image" | "bundle" => return Err("图片不能转换为代码，请新建代码片段。".into()),
                     "file" => return Err("文件记录不能转换为代码，请新建代码片段。".into()),
                     _ => {}
                 }
@@ -322,7 +359,13 @@ impl Store {
         if let Some(kind) = kind {
             tx.execute("UPDATE clips SET copy_count=copy_count+1 WHERE id=?1", [id])
                 .map_err(sql_error)?;
-            clip_stats::record(&tx, now(), &kind, clip_stats::Event::Reuse, 0)?;
+            clip_stats::record(
+                &tx,
+                now(),
+                if kind == "bundle" { "image" } else { &kind },
+                clip_stats::Event::Reuse,
+                0,
+            )?;
         }
         tx.commit().map_err(sql_error)
     }

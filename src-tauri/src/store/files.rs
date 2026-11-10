@@ -100,6 +100,7 @@ impl Store {
     }
 
     pub(super) fn fill_entries(conn: &Connection, clips: &mut [Clip]) -> Result<()> {
+        Self::fill_bundle_images(conn, clips)?;
         // Bound SQL parameters even for full JSON export.
         for chunk in clips.chunks_mut(500) {
             let ids: Vec<_> = chunk

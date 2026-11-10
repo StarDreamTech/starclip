@@ -4,8 +4,12 @@ import { api, isDesktop } from './api'
 import type { AppState, Clip, HistoryQuery, Settings } from './types'
 import Icon from './components/Icon.vue'
 import ClipImage from './components/ClipImage.vue'
+import ClipGallery from './components/ClipGallery.vue'
+import ImageViewer from './components/ImageViewer.vue'
 import ImageBatchBar from './components/ImageBatchBar.vue'
 import { selectClip } from './clip-selection'
+import { loadNavigation, saveNavigation } from './navigation'
+import type { SettingsTab } from './navigation'
 import HistoryPagination from './components/HistoryPagination.vue'
 import StartupScreen from './components/StartupScreen.vue'
 import DataSettings from './components/DataSettings.vue'
@@ -49,11 +53,11 @@ const shareBusy = ref(false)
 const imageBatchBusy = ref(false)
 const imageSelectMode = ref(false), imageSelection = ref<number[]>([])
 let imageAnchor: number | null = null
-const pageImageIds = computed(() => visible.value.filter(c => c.kind === 'image').map(c => c.id))
+const pageImageIds = computed(() => visible.value.filter(c => ['image','bundle'].includes(c.kind)).map(c => c.id))
 function clearImageSelection() { imageSelection.value = []; imageAnchor = null }
 function finishImageSelection() { imageSelectMode.value = false; clearImageSelection() }
 function chooseImage(clip: Clip, range = false) {
-  if (!imageSelectMode.value || clip.kind !== 'image' || imageBatchBusy.value) return
+  if (!imageSelectMode.value || !['image','bundle'].includes(clip.kind) || imageBatchBusy.value) return
   try { imageSelection.value = selectClip(imageSelection.value, clip.id, pageImageIds.value, imageAnchor, range); imageAnchor = clip.id }
   catch (error) { notify(errorText(error), true) }
 }
@@ -90,17 +94,30 @@ const guideVisible = ref(false)
 const guideBusy = ref(false)
 const guideError = ref('')
 const tutorialButton = ref<HTMLButtonElement>()
-const filter = ref('all')
+const initialNavigation = loadNavigation()
+let navigationReady = false, stateLoaded = false
+const filter = ref(initialNavigation.filter)
+const favoriteSort = ref<NonNullable<HistoryQuery['sort']>>('updated')
+try {
+  const saved = localStorage.getItem('starclip.favorite-sort.v1')
+  if (saved && ['updated', 'created', 'copies', 'manual'].includes(saved)) favoriteSort.value = saved as NonNullable<HistoryQuery['sort']>
+} catch { /* UI cache can be unavailable. */ }
+watch(favoriteSort, value => { try { localStorage.setItem('starclip.favorite-sort.v1', value) } catch { /* Keep the current choice for this window. */ } })
+const favoriteSortChoices = computed(() => [
+  { value: 'updated', label: t('最近更新') }, { value: 'created', label: t('最近收录') },
+  { value: 'copies', label: t('复制次数最多') }, { value: 'manual', label: t('自定义顺序') },
+])
+const favoriteDrag = ref<{ id: number; top: boolean; target: number | null; before: boolean; pointer: number } | null>(null)
 const query = ref('')
 const sourceFilters = ref<string[]>([])
 const hostFilter = ref('')
 const tagFilter = ref('')
 const privacyFilter = ref('all')
 const sourceExpanded = ref(false)
-const historyPage = ref(1), historyLoading = ref(false)
+const historyPage = ref(initialNavigation.page), historyLoading = ref(false)
 const historyScroll = ref<HTMLElement>()
 let historySearchTimer: ReturnType<typeof setTimeout> | undefined
-const historyRequest = (): HistoryQuery => ({ page: historyPage.value, filter: filter.value, query: query.value, sources: metadataSources.value, tag: tagFilter.value, privacy: privacyFilter.value })
+const historyRequest = (): HistoryQuery => ({ page: historyPage.value, filter: filter.value, sort: filter.value === 'pinned' ? favoriteSort.value : 'updated', query: query.value, sources: metadataSources.value, tag: tagFilter.value, privacy: privacyFilter.value })
 const metadataSources = computed(() => [...sourceFilters.value, ...(hostFilter.value ? [`host:${hostFilter.value}`] : [])])
 const sourceChoices = computed(() => Object.entries(sourceNames).filter(([key]) => state.value.history?.sources.includes(key) ?? state.value.clips.some(clip => clip.linkSources?.includes(key))).map(([key, label]) => [key, t(label)] as [string, string]))
 const hostChoices = computed(() => [{ value: '', label: t('全部域名') }, ...(state.value.history?.hosts ?? [...new Set(state.value.clips.flatMap(clip => clip.linkHosts ?? []))].sort()).map(host => ({ value: host, label: host }))])
@@ -121,6 +138,7 @@ const cleanupToastHost = ref<HTMLElement>()
 let cleanupTrigger: HTMLElement | null = null
 let cleanupScrollTop = 0
 const editing = ref<Clip | null>(null)
+const imageViewerPosition = ref<number | null>(null)
 const studioOpen = ref(false)
 const studioClip = ref<Clip | null>(null)
 const clipTitle = ref('')
@@ -132,8 +150,19 @@ const groupName = ref('')
 const groupColor = ref('#8b93d9')
 const settingsDraft = ref<Settings>({ ...state.value.settings })
 const settingsSaving = ref(false)
-const settingsTabKeys = ['appearance', 'starpet', 'habits', 'privacy', 'ai', 'data', 'stats', 'share', 'help'] as const
-type SettingsTab = typeof settingsTabKeys[number]
+const shortcutStateKnown = ref(false)
+const shortcutSaveError = ref<{ value: string; message: string } | null>(null)
+watch(() => settingsDraft.value.shortcut, () => { shortcutSaveError.value = null }, { flush: 'sync' })
+const shortcutStatus = computed(() => {
+  const value = settingsDraft.value.shortcut
+  if (!isDesktop) return { kind: 'unknown', icon: 'minus', label: t('桌面版可检查快捷键占用') }
+  if (!shortcutStateKnown.value) return loading.value ? { kind: 'checking', icon: 'clock', label: t('正在读取快捷键状态…') } : { kind: 'unknown', icon: 'minus', label: t('尚未读取快捷键状态') }
+  if (settingsSaving.value && value !== state.value.settings.shortcut) return { kind: 'checking', icon: 'clock', label: t('正在保存并检查快捷键…') }
+  if (shortcutSaveError.value?.value === value) return { kind: 'error', icon: 'alert', label: errorText(shortcutSaveError.value.message) }
+  if (value !== state.value.settings.shortcut) return { kind: 'pending', icon: 'clock', label: t('尚未检查，保存时检查快捷键是否可用') }
+  if (state.value.shortcutError) return { kind: 'error', icon: 'alert', label: errorText(state.value.shortcutError) }
+  return { kind: 'active', icon: 'check', label: t('当前快捷键已注册') }
+})
 const settingsTabs = computed<Array<{ key: SettingsTab; label: string; icon: string }>>(() => [
   { key: 'appearance', label: t('外观'), icon: 'moon' },
   { key: 'starpet', label: t('星伴'), icon: 'star' },
@@ -145,7 +174,7 @@ const settingsTabs = computed<Array<{ key: SettingsTab; label: string; icon: str
   { key: 'share', label: t('分享'), icon: 'spark' },
   { key: 'help', label: t('帮助'), icon: 'spark' },
 ])
-const settingsTab = ref<SettingsTab>('appearance')
+const settingsTab = ref<SettingsTab>(initialNavigation.settingsTab)
 const settingsScroll = ref<HTMLElement>()
 const dataSettings = ref<InstanceType<typeof DataSettings>>()
 const appearanceSettings = ref<InstanceType<typeof AppearanceSettings>>()
@@ -186,7 +215,7 @@ let unsubscribe: (() => void) | undefined
 let unsubscribeGrowthError: (() => void) | undefined
 let unsubscribeCloseRequest: (() => void) | undefined
 const colors = ['#8b93d9', '#71baad', '#d7b678', '#d98eaa', '#89afd5', '#b3a192']
-const kindNames = computed<Record<Clip['kind'], string>>(() => ({ text: t('文本'), link: t('链接'), code: t('代码'), color: t('色彩'), image: t('图片'), file: t('文件') }))
+const kindNames = computed<Record<Clip['kind'], string>>(() => ({ text: t('文本'), link: t('链接'), code: t('代码'), color: t('色彩'), image: t('图片'), bundle: t('图文组合'), file: t('文件') }))
 const navItems = computed(() => [{ key: 'all', name: t('全部记录'), icon: 'grid' }, { key: 'pinned', name: t('星标收藏'), icon: 'star' }, { key: 'kept', name: t('永久保留'), icon: 'shield' }, { key: 'link', name: t('链接'), icon: 'link' }, { key: 'image', name: t('图片'), icon: 'image' }, { key: 'file', name: t('文件'), icon: 'file' }, { key: 'code', name: t('星码集'), icon: 'code' }])
 const visible = computed(() => historyLoading.value ? [] : state.value.clips)
 const sectionName = computed(() => navItems.value.find(n => n.key === filter.value)?.name || state.value.groups.find(g => `group-${g.id}` === filter.value)?.name || t('全部记录'))
@@ -246,14 +275,26 @@ async function loadAppearance() {
   finally { if (!disposed) appearanceLoading.value = false }
 }
 watch(filter, () => { selected.value = null; query.value = ''; privateRevealed.value = false })
-watch([filter, query, metadataSources, tagFilter, privacyFilter], () => {
+watch([filter, query, metadataSources, tagFilter, privacyFilter, favoriteSort], () => {
+  favoriteDrag.value = null
   clearImageSelection()
   historyPage.value = 1; selected.value = null; historyLoading.value = true
   ++refreshVersion // Invalidate requests immediately, including during the typing debounce.
   clearTimeout(historySearchTimer)
   historySearchTimer = setTimeout(() => { void refresh(); historyScroll.value?.scrollTo({ top: 0 }) }, 150)
 }, { flush: 'sync' })
+function rememberNavigation() {
+  if (!navigationReady) return
+  saveNavigation({
+    filter: filter.value,
+    page: query.value || hasMetadataFilters.value ? 1 : historyPage.value,
+    settingsTab: settingsTab.value,
+    settingsOpen: modal.value === 'settings',
+  })
+}
+watch([filter, historyPage, settingsTab, () => modal.value === 'settings'], rememberNavigation, { flush: 'sync' })
 watch(modal, value => { privateRevealed.value = false; if (value !== 'clip') { ++clipDetailVersion; clipDetailsLoading.value = false; clipDetailsError.value = '' } }, { flush: 'sync' })
+watch([modal, () => editing.value?.id, clipDetailsBlocked, privateRevealed, () => !!editing.value && protectedClip(editing.value)], () => { imageViewerPosition.value = null }, { flush: 'sync' })
 watch(visible, clips => { if (!clips.some(c => c.id === selected.value)) selected.value = clips[0]?.id ?? null })
 watch(modal, async value => { await nextTick(); if (value && !dialog.value?.open) dialog.value?.showModal(); if (!value && dialog.value?.open) dialog.value?.close() })
 function notify(message: string, error = false) { clearTimeout(toastTimer); toast.value = message; toastError.value = error; toastTimer = setTimeout(() => { toast.value = '' }, 3600) }
@@ -268,6 +309,12 @@ async function refresh() {
   try {
     const [next, rules] = await Promise.all([api.getState(historyRequest()), api.privacyRules()])
     if (request !== refreshVersion || disposed) return
+    if (filter.value.startsWith('group-') && !next.groups.some(group => `group-${group.id}` === filter.value)) {
+      filter.value = 'all'
+      clearTimeout(historySearchTimer)
+      await refresh()
+      return
+    }
     const acceptTheme = !pendingTheme && !themeSaving.value && themeRevision === themeVersion
     if (!acceptTheme) next.settings.theme = state.value.settings.theme
     rulesRevision.value = rules.revision
@@ -278,6 +325,8 @@ async function refresh() {
     if (next.settings.pauseRevision !== settingsDraft.value.pauseRevision || next.settings.paused !== state.value.settings.paused) settingsDraft.value.paused = next.settings.paused
     settingsDraft.value.pauseRevision = next.settings.pauseRevision
     state.value = next
+    stateLoaded = true
+    shortcutStateKnown.value = true
     historyPage.value = next.history?.page ?? 1
     if (acceptTheme) {
       const changedTheme = themeChoice.value !== next.settings.theme
@@ -299,7 +348,7 @@ function changeHistoryPage(page: number) {
   void refresh()
 }
 async function run(action: () => Promise<unknown>, success?: string): Promise<boolean> { if (busy.value || dataBusy.value || cleanupOpen.value) return false; busy.value = true; try { await themeWriter.idle(); await action(); await refresh(); if (success) notify(success); return true } catch (error) { notify(errorText(error), true); return false } finally { busy.value = false } }
-function count(key: string) { return state.value.history?.counts[key] ?? state.value.clips.filter(c => key === 'all' || (key === 'pinned' && c.pinned) || (key === 'kept' && c.keepForever) || (key === 'link' ? c.kind === 'link' || !!c.linkHosts?.length : c.kind === key)).length }
+function count(key: string) { return state.value.history?.counts[key] ?? state.value.clips.filter(c => key === 'all' || (key === 'pinned' && c.pinned) || (key === 'kept' && c.keepForever) || (key === 'link' ? c.kind === 'link' || !!c.linkHosts?.length : c.kind === key || (key === 'image' && c.kind === 'bundle'))).length }
 function groupFor(clip: Clip) { return state.value.groups.find(g => g.id === clip.groupId) }
 function relativeTime(time: number) { return formatRelativeTime(time) }
 function fileEntries(clip: Clip) { return clip.entries ?? clip.content.split('\n').filter(Boolean).map(path => ({ path, entryKind: 'unknown' as const })) }
@@ -307,6 +356,7 @@ function fileNames(clip: Clip) { return fileEntries(clip).map(entry => entry.pat
 function titleFor(clip: Clip) {
   if (protectedClip(clip)) return t('隐私记录')
   if (!clip.title && clip.kind === 'file') { const names = fileNames(clip); return names.length > 1 ? t('{name} 等 {count} 个文件', { name: names[0]!, count: names.length }) : names[0] || t('未命名片段') }
+  if (!clip.title && clip.kind === 'bundle') return clip.content.trim().split('\n')[0]?.slice(0,44) || t('{count} 张图片', { count: clip.images?.length ?? 0 })
   return clip.title || (clip.kind === 'image' ? t('未命名图片') : clip.content.trim().split('\n')[0]?.slice(0, 44)) || t('未命名片段')
 }
 function imageLabel(clip: Clip) { const image = clip.image; if (!image) return t('PNG 图片'); const size = image.bytes < 1024 ? `${image.bytes} B` : image.bytes < 1048576 ? `${(image.bytes / 1024).toFixed(1)} KiB` : `${(image.bytes / 1048576).toFixed(1)} MiB`; return `${image.width} × ${image.height} · ${size}` }
@@ -318,12 +368,52 @@ async function copy(clip: Clip, quick = false, plain = false) {
     await api.copyClip(clip.id, plain); copied.value = clip.id; clearTimeout(copyTimer); copyTimer = setTimeout(() => { copied.value = null }, 1800)
     // 键盘快选 / 回车 / 双击后收起窗口，回到原应用直接粘贴；隐私内容同样收起，但提示仍保留在下次打开时可见。
     const hide = quick && isDesktop && state.value.settings.hideAfterCopy !== false
-    notify(protectedClip(clip) ? t('隐私内容已复制，请留意目标应用。') : plain && (clip.rich || clip.kind === 'file') ? t('已复制为纯文本') : hide ? t('已复制，回到原应用即可粘贴') : t('已复制，切换到目标应用即可粘贴'))
+    notify(protectedClip(clip) ? t('隐私内容已复制，请留意目标应用。') : plain && (clip.rich || ['file','bundle'].includes(clip.kind)) ? t('已复制为纯文本') : clip.kind === 'bundle' ? t('图文已整组复制；目标应用可能只接收文字或图片，可在详情中分别复制。') : hide ? t('已复制，回到原应用即可粘贴') : t('已复制，切换到目标应用即可粘贴'))
     if (hide) { query.value = ''; void hideMainWindow(undefined, true) }
     await refresh()
   } catch (error) { notify(errorText(error), true) }
 }
+async function copyBundleImages(clip: Clip) {
+  if (busy.value || dataBusy.value || clipDetailsBlocked.value || (protectedClip(clip) && !privateRevealed.value)) return
+  await run(() => api.copyImageFiles([clip.id], protectedClip(clip)), t('已复制为独立 PNG 文件，可粘贴到文件夹；其他应用的接收方式由其自身决定。'))
+}
 async function togglePin(clip: Clip) { await run(() => api.updateClip(clip.id, clip.title, clip.groupId, !clip.pinned), clip.pinned ? t('已取消星标') : t('已收入星标收藏')) }
+async function toggleFavoriteTop(clip: Clip) { await run(() => api.setFavoriteTop(clip.id, !clip.onTop), clip.onTop ? t('已取消置顶') : t('收藏已置顶')) }
+async function moveFavorite(clip: Clip, target: number | null, before: boolean) {
+  await run(() => api.moveFavorite(clip.id, target, before), t('收藏顺序已保存'))
+}
+function startFavoriteDrag(clip: Clip, event: PointerEvent) {
+  if (event.button !== 0 || busy.value || dataBusy.value || imageSelectMode.value || favoriteSort.value !== 'manual') return
+  event.preventDefault(); event.stopPropagation()
+  favoriteDrag.value = { id: clip.id, top: !!clip.onTop, target: null, before: true, pointer: event.pointerId }
+  const handle = event.currentTarget as HTMLElement
+  handle.setPointerCapture(event.pointerId)
+}
+function updateFavoriteDrag(event: PointerEvent) {
+  const drag = favoriteDrag.value
+  if (!drag || drag.pointer !== event.pointerId) return
+  const article = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-clip-id]')
+  const clip = visible.value.find(item => item.id === Number(article?.dataset.clipId))
+  drag.target = null
+  if (clip && article && clip.id !== drag.id && !!clip.onTop === drag.top) {
+    const rect = article.getBoundingClientRect()
+    drag.target = clip.id
+    drag.before = state.value.settings.layout === 'list' ? event.clientY < rect.top + rect.height / 2 : event.clientX < rect.left + rect.width / 2
+  }
+  const scroll = historyScroll.value
+  if (scroll) {
+    const rect = scroll.getBoundingClientRect()
+    if (event.clientY < rect.top + 40) scroll.scrollTop -= 20
+    if (event.clientY > rect.bottom - 40) scroll.scrollTop += 20
+  }
+}
+async function finishFavoriteDrag(event: PointerEvent) {
+  const drag = favoriteDrag.value
+  if (!drag || drag.pointer !== event.pointerId) return
+  favoriteDrag.value = null
+  const clip = visible.value.find(clip => clip.id === drag.id)
+  if (clip && drag.target !== null) await moveFavorite(clip, drag.target, drag.before)
+}
 async function toggleKept(clip: Clip) { await run(() => api.setKeepForever(clip.id, !clip.keepForever), clip.keepForever ? t('已取消永久保留') : t('已永久保留，不参与清理')) }
 async function openCleanup(event: MouseEvent) {
   if (busy.value || dataBusy.value || cleanupOpen.value) return
@@ -347,15 +437,22 @@ function cleanupClosed() {
 }
 async function cleanupChanged() { await Promise.all([refresh(), dataSettings.value?.refresh()]) }
 function openClip(clip?: Clip) { ++clipDetailVersion; clipDetailsLoading.value = false; clipDetailsError.value = ''; privateRevealed.value = false; editing.value = clip ?? null; clipTitle.value = clip?.title || ''; clipContent.value = clip?.kind === 'image' ? '' : clip?.content || ''; clipGroup.value = clip?.groupId ?? currentGroup.value?.id ?? null; clipPinned.value = clip?.pinned ?? false; clipKept.value = clip?.keepForever ?? false; modal.value = 'clip' }
-function openStudio(clip: Clip | null = null) { if (clip?.kind === 'file') return notify(t('文件记录可直接复制到目标应用，或复制为纯文本路径。'), true); if (clip?.kind === 'image') return notify(t('星绘坊用于文字和代码，图片可直接复制到目标应用。'), true); modal.value = ''; studioClip.value = clip; studioOpen.value = true; recordStudioOpened() }
+function openImageViewer(position = 0) {
+  const clip = editing.value
+  if (!clip || modal.value !== 'clip' || busy.value || dataBusy.value || clipDetailsBlocked.value || (protectedClip(clip) && !privateRevealed.value)) return
+  const count = clip.kind === 'bundle' ? clip.images?.length ?? 0 : clip.kind === 'image' ? 1 : 0
+  if (count) imageViewerPosition.value = Math.max(0, Math.min(count - 1, position))
+}
+function openStudio(clip: Clip | null = null) { if (clip?.kind === 'file') return notify(t('文件记录可直接复制到目标应用，或复制为纯文本路径。'), true); if (clip && ['image','bundle'].includes(clip.kind)) return notify(t('星绘坊用于文字和代码，图片可直接复制到目标应用。'), true); modal.value = ''; studioClip.value = clip; studioOpen.value = true; recordStudioOpened() }
 async function saveClip() {
   if (clipDetailsBlocked.value) return
-  if (editing.value?.kind !== 'image' && !clipContent.value.trim()) return notify(t('先写下一点内容吧'), true)
+  if (!['image','bundle'].includes(editing.value?.kind ?? '') && !clipContent.value.trim()) return notify(t('先写下一点内容吧'), true)
   await run(async () => {
     if (editing.value) {
       // Protect first: automatic cleanup may run between these two native commands.
       if (clipKept.value && !editing.value.keepForever) await api.setKeepForever(editing.value.id, true)
-      await api.updateClip(editing.value.id, clipTitle.value.trim(), clipGroup.value, clipPinned.value)
+      if (editing.value.kind === 'bundle') await api.updateBundle(editing.value.id, clipContent.value, clipTitle.value.trim(), clipGroup.value, clipPinned.value)
+      else await api.updateClip(editing.value.id, clipTitle.value.trim(), clipGroup.value, clipPinned.value)
       if (!clipKept.value && editing.value.keepForever) await api.setKeepForever(editing.value.id, false)
     }
     else { const clip = await api.addClip(clipContent.value, clipTitle.value.trim(), clipGroup.value, clipKept.value); if (clipPinned.value) await api.updateClip(clip.id, clip.title, clipGroup.value, true) }
@@ -391,13 +488,16 @@ async function quitFromSettings() {
   catch (error) { notify(errorText(error), true) }
   finally { busy.value = false }
 }
-function closeModal() { if (!dataBusy.value && !busy.value && !cleanupOpen.value) modal.value = '' }
+function closeModal() {
+  if (imageViewerPosition.value !== null) { imageViewerPosition.value = null; return }
+  if (!dataBusy.value && !busy.value && !cleanupOpen.value) modal.value = ''
+}
 // A close remains pending while drafts or work prevent releasing the WebView.
 // Native request IDs ensure a delayed reply can never hide a reopened window.
 const canReleaseWindow = computed(() => windowReady.value && !loading.value && !busy.value && !dataBusy.value && !themeSaving.value
   && !updateNoticeBusy.value
   && (!modal.value || (modal.value === 'settings' && settingsCanRelease.value))
-  && !studioOpen.value && !cleanupOpen.value && !guideVisible.value && !guideBusy.value)
+  && imageViewerPosition.value === null && !favoriteDrag.value && !studioOpen.value && !cleanupOpen.value && !guideVisible.value && !guideBusy.value)
 let pendingWindowClose: { requestId?: number; returnFocus?: boolean } | null = null
 let closingWindow = false
 let windowReleaseTimer: ReturnType<typeof setTimeout> | undefined
@@ -472,6 +572,11 @@ function settingsTabKeyboard(event: KeyboardEvent) {
 function finishStartup() {
   startupVisible.value = false
   if (firstGuidePending.value) { firstGuidePending.value = false; guideVisible.value = true }
+  if (!navigationReady) {
+    if (stateLoaded && initialNavigation.settingsOpen && state.value.onboardingCompleted && !modal.value) openSettings()
+    navigationReady = true
+    if (stateLoaded) rememberNavigation()
+  }
 }
 function openGuide() {
   if (busy.value || dataBusy.value) return
@@ -494,7 +599,17 @@ async function finishGuide() {
 async function saveSettings() {
   if (busy.value || dataBusy.value || cleanupOpen.value || !settingsDirty.value) return
   settingsSaving.value = true
-  try { if (await run(() => api.saveSettings({ ...settingsDraft.value, theme: themeChoice.value }, settingsDraft.value.pauseRevision))) notify(t('偏好设置已保存')) }
+  const settings = { ...settingsDraft.value, theme: themeChoice.value }
+  try {
+    if (await run(async () => {
+      try { await api.saveSettings(settings, settings.pauseRevision) }
+      catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (/快捷键|shortcut/i.test(message)) shortcutSaveError.value = { value: settings.shortcut, message }
+        throw error
+      }
+    })) { shortcutSaveError.value = null; notify(t('偏好设置已保存')) }
+  }
   finally { settingsSaving.value = false; applyLanguage(state.value.settings.uiLanguage) }
 }
 async function toggleCapture() {
@@ -553,6 +668,8 @@ function moveSelection(delta: number) {
   card?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
 function keyboard(event: KeyboardEvent) {
+  if (favoriteDrag.value) { if (event.key === 'Escape') { event.preventDefault(); favoriteDrag.value = null }; return }
+  if (imageViewerPosition.value !== null) return
   const target = event.target as HTMLElement
   const typing = target.matches('input, textarea, [role=combobox]') || target.isContentEditable
   const modifier = event.metaKey || event.ctrlKey
@@ -652,7 +769,7 @@ onUnmounted(() => { disposed = true; pendingWindowClose = null; clearTimeout(win
       <div class="sidebar-bottom"><div class="night-note"><StickerScene :pack="state.settings.stickerPack" :theme="resolvedTheme" :custom-image="customSticker" placement="sidebar" /><p>{{ t('让散落的灵感，') }}<br>{{ t('在这里连成星座。') }}</p><span>YOUR LITTLE UNIVERSE</span></div><button class="capture-toggle" :title="state.settings.paused ? t('当前已暂停，开启时会先读取当前剪贴内容') : t('点击暂停剪贴记录')" :class="{ paused: state.settings.paused }" @click="toggleCapture" :disabled="busy || dataBusy"><span class="status-dot" /><span>{{ state.settings.paused ? t('开启剪贴记录') : t('正在拾取灵感') }}</span><Icon :name="state.settings.paused ? 'play' : 'pause'" :size="13" /></button><button class="nav-item settings-nav" @click="openSettings"><Icon name="sliders" /><span>{{ t('偏好设置') }}</span><span class="version">v{{ appVersion }}</span></button></div>
     </aside>
     <main class="main-panel">
-      <header class="topbar"><div class="breadcrumb"><Icon name="spark" :size="15" /><span>{{ t('我的星空') }}</span><Icon name="chevron" :size="12" /><strong>{{ sectionName }}</strong></div><div class="topbar-right"><StickerScene class="header-stickers" :pack="state.settings.stickerPack" :theme="resolvedTheme" :custom-image="customSticker" placement="header" /><span v-if="!isDesktop" class="demo-badge">{{ t('交互演示 · 示例数据') }}</span><span class="date-label">{{ dateLabel }}</span><div class="theme-picker"><UiSelect :model-value="themeChoice" :options="themeChoices" :label="t('切换主题')" :disabled="busy || dataBusy" @update:model-value="changeTheme" /></div></div></header>
+      <header class="topbar"><div class="breadcrumb"><Icon name="spark" :size="15" /><span>{{ t('我的星空') }}</span><Icon name="chevron" :size="12" /><strong>{{ sectionName }}</strong></div><div class="topbar-right"><StickerScene class="header-stickers" :pack="state.settings.stickerPack" :theme="resolvedTheme" :custom-image="customSticker" placement="header" /><span v-if="!isDesktop" class="demo-badge">{{ t('交互演示 · 示例数据') }}</span><span class="date-label">{{ dateLabel }}</span><a class="icon-button github-link" href="https://github.com/cpython666/starclip" target="_blank" rel="noopener noreferrer" :title="t('查看开源项目（GitHub）')" :aria-label="t('查看开源项目（GitHub）')" @click="openProjectLink($event, 'repository')"><Icon name="github" :size="18" /></a><div class="theme-picker"><UiSelect :model-value="themeChoice" :options="themeChoices" :label="t('切换主题')" :disabled="busy || dataBusy" @update:model-value="changeTheme" /></div></div></header>
       <UpdateNotice v-if="isDesktop" :blocked="updateNoticeBlocked" @busy="updateNoticeBusy = $event" @open-settings="openUpdateSettings" />
       <div ref="historyScroll" :class="['main-scroll', { 'horizontal-layout': state.settings.layout === 'horizontal' }]">
         <div v-if="state.clipboardError || state.shortcutError || state.windowError" class="error-banner" role="alert"><Icon name="alert" :size="16" /><span>{{ errorText(state.clipboardError || state.shortcutError || state.windowError) }}</span><button @click="openSettings">{{ t('查看设置') }}</button></div>
@@ -660,20 +777,20 @@ onUnmounted(() => { disposed = true; pendingWindowClose = null; clearTimeout(win
           <div class="collection-heading"><div><h2>{{ sectionName }} <span>{{ state.history?.total ?? visible.length }}</span></h2><p>{{ query ? t('正在查找「{query}」', { query }) : filter === 'pinned' ? t('那些想要再次遇见的片段') : filter === 'kept' ? t('认真留下的，时间也不会带走') : filter === 'image' ? t('截图与画面 · 把看见的美好，留在自己的星空') : filter === 'code' ? t('代码收藏 · 把常用的几行，收进自己的星空') : currentGroup ? t('把相近的灵感，放在同一片星空') : t('好想法，总会再次闪光') }}</p></div><div class="collection-actions"><button class="button subtle" :disabled="busy || dataBusy" @click="imageSelectMode ? finishImageSelection() : imageSelectMode = true">{{ imageSelectMode ? t('完成多选') : t('多选图片') }}</button><button class="button subtle cleanup-entry" :title="t('星尘整理 · 按大小、时间与类型清理历史')" :disabled="busy || dataBusy" @click="openCleanup"><Icon name="spark" :size="16" />{{ t('星尘整理') }}</button><button v-if="currentGroup" class="icon-button" :title="t('删除当前分组')" :aria-label="t('删除当前分组')" @click="modal = 'delete-group'"><Icon name="trash" :size="16" /></button><button class="button subtle code-create" :title="t('星绘坊 · 把文字与代码做成卡片')" @click="openStudio()"><Icon name="code" :size="16" />{{ t('星绘坊') }}</button><button class="button primary" @click="openClip()"><Icon name="plus" :size="16" />{{ t('新建片段') }}</button></div></div>
           <div class="toolbar"><label class="search-box"><Icon name="search" :size="18" /><input ref="searchInput" v-model="query" :placeholder="t('搜索你收藏的每一点灵感…')" :aria-label="t('搜索记录')" /><button v-if="query" class="icon-button" @click="query = ''" :title="t('清空搜索')" :aria-label="t('清空搜索')"><Icon name="close" :size="14" /></button><kbd v-else>{{ modKey }} K</kbd></label><div class="layout-switch" role="group" :aria-label="t('显示方式')"><button :class="{ selected: state.settings.layout === 'grid' }" :title="t('网格视图')" :aria-label="t('网格视图')" :aria-pressed="state.settings.layout === 'grid'" @click="changeLayout('grid')"><Icon name="grid" :size="17" /></button><button :class="{ selected: state.settings.layout === 'list' }" :title="t('列表视图')" :aria-label="t('列表视图')" :aria-pressed="state.settings.layout === 'list'" @click="changeLayout('list')"><Icon name="list" :size="17" /></button><button :class="{ selected: state.settings.layout === 'horizontal' }" :title="t('流星栏 · 横向快取')" :aria-label="t('流星栏 · 横向快取')" :aria-pressed="state.settings.layout === 'horizontal'" @click="changeLayout('horizontal')"><Icon name="list" :size="17" class="horizontal-view-icon" /></button></div></div>
           <div v-if="state.settings.layout === 'horizontal'" class="meteor-bar-heading"><div><Icon name="spark" :size="15" /><strong>{{ t('流星栏') }}</strong><span>{{ t('横向浏览，快速取用 · ← / ↑ 上一条，→ / ↓ 下一条') }}</span></div><div class="meteor-controls"><span>{{ visible.length ? selectedIndex + 1 : 0 }} / {{ visible.length }}</span><button class="icon-button" :aria-label="t('上一条片段')" :title="t('上一条片段')" :disabled="selectedIndex <= 0" @click="moveSelection(-1)"><Icon name="chevron" :size="15" class="previous-icon" /></button><button class="icon-button" :aria-label="t('下一条片段')" :title="t('下一条片段')" :disabled="selectedIndex < 0 || selectedIndex >= visible.length - 1" @click="moveSelection(1)"><Icon name="chevron" :size="15" /></button></div></div>
-          <div class="results-label"><span>{{ query ? t('搜索结果') : t('最近收录') }}</span><span>{{ t('按最近更新排序') }} <Icon name="clock" :size="12" /></span></div>
+          <div class="results-label"><span>{{ query ? t('搜索结果') : t('最近收录') }}</span><UiSelect v-if="filter === 'pinned'" v-model="favoriteSort" :options="favoriteSortChoices" :label="t('收藏排序')" :disabled="busy || dataBusy || historyLoading || !!favoriteDrag" /><span v-else>{{ t('按最近更新排序') }} <Icon name="clock" :size="12" /></span></div><p v-if="filter === 'pinned' && favoriteSort === 'manual'" class="favorite-order-hint">{{ t('拖动把手调整顺序，也可移到最前或最后；置顶项在前。') }}</p>
           <div class="metadata-filters" :aria-label="t('来源、标签和隐私筛选')">
             <div class="metadata-filter-controls"><button type="button" class="button subtle" :aria-expanded="sourceExpanded" @click="sourceExpanded = !sourceExpanded">{{ t('链接来源') }}{{ metadataSources.length ? ` · ${metadataSources.length}` : '' }}</button><UiSelect v-model="tagFilter" :options="tagChoices" :label="t('按普通标签筛选')" /><UiSelect v-model="privacyFilter" :options="privacyChoices" :label="t('按隐私状态筛选')" /><button v-if="hasMetadataFilters" type="button" class="button subtle" @click="clearMetadataFilters">{{ t('清空筛选') }}</button></div>
             <div v-if="sourceExpanded" class="source-filters"><label v-for="[key, label] in sourceChoices" :key="key"><input v-model="sourceFilters" type="checkbox" :value="key" />{{ label }}</label><UiSelect v-model="hostFilter" :options="hostChoices" :label="t('按精确域名筛选')" /><p>{{ t('来源之间满足任一；与搜索、类型、标签和隐私状态同时匹配。短链不自动展开。') }}</p></div>
             <div v-if="hasMetadataFilters" class="metadata-chips"><button v-for="source in sourceFilters" :key="source" type="button" @click="sourceFilters = sourceFilters.filter(value => value !== source)">{{ t(sourceNames[source] ?? source) }} ×</button><button v-if="hostFilter" type="button" @click="hostFilter = ''">{{ hostFilter }} ×</button><button v-if="tagFilter" type="button" @click="tagFilter = ''">#{{ tagFilter }} ×</button><button v-if="privacyFilter !== 'all'" type="button" @click="privacyFilter = 'all'">{{ privacyChoices.find(choice => choice.value === privacyFilter)?.label }} ×</button></div>
           </div>
-          <ImageBatchBar v-if="imageSelectMode" :ids="imageSelection" :page-ids="pageImageIds" :disabled="busy || historyLoading || (dataBusy && !imageBatchBusy)" @busy="imageBatchBusy = $event" @clear="clearImageSelection" @done="finishImageSelection" @select-page="selectPageImages" />
+          <ImageBatchBar v-if="imageSelectMode" :ids="imageSelection" :page-ids="pageImageIds" :disabled="busy || historyLoading || (dataBusy && !imageBatchBusy)" @busy="imageBatchBusy = $event" @clear="clearImageSelection" @done="finishImageSelection" @select-page="selectPageImages" @created="clip => { finishImageSelection(); openClip(clip); refresh() }" />
           <HistoryPagination v-if="state.history" :history="state.history" :disabled="historyLoading || busy || dataBusy" @page="changeHistoryPage" />
           <div v-if="loading || historyLoading" class="empty-state"><span class="loading-orbit" /><h3>{{ t('正在点亮你的星空…') }}</h3></div>
           <div v-else-if="!visible.length" class="empty-state"><div class="empty-illustration"><Icon :name="query ? 'search' : filter === 'pinned' ? 'star' : 'spark'" :size="38" /><i>✧</i><b>·</b></div><h3>{{ hasMetadataFilters ? t('没有匹配这些条件的记录') : query ? t('还没找到这颗星') : filter === 'pinned' ? t('为喜欢的灵感点一颗星') : filter === 'kept' ? t('给重要的灵感一个长久的家') : filter === 'image' ? t('把看见的美好，留在这里') : t('你的第一颗灵感，还在路上') }}</h3><p>{{ hasMetadataFilters ? t('来源、标签、隐私和搜索会同时生效，可以移除部分条件。') : query ? t('换个关键词试试，或查看全部记录。') : filter === 'pinned' ? t('点击片段上的星星，它就会出现在这里。') : filter === 'kept' ? t('点击片段上的盾牌，标记为永久保留。') : filter === 'image' ? t('开启记录后，复制图片或截图即可收录；图片文件路径不等于图片。') : t('复制文字或图片，或亲手写下一个新片段。') }}</p><button v-if="hasMetadataFilters" type="button" class="button subtle" @click="clearMetadataFilters">{{ t('清空筛选') }}</button><button v-else-if="query || filter !== 'image'" class="button subtle" @click="query ? query = '' : openClip()">{{ query ? t('清空搜索') : t('写下第一条片段') }}<Icon name="arrow" :size="15" /></button></div>
           <div v-else :class="['clip-collection', state.settings.layout]" :aria-label="state.settings.layout === 'horizontal' ? t('流星栏：横向片段列表') : undefined">
-            <article v-for="(clip, index) in visible" :key="clip.id" :data-clip-id="clip.id" :class="['clip-card', `kind-${clip.kind}`, { 'is-selected': selected === clip.id, 'is-copied': copied === clip.id, 'is-batch-selected': imageSelectMode && imageSelection.includes(clip.id) }]" tabindex="0" :aria-label="imageSelectMode ? titleFor(clip) : t('{title}，{kind}，双击复制', { title: titleFor(clip), kind: kindNames[clip.kind] })" @click="event => { selected = clip.id; chooseImage(clip, event.shiftKey) }" @focus="selected = clip.id" @dblclick="!imageSelectMode && copy(clip, true)" @keydown.enter="event => { if (event.target === event.currentTarget) { event.stopPropagation(); event.preventDefault(); !imageSelectMode && copy(clip, true) } }">
-              <div class="card-top"><input v-if="imageSelectMode && clip.kind === 'image'" type="checkbox" class="image-selection-checkbox" :checked="imageSelection.includes(clip.id)" :disabled="imageBatchBusy" :aria-label="t('选择图片：{title}', { title: titleFor(clip) })" @click.stop="event => checkImage(clip, event)" /><span :class="['kind-icon', clip.kind]"><Icon :name="clip.kind" :size="16" /></span><span class="kind-label">{{ clip.language || kindNames[clip.kind] }}</span><kbd v-if="quickKeysVisible && index < 9" class="quick-key" aria-hidden="true">{{ modKey }}{{ index + 1 }}</kbd><div v-if="!imageSelectMode" class="card-top-actions" @dblclick.stop><button :class="['icon-button', 'keep-button', { kept: clip.keepForever }]" :title="clip.keepForever ? t('永久保留中 · 点击取消') : t('永久保留，不参与清理')" :aria-label="`${clip.keepForever ? t('取消永久保留') : t('永久保留')} ${titleFor(clip)}`" :aria-pressed="clip.keepForever" @click.stop="toggleKept(clip)"><Icon name="shield" :size="15" /></button><button :class="['icon-button', 'pin-button', { pinned: clip.pinned }]" :title="clip.pinned ? t('取消星标') : t('收藏到星标')" :aria-label="clip.pinned ? t('取消星标') : t('收藏到星标')" :aria-pressed="clip.pinned" @click.stop="togglePin(clip)"><Icon name="star" :size="15" /></button><button class="icon-button edit-button" :title="t('查看和编辑')" :aria-label="t('查看和编辑')" @click.stop="openClip(clip)"><Icon name="more" :size="17" /></button></div></div>
-              <div class="card-main"><template v-if="protectedClip(clip)"><h3>{{ t('隐私记录') }}</h3><p class="private-card-note"><Icon name="shield" :size="18" />{{ t('隐私 · 不向 AI 提供') }}</p><button type="button" class="private-card-open" @click.stop="event => imageSelectMode ? chooseImage(clip, event.shiftKey) : openClip(clip)" @dblclick.stop>{{ imageSelectMode ? t('选择图片：{title}', { title: titleFor(clip) }) : t('在本机查看与复核') }}</button></template><template v-else-if="clip.kind === 'image'"><h3>{{ titleFor(clip) }}</h3><button class="image-open" type="button" :aria-label="imageSelectMode ? t('选择图片：{title}', { title: titleFor(clip) }) : t('预览图片：{title}', { title: titleFor(clip) })" @click.stop="event => imageSelectMode ? chooseImage(clip, event.shiftKey) : openClip(clip)" @dblclick.stop><ClipImage :id="clip.id" :alt="titleFor(clip)" /><span class="image-card-meta">{{ imageLabel(clip) }}</span></button></template><template v-else-if="clip.kind === 'color'"><div class="color-preview" :style="{ background: colorValue(clip.content) }"><span>{{ clip.content.trim() }}</span></div><h3>{{ titleFor(clip) }}</h3></template><template v-else><h3>{{ titleFor(clip) }}</h3><div v-if="clip.kind === 'link'" class="link-preview"><span class="link-favicon">{{ linkHost(clip.content)[0]?.toUpperCase() }}</span><div><strong>{{ linkHost(clip.content) }}</strong><span>{{ clip.content }}</span></div><Icon name="arrow" :size="15" /></div><pre v-else-if="clip.kind === 'code'" class="code-preview">{{ clip.content }}</pre><ul v-else-if="clip.kind === 'file'" class="file-preview"><li v-for="name in fileNames(clip).slice(0, 4)" :key="name"><Icon name="file" :size="13" />{{ name }}</li><li v-if="fileNames(clip).length > 4" class="file-more">{{ t('还有 {count} 个', { count: fileNames(clip).length - 4 }) }}</li></ul><p v-else class="text-preview">{{ clip.content }}</p></template></div>
+            <article v-for="(clip, index) in visible" :key="clip.id" :data-clip-id="clip.id" :class="['clip-card', `kind-${clip.kind}`, { 'is-selected': selected === clip.id, 'is-copied': copied === clip.id, 'is-batch-selected': imageSelectMode && imageSelection.includes(clip.id), 'is-favorite-dragging': favoriteDrag?.id === clip.id, 'favorite-drop-before': favoriteDrag?.target === clip.id && favoriteDrag.before, 'favorite-drop-after': favoriteDrag?.target === clip.id && !favoriteDrag.before }]" tabindex="0" :aria-label="imageSelectMode ? titleFor(clip) : t('{title}，{kind}，双击复制', { title: titleFor(clip), kind: kindNames[clip.kind] })" @click="event => { selected = clip.id; chooseImage(clip, event.shiftKey) }" @focus="selected = clip.id" @dblclick="!imageSelectMode && copy(clip, true)" @keydown.enter="event => { if (event.target === event.currentTarget) { event.stopPropagation(); event.preventDefault(); !imageSelectMode && copy(clip, true) } }">
+              <div class="card-top"><input v-if="imageSelectMode && ['image','bundle'].includes(clip.kind)" type="checkbox" class="image-selection-checkbox" :checked="imageSelection.includes(clip.id)" :disabled="imageBatchBusy" :aria-label="t('选择图片：{title}', { title: titleFor(clip) })" @click.stop="event => checkImage(clip, event)" /><span :class="['kind-icon', clip.kind]"><Icon :name="clip.kind === 'bundle' ? 'image' : clip.kind" :size="16" /></span><span class="kind-label">{{ clip.language || kindNames[clip.kind] }}</span><kbd v-if="quickKeysVisible && index < 9" class="quick-key" aria-hidden="true">{{ modKey }}{{ index + 1 }}</kbd><div v-if="!imageSelectMode" class="card-top-actions" @dblclick.stop><template v-if="filter === 'pinned'"><span v-if="clip.onTop" class="favorite-top-label">{{ t('已置顶') }}</span><template v-if="favoriteSort === 'manual'"><button type="button" class="icon-button favorite-drag-handle" :aria-label="t('拖动排序')" :title="t('拖动排序')" :disabled="busy || dataBusy" @click.stop @pointerdown="startFavoriteDrag(clip, $event)" @pointermove="updateFavoriteDrag" @pointerup="finishFavoriteDrag" @pointercancel="favoriteDrag = null" @lostpointercapture="favoriteDrag = null"><Icon name="grip" :size="16" /></button><button type="button" class="icon-button" :aria-label="t('移到收藏最前')" :title="t('移到收藏最前')" :disabled="busy || dataBusy" @click.stop="moveFavorite(clip, null, true)"><Icon name="first" :size="15" /></button><button type="button" class="icon-button" :aria-label="t('移到收藏最后')" :title="t('移到收藏最后')" :disabled="busy || dataBusy" @click.stop="moveFavorite(clip, null, false)"><Icon name="last" :size="15" /></button></template><button type="button" :class="['icon-button', { 'favorite-is-top': clip.onTop }]" :aria-label="clip.onTop ? t('取消置顶') : t('置顶收藏')" :title="clip.onTop ? t('取消置顶') : t('置顶收藏')" :aria-pressed="!!clip.onTop" :disabled="busy || dataBusy" @click.stop="toggleFavoriteTop(clip)"><Icon name="pin" :size="15" /></button></template><button :class="['icon-button', 'keep-button', { kept: clip.keepForever }]" :title="clip.keepForever ? t('永久保留中 · 点击取消') : t('永久保留，不参与清理')" :aria-label="`${clip.keepForever ? t('取消永久保留') : t('永久保留')} ${titleFor(clip)}`" :aria-pressed="clip.keepForever" @click.stop="toggleKept(clip)"><Icon name="shield" :size="15" /></button><button :class="['icon-button', 'pin-button', { pinned: clip.pinned }]" :title="clip.pinned ? t('取消星标') : t('收藏到星标')" :aria-label="clip.pinned ? t('取消星标') : t('收藏到星标')" :aria-pressed="clip.pinned" @click.stop="togglePin(clip)"><Icon name="star" :size="15" /></button><button class="icon-button edit-button" :title="t('查看和编辑')" :aria-label="t('查看和编辑')" @click.stop="openClip(clip)"><Icon name="more" :size="17" /></button></div></div>
+              <div class="card-main"><template v-if="protectedClip(clip)"><h3>{{ t('隐私记录') }}</h3><p class="private-card-note"><Icon name="shield" :size="18" />{{ t('隐私 · 不向 AI 提供') }}</p><button type="button" class="private-card-open" @click.stop="event => imageSelectMode ? chooseImage(clip, event.shiftKey) : openClip(clip)" @dblclick.stop>{{ imageSelectMode ? t('选择图片：{title}', { title: titleFor(clip) }) : t('在本机查看与复核') }}</button></template><template v-else-if="clip.kind === 'bundle'"><h3>{{ titleFor(clip) }}</h3><p v-if="clip.content" class="text-preview bundle-caption">{{ clip.content }}</p><button class="image-open" type="button" :aria-label="imageSelectMode ? t('选择图片：{title}', { title: titleFor(clip) }) : t('预览图片：{title}', { title: titleFor(clip) })" @click.stop="event => imageSelectMode ? chooseImage(clip, event.shiftKey) : openClip(clip)" @dblclick.stop><ClipGallery :clip="clip" /></button></template><template v-else-if="clip.kind === 'image'"><h3>{{ titleFor(clip) }}</h3><button class="image-open" type="button" :aria-label="imageSelectMode ? t('选择图片：{title}', { title: titleFor(clip) }) : t('预览图片：{title}', { title: titleFor(clip) })" @click.stop="event => imageSelectMode ? chooseImage(clip, event.shiftKey) : openClip(clip)" @dblclick.stop><ClipImage :id="clip.id" :alt="titleFor(clip)" /><span class="image-card-meta">{{ imageLabel(clip) }}</span></button></template><template v-else-if="clip.kind === 'color'"><div class="color-preview" :style="{ background: colorValue(clip.content) }"><span>{{ clip.content.trim() }}</span></div><h3>{{ titleFor(clip) }}</h3></template><template v-else><h3>{{ titleFor(clip) }}</h3><div v-if="clip.kind === 'link'" class="link-preview"><span class="link-favicon">{{ linkHost(clip.content)[0]?.toUpperCase() }}</span><div><strong>{{ linkHost(clip.content) }}</strong><span>{{ clip.content }}</span></div><Icon name="arrow" :size="15" /></div><pre v-else-if="clip.kind === 'code'" class="code-preview">{{ clip.content }}</pre><ul v-else-if="clip.kind === 'file'" class="file-preview"><li v-for="name in fileNames(clip).slice(0, 4)" :key="name"><Icon name="file" :size="13" />{{ name }}</li><li v-if="fileNames(clip).length > 4" class="file-more">{{ t('还有 {count} 个', { count: fileNames(clip).length - 4 }) }}</li></ul><p v-else class="text-preview">{{ clip.content }}</p></template></div>
               <div v-if="!protectedClip(clip) && (clip.tags?.length || clip.linkSources?.length)" class="card-metadata"><span v-for="source in (clip.linkSources ?? []).slice(0, 1)" :key="source">{{ t(sourceNames[source] ?? source) }}</span><span v-for="tag in (clip.tags ?? []).slice(0, 2)" :key="tag">#{{ tag }}</span><small v-if="(clip.tags?.length ?? 0) > 2">+{{ clip.tags!.length - 2 }}</small></div>
               <div class="card-bottom"><span v-if="groupFor(clip)" class="group-tag" :style="{ '--group-color': groupFor(clip)?.color }"><span />{{ groupFor(clip)?.name }}</span><span v-else class="time-label">{{ relativeTime(clip.updatedAt) }}</span><div v-if="!imageSelectMode" class="card-copy-area" @dblclick.stop><kbd v-if="index < 9">{{ modKey }} {{ index + 1 }}</kbd><button :class="['copy-button', { copied: copied === clip.id }]" @click.stop="copy(clip)" :title="t('复制{title}', { title: titleFor(clip) })" :aria-label="t('复制{title}', { title: titleFor(clip) })"><Icon :name="copied === clip.id ? 'check' : 'copy'" :size="14" /><span>{{ copied === clip.id ? t('已复制') : t('复制') }}</span></button></div></div>
             </article>
@@ -692,14 +809,15 @@ onUnmounted(() => { disposed = true; pendingWindowClose = null; clearTimeout(win
           <div v-if="editing && protectedClip(editing)" class="private-detail-note"><strong>{{ t('隐私记录 · 原文默认折叠') }}</strong><p>{{ t('在本机展开不会授予 AI 访问权限。') }}</p><p v-if="editing.privacyManual">{{ t('保护依据：手动标记为隐私') }}</p><div v-if="editing.privacyReasons?.length" class="privacy-match-reasons"><strong>{{ t('保护依据与命中规则') }}</strong><ul><li v-for="reason in editing.privacyReasons" :key="reason"><strong>{{ reason.startsWith('自定义规则：') ? t('自定义规则：{name}', { name: reason.slice(6) }) : t(reason) }}</strong><p>{{ t(privacyReasonExplanation(reason)) }}</p></li></ul><small>{{ t('包含此前保留的命中记录；规则停用或内容修改后，可在下方复核。不会展示敏感值。') }}</small></div><button type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked" @click="privateRevealed = !privateRevealed">{{ privateRevealed ? t('收起私密内容') : t('仅在本机展开内容') }}</button></div>
           <p v-if="clipDetailsLoading" class="field-note">{{ t('正在读取…') }}</p><p v-if="clipDetailsError" class="privacy-error" role="alert">{{ clipDetailsError }} <button type="button" class="button subtle" @click="privacyChanged">{{ t('重新读取') }}</button></p>
           <template v-if="!clipDetailsBlocked && (!editing || !protectedClip(editing) || privateRevealed)"><label>{{ t('片段名称') }} <span class="optional">{{ t('选填') }}</span><input v-model="clipTitle" maxlength="200" :placeholder="t('为这颗灵感起个名字')" autofocus /></label>
-          <div v-if="editing?.kind === 'image'" class="image-detail"><ClipImage :id="editing.id" :alt="titleFor(editing)" :thumbnail="false" /><p class="field-note">{{ imageLabel(editing) }} · {{ t('收录于 {time}', { time: formatDate(editing.createdAt, { dateStyle: 'medium', timeStyle: 'short' }) }) }}</p><p class="field-note">{{ t('图片保持原样；可修改标题、分组和保留方式，复制后粘贴到支持图片的应用。') }}</p></div>
+          <div v-if="editing?.kind === 'image'" class="image-detail"><div class="image-detail-preview"><ClipImage :id="editing.id" :alt="titleFor(editing)" :thumbnail="false" /><button type="button" class="image-expand" :aria-label="t('全屏查看图片')" @click="openImageViewer()"><Icon name="expand" :size="16" />{{ t('全屏查看') }}</button></div><p class="field-note">{{ imageLabel(editing) }} · {{ t('收录于 {time}', { time: formatDate(editing.createdAt, { dateStyle: 'medium', timeStyle: 'short' }) }) }}</p><p class="field-note">{{ t('图片保持原样；可修改标题、分组和保留方式，复制后粘贴到支持图片的应用。') }}</p></div>
+          <div v-else-if="editing?.kind === 'bundle'" class="bundle-detail"><ClipGallery :clip="editing" detail @view="openImageViewer" /><label>{{ t('配文') }}<textarea v-model="clipContent" rows="4" maxlength="262144" :placeholder="t('可选：给这组图片写点文字')" /></label><p class="field-note">{{ t('整组复制同时提供文字与图片文件；接收方式取决于目标应用，也可分别复制。') }}</p></div>
           <div v-else-if="editing?.kind === 'file'" class="file-details"><strong>{{ t('文件路径') }}</strong><ol><li v-for="entry in fileEntries(editing)" :key="entry.path"><code>{{ entry.path }}</code><span>{{ t(entry.entryKind === 'directory' ? '文件夹' : entry.entryKind === 'file' ? '文件' : '未知类型') }}</span></li></ol></div>
           <label v-else>{{ t('内容') }} <span v-if="editing" class="optional">{{ t('原始记录 · 只读') }}</span><textarea v-model="clipContent" :readonly="!!editing" :placeholder="t('写下一段文字、一个链接，或者几行代码…')" rows="7" required /><span class="field-note">{{ t('{count} 个字符', { count: formatNumber([...clipContent].length) }) }}{{ editing ? ` · ${t('收录于 {time}', { time: formatDate(editing.createdAt, { dateStyle: 'medium', timeStyle: 'short' }) })}` : '' }}</span></label>
           </template>
           <ClipPrivacy v-if="editing" :clip="editing" :revision="rulesRevision" :disabled="busy || clipDetailsBlocked || dataOperationBusy || updateBusy || shareBusy || appearanceBusy || privacyBusy || telemetryBusy || aiBusy" @busy="clipPrivacyBusy = $event" @changed="privacyChanged" />
           <div class="form-row"><div class="group-field"><span>{{ t('所属星座') }}</span><UiSelect v-model="clipGroup" :options="groupChoices" :label="t('所属星座')" :disabled="busy || dataBusy" /></div><label class="checkbox-label"><input type="checkbox" v-model="clipPinned" /><Icon name="star" :size="17" />{{ t('加入星标收藏') }}</label></div>
           <label class="checkbox-label keep-setting"><input type="checkbox" v-model="clipKept" /><Icon name="shield" :size="17" />{{ t('永久保留，不参与清理') }}</label><p v-if="editing?.keepForever" class="field-note">{{ t('这条记录已受保护；如需删除，请先取消永久保留并保存。') }}</p>
-          <div class="modal-actions"><button v-if="editing" type="button" class="button danger-quiet" @click="deleteEditing" :disabled="busy || dataBusy || editing.keepForever"><Icon name="trash" :size="16" />{{ t('删除') }}</button><span class="spacer" /><button v-if="editing && (editing.rich || editing.kind === 'file')" type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked || (protectedClip(editing) && !privateRevealed)" :title="editing.kind === 'file' ? t('只复制文件路径') : t('去掉原有格式，只复制文字')" @click="copy(editing, false, true)"><Icon name="text" :size="15" />{{ t('复制为纯文本') }}</button><button v-if="editing?.kind === 'file'" type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked || (protectedClip(editing) && !privateRevealed)" @click="copy(editing)"><Icon name="copy" :size="15" />{{ t('复制文件') }}</button><button v-else-if="editing?.kind === 'image'" type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked" @click="copy(editing)"><Icon name="copy" :size="15" />{{ t('复制图片') }}</button><button v-else-if="editing" type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked || (protectedClip(editing) && !privateRevealed)" @click="openStudio(editing)"><Icon name="code" :size="15" />{{ t('带入星绘坊') }}</button><button type="submit" class="button primary" :disabled="busy || dataBusy || clipDetailsBlocked || (editing?.kind !== 'image' && !clipContent.trim())">{{ editing ? t('保存修改') : t('收下这颗灵感') }}<Icon name="check" :size="16" /></button></div>
+          <div class="modal-actions"><button v-if="editing" type="button" class="button danger-quiet" @click="deleteEditing" :disabled="busy || dataBusy || editing.keepForever"><Icon name="trash" :size="16" />{{ t('删除') }}</button><span class="spacer" /><button v-if="editing && (editing.rich || editing.kind === 'file' || (editing.kind === 'bundle' && !!editing.content))" type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked || (protectedClip(editing) && !privateRevealed)" :title="editing.kind === 'file' ? t('只复制文件路径') : t('去掉原有格式，只复制文字')" @click="copy(editing, false, true)"><Icon name="text" :size="15" />{{ t('复制为纯文本') }}</button><button v-if="editing?.kind === 'file'" type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked || (protectedClip(editing) && !privateRevealed)" @click="copy(editing)"><Icon name="copy" :size="15" />{{ t('复制文件') }}</button><template v-else-if="editing?.kind === 'bundle'"><button type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked || (protectedClip(editing) && !privateRevealed)" @click="copyBundleImages(editing)">{{ t('只复制图片') }}</button><button type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked || (protectedClip(editing) && !privateRevealed)" @click="copy(editing)">{{ t('整组复制') }}</button></template><button v-else-if="editing?.kind === 'image'" type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked" @click="copy(editing)"><Icon name="copy" :size="15" />{{ t('复制图片') }}</button><button v-else-if="editing" type="button" class="button subtle" :disabled="busy || dataBusy || clipDetailsBlocked || (protectedClip(editing) && !privateRevealed)" @click="openStudio(editing)"><Icon name="code" :size="15" />{{ t('带入星绘坊') }}</button><button type="submit" class="button primary" :disabled="busy || dataBusy || clipDetailsBlocked || (!['image','bundle'].includes(editing?.kind ?? '') && !clipContent.trim())">{{ editing ? t('保存修改') : t('收下这颗灵感') }}<Icon name="check" :size="16" /></button></div>
         </form>
         <form v-else-if="modal === 'group'" @submit.prevent="saveGroup"><p class="modal-intro">{{ t('把常用片段放在一起，下次相遇更容易。') }}</p><label>{{ t('星座名称') }}<input v-model="groupName" maxlength="40" :placeholder="t('例如：工作碎片、值得一读')" required autofocus /></label><label class="color-label">{{ t('标记颜色') }}<div class="color-choices"><button v-for="color in colors" :key="color" type="button" :style="{ background: color }" :class="{ chosen: groupColor === color }" :aria-label="t('选择颜色 {color}', { color })" :aria-pressed="groupColor === color" @click="groupColor = color"><Icon v-if="groupColor === color" name="check" :size="16" /></button></div></label><div class="modal-actions"><button type="button" class="button subtle" :disabled="dataBusy" @click="closeModal">{{ t('取消') }}</button><button class="button primary" :disabled="busy || dataBusy || !groupName.trim()">{{ t('创建分组') }}<Icon name="plus" :size="16" /></button></div></form>
         <form v-else-if="modal === 'settings'" @submit.prevent="saveSettings" class="settings-form">
@@ -719,7 +837,7 @@ onUnmounted(() => { disposed = true; pendingWindowClose = null; clearTimeout(win
             </section>
             <section v-show="settingsTab === 'habits'" id="settings-panel-habits" role="tabpanel" aria-labelledby="settings-tab-habits" class="settings-panel">
               <StartupSettings v-if="settingsTab === 'habits'" ref="startupSettings" :disabled="busy || themeSaving || dataOperationBusy || updateBusy || shareBusy || appearanceBusy || privacyBusy || telemetryBusy || aiBusy || clipPrivacyBusy" @busy="startupBusy = $event" @quit="quitFromSettings" />
-              <fieldset class="settings-section preferences-boundary" :disabled="busy || dataBusy" :aria-label="t('使用习惯')"><h3><Icon name="sliders" :size="16" />{{ t('使用习惯') }}</h3><div class="setting-row"><div><strong>{{ t('界面语言') }}</strong><p>{{ t('保存后立即切换界面语言；跟随系统时，中文系统显示简体中文，其他系统显示英文。') }}</p></div><UiSelect v-model="settingsDraft.uiLanguage" :options="uiLanguageChoices" :label="t('界面语言')" :disabled="busy || dataBusy" /></div><div class="setting-row"><div><strong>{{ t('流星启动画面') }}</strong><p>{{ t('仅首次打开短暂显示，可随时跳过') }}</p></div><div class="startup-preference"><button type="button" class="startup-replay" :disabled="dataBusy" @click="replayStartup">{{ t('重看一次') }}</button><button type="button" :class="['switch', { on: settingsDraft.showStartup }]" role="switch" :aria-checked="settingsDraft.showStartup" :aria-label="t('流星启动画面')" :disabled="dataBusy" @click="settingsDraft.showStartup = !settingsDraft.showStartup"><span /></button></div></div><div class="setting-row"><div><strong>{{ t('默认布局') }}</strong><p>{{ t('网格、列表，或横向快取的流星栏') }}</p></div><UiSelect v-model="settingsDraft.layout" :options="layoutChoices" :label="t('默认布局')" :disabled="busy || dataBusy" /></div><div class="setting-row"><div><strong>{{ t('窗口置顶') }}</strong><p>{{ isDesktop ? t('保持在其他应用窗口上方') : t('桌面版生效；此处仅预览设置') }}</p></div><button type="button" :class="['switch', { on: settingsDraft.alwaysOnTop }]" role="switch" :aria-checked="settingsDraft.alwaysOnTop" :aria-label="t('窗口置顶')" @click="settingsDraft.alwaysOnTop = !settingsDraft.alwaysOnTop"><span /></button></div><div class="setting-row"><div><strong>{{ t('复制后收起窗口') }}</strong><p>{{ t('回车、双击或 {key} 1–9 复制后收起星笺，回到原应用直接粘贴', { key: modKey }) }}</p></div><button type="button" :class="['switch', { on: settingsDraft.hideAfterCopy !== false }]" role="switch" :aria-checked="settingsDraft.hideAfterCopy !== false" :aria-label="t('复制后收起窗口')" @click="settingsDraft.hideAfterCopy = settingsDraft.hideAfterCopy === false"><span /></button></div><div class="setting-row"><div><strong>{{ t('快选复制') }}</strong><p>{{ t('按住 {key} 查看序号；搜索框内也可用，回车复制第一条', { key: modKey }) }}</p></div><kbd class="setting-shortcut">{{ modKey }} 1–9</kbd></div><div class="setting-row"><div><strong>{{ t('呼出快捷键') }}</strong><p>{{ t('从任何应用打开星笺') }}</p></div><input class="shortcut-input" v-model="settingsDraft.shortcut" :aria-label="t('呼出快捷键')" placeholder="CommandOrControl+Shift+V" /></div><div class="setting-row"><div><strong>{{ t('分类 / 分组切换') }}</strong><p>{{ t('窗口内循环切换；输入文字和弹窗内不触发') }}</p></div><kbd class="setting-shortcut">{{ modKey }} ⇧ ← / →</kbd></div><p class="retention-note">{{ t('关闭主窗口后，星笺继续在后台运行，已开启的记录也会继续。可用呼出快捷键、再次打开应用或菜单栏 / 托盘菜单重新打开；要完全退出，可使用上方的「退出星笺」或托盘菜单。Windows 托盘图标可能收在通知区域的折叠菜单中。') }}</p></fieldset>
+              <fieldset class="settings-section preferences-boundary" :disabled="busy || dataBusy" :aria-label="t('使用习惯')"><h3><Icon name="sliders" :size="16" />{{ t('使用习惯') }}</h3><div class="setting-row"><div><strong>{{ t('界面语言') }}</strong><p>{{ t('保存后立即切换界面语言；跟随系统时，中文系统显示简体中文，其他系统显示英文。') }}</p></div><UiSelect v-model="settingsDraft.uiLanguage" :options="uiLanguageChoices" :label="t('界面语言')" :disabled="busy || dataBusy" /></div><div class="setting-row"><div><strong>{{ t('流星启动画面') }}</strong><p>{{ t('仅首次打开短暂显示，可随时跳过') }}</p></div><div class="startup-preference"><button type="button" class="startup-replay" :disabled="dataBusy" @click="replayStartup">{{ t('重看一次') }}</button><button type="button" :class="['switch', { on: settingsDraft.showStartup }]" role="switch" :aria-checked="settingsDraft.showStartup" :aria-label="t('流星启动画面')" :disabled="dataBusy" @click="settingsDraft.showStartup = !settingsDraft.showStartup"><span /></button></div></div><div class="setting-row"><div><strong>{{ t('默认布局') }}</strong><p>{{ t('网格、列表，或横向快取的流星栏') }}</p></div><UiSelect v-model="settingsDraft.layout" :options="layoutChoices" :label="t('默认布局')" :disabled="busy || dataBusy" /></div><div class="setting-row"><div><strong>{{ t('窗口置顶') }}</strong><p>{{ isDesktop ? t('保持在其他应用窗口上方') : t('桌面版生效；此处仅预览设置') }}</p></div><button type="button" :class="['switch', { on: settingsDraft.alwaysOnTop }]" role="switch" :aria-checked="settingsDraft.alwaysOnTop" :aria-label="t('窗口置顶')" @click="settingsDraft.alwaysOnTop = !settingsDraft.alwaysOnTop"><span /></button></div><div class="setting-row"><div><strong>{{ t('复制后收起窗口') }}</strong><p>{{ t('回车、双击或 {key} 1–9 复制后收起星笺，回到原应用直接粘贴', { key: modKey }) }}</p></div><button type="button" :class="['switch', { on: settingsDraft.hideAfterCopy !== false }]" role="switch" :aria-checked="settingsDraft.hideAfterCopy !== false" :aria-label="t('复制后收起窗口')" @click="settingsDraft.hideAfterCopy = settingsDraft.hideAfterCopy === false"><span /></button></div><div class="setting-row"><div><strong>{{ t('快选复制') }}</strong><p>{{ t('按住 {key} 查看序号；搜索框内也可用，回车复制第一条', { key: modKey }) }}</p></div><kbd class="setting-shortcut">{{ modKey }} 1–9</kbd></div><div class="setting-row"><div><strong>{{ t('呼出快捷键') }}</strong><p>{{ t('从任何应用打开星笺') }}</p><p>{{ t('保存时会检查快捷键注册；若被占用或不可用，会提示并保留原快捷键。') }}</p></div><div class="shortcut-control"><input class="shortcut-input" v-model="settingsDraft.shortcut" :aria-label="t('呼出快捷键')" aria-describedby="shortcut-status" :aria-invalid="shortcutStatus.kind === 'error'" placeholder="CommandOrControl+Shift+V" /><span class="shortcut-status-icon" :class="shortcutStatus.kind" :data-shortcut-state="shortcutStatus.kind" :title="shortcutStatus.label" aria-hidden="true"><Icon :name="shortcutStatus.icon" :size="15" /></span><span id="shortcut-status" class="shortcut-status-text" role="status">{{ shortcutStatus.label }}</span></div></div><div class="setting-row"><div><strong>{{ t('分类 / 分组切换') }}</strong><p>{{ t('窗口内循环切换；输入文字和弹窗内不触发') }}</p></div><kbd class="setting-shortcut">{{ modKey }} ⇧ ← / →</kbd></div><p class="retention-note">{{ t('关闭主窗口后，星笺继续在后台运行，已开启的记录也会继续。可用呼出快捷键、再次打开应用或菜单栏 / 托盘菜单重新打开；要完全退出，可使用上方的「退出星笺」或托盘菜单。Windows 托盘图标可能收在通知区域的折叠菜单中。') }}</p></fieldset>
             </section>
             <section v-show="settingsTab === 'privacy'" id="settings-panel-privacy" role="tabpanel" aria-labelledby="settings-tab-privacy" class="settings-panel">
               <fieldset class="settings-section preferences-boundary" :disabled="busy || dataBusy" :aria-label="t('记录与隐私')"><h3><Icon name="shield" :size="16" />{{ t('采集与保留') }}</h3><div class="setting-row"><div><strong>{{ t('自动记录新复制的文本与图片') }}</strong><p>{{ t('开启或恢复时先记录当前剪贴内容，再监听新的复制；内容保存在本机') }}</p></div><button type="button" :class="['switch', { on: !settingsDraft.paused }]" role="switch" :aria-checked="!settingsDraft.paused" :aria-label="t('自动记录新复制的文本与图片')" @click="settingsDraft.paused = !settingsDraft.paused"><span /></button></div><div class="setting-row"><div><strong>{{ t('历史记录上限') }}</strong><p>{{ t('星标、永久保留与分组记录不计入上限') }}</p></div><UiSelect v-model="settingsDraft.maxHistory" :options="historyChoices" :label="t('历史记录上限')" :disabled="busy || dataBusy" /></div><div class="setting-row"><div><strong>{{ t('历史保留时长') }}</strong><p>{{ t('按最近更新时间计算；星标、永久保留与分组受保护') }}</p></div><UiSelect v-model="settingsDraft.retentionDays" :options="retentionChoices" :label="t('历史保留时长')" :disabled="busy || dataBusy" /></div><p class="field-note">{{ t('默认长期保留：不限条数、不限天数。历史不会因数量或时间自动移除；你仍可主动删除或整理，也可自行设置清理规则。') }}</p><p class="retention-note">{{ t('保存偏好后立即应用清理规则。桌面版还会在启动、新记录和约每分钟检查；暂停记录时也会按已选时长清理。浏览器演示只在保存偏好或新增内容时检查。永久保留、星标和已分组内容不会自动清理；重新捕获相同内容会更新保留起点。清理无法撤回，可先导出备份。同时选择「不限条数」和「不限天数」可关闭自动淘汰；重要内容也可单独标记永久保留。') }}</p><div class="privacy-note"><Icon name="shield" :size="16" /><p>{{ t('内容仅保存在本机，不上传云端。剪贴板可能含有私密内容，复制密码等敏感信息前请先暂停记录。') }}</p></div></fieldset>
@@ -778,6 +896,7 @@ onUnmounted(() => { disposed = true; pendingWindowClose = null; clearTimeout(win
         <CleanupPanel v-if="cleanupOpen" @busy="cleanupBusy = $event" @changed="cleanupChanged" />
       </div>
     </dialog>
+    <ImageViewer v-if="imageViewerPosition !== null && editing" :clip="editing" :initial-position="imageViewerPosition" @close="imageViewerPosition = null" />
     <CodeStudio v-if="studioOpen" :clip="studioClip" :groups="state.groups" :initial-mode="studioClip && studioClip.kind !== 'code' ? 'handwriting' : 'code'" @close="studioOpen = false" @saved="refresh" />
     <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="importBackup" />
     <Teleport :to="toastTarget"><Transition name="toast"><div v-if="toast" :class="['toast-message', { error: toastError }]" role="status"><Icon :name="toastError ? 'alert' : 'check'" :size="17" /><span>{{ toast }}</span><button class="icon-button" @click="toast = ''" :aria-label="t('关闭提示')"><Icon name="close" :size="14" /></button></div></Transition></Teleport>

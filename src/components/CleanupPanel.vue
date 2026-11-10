@@ -140,7 +140,7 @@ async function execute() {
       </dl>
       <p class="cleanup-estimate">{{ t('文字与标题按 UTF-8 字节统计，图片按原图 PNG 字节加标题统计，不计缩略图。这不是预计可释放的磁盘空间；索引、缩略图和空闲页会影响数据库大小，实际缩减以执行结果为准。') }}</p>
       <div v-if="items.length" class="cleanup-table-wrap" role="region" :aria-label="t('待清理记录明细')" tabindex="0">
-        <table><thead><tr><th scope="col">{{ t('片段标题') }}</th><th scope="col">{{ t('类型') }}</th><th scope="col">{{ t('内容占用') }}</th><th scope="col">{{ t('最近更新') }}</th></tr></thead><tbody><tr v-for="item in items" :key="item.id"><td class="cleanup-title">{{ item.title || t('未命名片段') }}</td><td>{{ kindNames[item.kind] }}</td><td :title="t('{size} 字节', { size: formatNumber(item.bytes) })">{{ bytes(item.bytes) }}</td><td>{{ updatedAt(item.updatedAt) }}</td></tr></tbody></table>
+        <table><thead><tr><th scope="col">{{ t('片段标题') }}</th><th scope="col">{{ t('类型') }}</th><th scope="col">{{ t('内容占用') }}</th><th scope="col">{{ t('最近更新') }}</th></tr></thead><tbody><tr v-for="item in items" :key="item.id"><td class="cleanup-title">{{ item.title || t('未命名片段') }}</td><td>{{ kindNames[item.kind === 'bundle' ? 'image' : item.kind] }}</td><td :title="t('{size} 字节', { size: formatNumber(item.bytes) })">{{ bytes(item.bytes) }}</td><td>{{ updatedAt(item.updatedAt) }}</td></tr></tbody></table>
       </div>
       <p v-if="preview.truncated || preview.matchedCount > items.length" class="cleanup-truncated">{{ t('列出前 {shown} 条，确认后将清理全部 {total} 条匹配记录。', { shown: items.length, total: preview.matchedCount }) }}</p>
       <p v-else-if="preview.matchedCount === 0" class="cleanup-empty">{{ t('没有符合条件的可删除记录。仍可单独整理数据库中的可复用空间。') }}</p>

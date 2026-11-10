@@ -2,6 +2,11 @@
 // covers the public error surface; backendPatterns handles messages that wrap
 // an OS error after a colon.
 export const backendEn: Record<string, string> = {
+  "请先将记录加入星标收藏。": "Star this clip before arranging favorites.",
+  "收藏记录已改变，请刷新后重试。": "Favorites have changed. Refresh and try again.",
+  "置顶项与普通收藏分别排序，请选择同一区域的记录。": "Pinned and other favorites are arranged separately. Choose a clip in the same section.",
+  "未知的收藏排序方式。": "Unknown favorite order.",
+  "备份中的收藏排序无效。": "The backup contains an invalid favorite order.",
   "应用内部状态异常，请重新启动星笺。": "Internal app state is invalid. Restart Starclip.",
   "不支持的界面语言。": "Unsupported interface language.",
   "统计范围需为 1–366 天。": "The insights range must be 1–366 days.",

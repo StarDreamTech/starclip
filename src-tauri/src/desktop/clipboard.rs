@@ -4,7 +4,7 @@ use super::*;
 pub(super) enum ClipboardWrite {
     Text(String),
     Html(String, String),
-    Image((u32, u32, Vec<u8>)),
+    Image((u32, u32, Vec<u8>), Vec<u8>),
     Files(Vec<String>),
 }
 pub(super) fn write_and_suppress(
@@ -22,7 +22,7 @@ pub(super) fn write_clipboard(context: &Context, content: ClipboardWrite) -> Res
             CaptureKey::Text(text.clone())
         }
         ClipboardWrite::Files(paths) => CaptureKey::Files(paths.join("\n")),
-        ClipboardWrite::Image((width, height, rgba)) => {
+        ClipboardWrite::Image((width, height, rgba), _) => {
             CaptureKey::Image(images::fingerprint_rgba(*width, *height, rgba)?)
         }
     };
@@ -30,7 +30,13 @@ pub(super) fn write_clipboard(context: &Context, content: ClipboardWrite) -> Res
     if reader.clipboard.is_none() {
         reader.clipboard = Some(Clipboard::new().map_err(|e| format!("无法访问剪贴板：{e}"))?);
     }
-    let Reader { clipboard, capture } = &mut *reader;
+    let own_png = match &content {
+        ClipboardWrite::Image(_, png) => Some(png.clone()),
+        _ => None,
+    };
+    let Reader {
+        clipboard, capture, ..
+    } = &mut *reader;
     write_and_suppress(capture, key, || match content {
         ClipboardWrite::Text(text) => clipboard
             .as_mut()
@@ -48,7 +54,7 @@ pub(super) fn write_clipboard(context: &Context, content: ClipboardWrite) -> Res
             .set()
             .file_list(&paths)
             .map_err(|e| format!("文件复制失败：{e}")),
-        ClipboardWrite::Image((width, height, rgba)) => clipboard
+        ClipboardWrite::Image((width, height, rgba), _) => clipboard
             .as_mut()
             .unwrap()
             .set_image(ImageData {
@@ -57,7 +63,12 @@ pub(super) fn write_clipboard(context: &Context, content: ClipboardWrite) -> Res
                 bytes: rgba.into(),
             })
             .map_err(|e| format!("图片复制失败：{e}")),
-    })
+    })?;
+    reader.copy_image_png = own_png;
+    reader.last_image_id = None;
+    reader.last_bundle_id = None;
+    reader.own_bundle = None;
+    Ok(())
 }
 
 pub(super) fn set_clipboard_error(app: &AppHandle, context: &Context, error: Option<String>) {
@@ -90,12 +101,25 @@ pub(super) fn clipboard_sequence() -> Option<u64> {
 pub(super) enum ClipboardContent {
     Empty,
     Text(String, Option<String>),
-    Image(ImageData<'static>),
-    Files(Vec<String>),
+    Image(images::PreparedImage),
+    Bundle(media::IncomingBundle),
+    Files(Vec<String>, String),
+}
+
+pub(super) enum ReadFailure {
+    Invalid(String),
+    Transient(String),
+}
+fn optional_text(clipboard: &mut Clipboard) -> std::result::Result<String, ReadFailure> {
+    match clipboard.get_text() {
+        Ok(text) => Ok(text),
+        Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
+        Err(error) => Err(ReadFailure::Transient(error.to_string())),
+    }
 }
 pub(super) fn read_clipboard(
     clipboard: &mut Clipboard,
-) -> std::result::Result<ClipboardContent, arboard::Error> {
+) -> std::result::Result<ClipboardContent, ReadFailure> {
     // Files first: Finder also offers the file icon as an image and names as text.
     if let Ok(files) = clipboard.get().file_list() {
         let paths: Vec<String> = files
@@ -104,14 +128,36 @@ pub(super) fn read_clipboard(
             .filter(|path| !path.is_empty() && !path.contains('\n'))
             .collect();
         if !paths.is_empty() && paths.len() == files.len() {
-            return Ok(ClipboardContent::Files(paths));
+            let text = optional_text(clipboard)?;
+            return Ok(ClipboardContent::Files(paths, text));
         }
     }
     let image_error = match clipboard.get_image() {
-        Ok(image) => return Ok(ClipboardContent::Image(image)),
+        Ok(image) => {
+            let width = u32::try_from(image.width)
+                .map_err(|_| ReadFailure::Invalid("图片尺寸超出支持范围。".into()))?;
+            let height = u32::try_from(image.height)
+                .map_err(|_| ReadFailure::Invalid("图片尺寸超出支持范围。".into()))?;
+            let prepared =
+                images::prepare_rgba(width, height, &image.bytes).map_err(ReadFailure::Invalid)?;
+            let text = optional_text(clipboard)?;
+            if !text.trim().is_empty() {
+                if text.len() > crate::store::MAX_CONTENT_BYTES {
+                    return Err(ReadFailure::Invalid(
+                        "单条文字超过 256 KiB，未记录。".into(),
+                    ));
+                }
+                return Ok(ClipboardContent::Bundle(media::IncomingBundle {
+                    text,
+                    images: vec![prepared],
+                    own: None,
+                }));
+            }
+            return Ok(ClipboardContent::Image(prepared));
+        }
         Err(arboard::Error::ContentNotAvailable) => None,
         Err(arboard::Error::ConversionFailure) => Some(arboard::Error::ConversionFailure),
-        Err(error) => return Err(error),
+        Err(error) => return Err(ReadFailure::Transient(error.to_string())),
     };
     match clipboard.get_text() {
         Ok(text) => {
@@ -124,10 +170,10 @@ pub(super) fn read_clipboard(
             Ok(ClipboardContent::Text(text, html))
         }
         Err(arboard::Error::ContentNotAvailable) => match image_error {
-            Some(error) => Err(error),
+            Some(error) => Err(ReadFailure::Invalid(error.to_string())),
             None => Ok(ClipboardContent::Empty),
         },
-        Err(error) => Err(error),
+        Err(error) => Err(ReadFailure::Transient(error.to_string())),
     }
 }
 
@@ -180,6 +226,8 @@ pub(super) fn monitor(app: AppHandle, context: Arc<Context>) {
                 // while clipboard pixels are decoded and compressed outside the store lock.
                 let mut reader = lock(&context.reader)?;
                 if lock(&context.store)?.settings()?.paused {
+                    reader.copy_image_png = None;
+                    reader.own_bundle = None;
                     return Ok(None);
                 }
                 let sequence = clipboard_sequence();
@@ -190,39 +238,48 @@ pub(super) fn monitor(app: AppHandle, context: Arc<Context>) {
                     reader.clipboard =
                         Some(Clipboard::new().map_err(|e| format!("无法访问剪贴板：{e}"))?);
                 }
-                let content = match read_clipboard(reader.clipboard.as_mut().unwrap()) {
+                let mut content = match read_clipboard(reader.clipboard.as_mut().unwrap()) {
                     Ok(content) => content,
-                    Err(error) => {
-                        if matches!(error, arboard::Error::ConversionFailure) {
-                            reader.capture.skip_invalid(sequence);
-                        }
+                    Err(ReadFailure::Invalid(error)) => {
+                        reader.capture.skip_invalid(sequence);
+                        return Err(format!("剪贴板读取失败：{error}"));
+                    }
+                    Err(ReadFailure::Transient(error)) => {
                         return Err(format!("剪贴板读取失败：{error}"));
                     }
                 };
+                if let ClipboardContent::Files(paths, text) = &content {
+                    let key = Some(CaptureKey::Files(paths.join("\n")));
+                    match media::read_file_bundle(text.clone(), paths) {
+                        Ok(Some(bundle)) => {
+                            // A file-only write from this app is suppressed once; a new caption
+                            // or a later native change must still be examined as a collection.
+                            if bundle.text.is_empty() && !reader.capture.needs_capture(&key) {
+                                reader
+                                    .capture
+                                    .accept(sequence, if sequence.is_some() { None } else { key });
+                                return Ok(Some(false));
+                            }
+                            content = ClipboardContent::Bundle(bundle);
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            reader.capture.skip_invalid(sequence);
+                            return Err(error);
+                        }
+                    }
+                }
+
                 let source = crate::clipboard_source::read();
-                // A copy during the read may mix formats from two owners. Retry next poll.
+                // Retry if ownership changed while multiple representations were read.
                 if sequence.is_some() && sequence != clipboard_sequence() {
                     return Ok(None);
                 }
                 let key = match &content {
                     ClipboardContent::Image(image) => {
-                        let dimensions = u32::try_from(image.width)
-                            .ok()
-                            .zip(u32::try_from(image.height).ok());
-                        let digest = dimensions
-                            .ok_or_else(|| "图片尺寸超出支持范围。".to_string())
-                            .and_then(|(width, height)| {
-                                images::fingerprint_rgba(width, height, &image.bytes)
-                            });
-                        match digest {
-                            Ok(digest) => Some(CaptureKey::Image(digest)),
-                            Err(error) => {
-                                reader.capture.skip_invalid(sequence);
-                                return Err(error);
-                            }
-                        }
+                        Some(CaptureKey::Image(image.digest().into()))
                     }
-                    ClipboardContent::Files(paths) => {
+                    ClipboardContent::Files(paths, _) => {
                         if paths.len() > crate::store::MAX_FILES {
                             reader.capture.skip_invalid(sequence);
                             return Err(format!(
@@ -241,35 +298,94 @@ pub(super) fn monitor(app: AppHandle, context: Arc<Context>) {
                     }
                     _ => None,
                 };
-                let capture = reader.capture.needs_capture(&key);
-                if capture {
-                    match content {
-                        ClipboardContent::Image(image) => {
-                            let prepared = match images::prepare_rgba(
-                                image.width as u32,
-                                image.height as u32,
-                                &image.bytes,
-                            ) {
-                                Ok(image) => image,
-                                Err(error) => {
-                                    reader.capture.skip_invalid(sequence);
-                                    return Err(error);
+                let mut capture = reader.capture.needs_capture(&key);
+                match content {
+                    ClipboardContent::Image(image) => {
+                        let own = reader
+                            .copy_image_png
+                            .as_deref()
+                            .map(|png| {
+                                if png.len() < 24 {
+                                    return Ok(false);
                                 }
-                            };
-                            lock(&context.store)?.capture_image(&prepared, &source)?;
+                                let width = u32::from_be_bytes(png[16..20].try_into().unwrap());
+                                let height = u32::from_be_bytes(png[20..24].try_into().unwrap());
+                                image.matches_png(width, height, png)
+                            })
+                            .transpose()?
+                            .unwrap_or(false);
+                        let store = lock(&context.store)?;
+                        let existing = store.image_record_id(&image)?;
+                        // A hash alone never suppresses a different image.
+                        capture = !own
+                            && (capture || existing.is_none() || existing != reader.last_image_id);
+                        if capture {
+                            reader.last_image_id = Some(store.capture_image(&image, &source)?.id);
+                        } else {
+                            reader.last_image_id = existing;
                         }
-                        ClipboardContent::Text(text, html) => {
+                        reader.last_bundle_id = None;
+                    }
+                    ClipboardContent::Bundle(bundle) => {
+                        let store = lock(&context.store)?;
+                        let own = match &bundle.own {
+                            Some((token, id)) if reader.own_bundle.as_ref() == Some(token) => {
+                                store.bundle_matches(*id, &bundle.text, &bundle.images)?
+                            }
+                            _ => false,
+                        };
+                        let same = match reader.last_bundle_id {
+                            Some(id) => store
+                                .bundle_matches(id, &bundle.text, &bundle.images)
+                                .unwrap_or(false),
+                            None => false,
+                        };
+                        capture = !own && !same;
+                        if capture {
+                            reader.last_bundle_id = Some(
+                                store
+                                    .add_bundle(
+                                        &bundle.text,
+                                        &bundle.images,
+                                        "",
+                                        false,
+                                        false,
+                                        Some(&source),
+                                    )?
+                                    .id,
+                            );
+                        } else if own {
+                            reader.last_bundle_id = bundle.own.as_ref().map(|(_, id)| *id);
+                        }
+                        reader.last_image_id = None;
+                    }
+                    ClipboardContent::Text(text, html) => {
+                        if capture {
                             lock(&context.store)?.capture_rich_text(
                                 &text,
                                 html.as_deref(),
                                 &source,
                             )?;
                         }
-                        ClipboardContent::Files(paths) => {
+                        reader.last_image_id = None;
+                        reader.last_bundle_id = None;
+                    }
+                    ClipboardContent::Files(paths, _) => {
+                        if capture {
                             lock(&context.store)?.capture_files(&paths, &source)?;
                         }
-                        ClipboardContent::Empty => {}
+                        reader.last_image_id = None;
+                        reader.last_bundle_id = None;
                     }
+                    ClipboardContent::Empty => {
+                        reader.last_image_id = None;
+                        reader.last_bundle_id = None;
+                    }
+                }
+                reader.copy_image_png = None;
+                // Keep the own collection token until another representation is observed.
+                if key.is_some() {
+                    reader.own_bundle = None;
                 }
                 reader.capture.accept(sequence, key);
                 Ok(Some(capture))

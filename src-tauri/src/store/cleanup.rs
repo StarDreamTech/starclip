@@ -62,7 +62,8 @@ impl Store {
         let mut items: Vec<CleanupItem> = Vec::new();
         let mut stmt = self.conn.prepare(CLIP_SELECT).map_err(sql_error)?;
         for row in stmt.query_map([], clip_from_row).map_err(sql_error)? {
-            let clip = row.map_err(sql_error)?;
+            let mut clip = row.map_err(sql_error)?;
+            Self::fill_bundle_images(&self.conn, std::slice::from_mut(&mut clip))?;
             total_count += 1;
             if clip.pinned || clip.keep_forever {
                 protected_count += 1;
@@ -71,7 +72,9 @@ impl Store {
             let bytes = clip_bytes(&clip);
             if (filter.min_bytes == 0 || bytes > filter.min_bytes)
                 && (filter.older_than_days == 0 || clip.updated_at < cutoff)
-                && (filter.kind == "all" || clip.kind == filter.kind)
+                && (filter.kind == "all"
+                    || clip.kind == filter.kind
+                    || (filter.kind == "image" && clip.kind == "bundle"))
                 && (filter.include_grouped || clip.group_id.is_none())
             {
                 content_bytes += bytes;

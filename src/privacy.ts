@@ -61,5 +61,5 @@ export function analyzeDemoClip(clip: Clip, config: PrivacyRules): Clip {
       if (rule.markPrivate) reasons.add(`自定义规则：${rule.name}`);
     }
   }
-  return { ...clip, privacyManual: !!clip.privacyManual, isPrivate: !!clip.privacyManual || reasons.size > 0, privacyReasons: [...reasons], scanVersion: clip.kind === 'image' ? 0 : config.revision, tags: [...tags], manualTags: [...(clip.manualTags ?? clip.tags ?? [])], linkHosts: [...hosts], linkSources: [...sources] };
+  return { ...clip, privacyManual: !!clip.privacyManual, isPrivate: !!clip.privacyManual || reasons.size > 0, privacyReasons: [...reasons], scanVersion: ['image','bundle'].includes(clip.kind) ? 0 : config.revision, tags: [...tags], manualTags: [...(clip.manualTags ?? clip.tags ?? [])], linkHosts: [...hosts], linkSources: [...sources] };
 }

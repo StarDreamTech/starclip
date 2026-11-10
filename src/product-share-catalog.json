@@ -10,7 +10,7 @@
       "id": "detailed",
       "locale": "zh-CN",
       "label": "产品介绍",
-      "content": "星笺 Starclip｜开源的本地剪贴板管理工具 ✦\n\n让剪贴板不止记住上一次复制。\n\n• 找回复制历史：文字、图片与代码，搜索后再次复制，减少重复查找。\n• 整理重要内容：星标、分组和永久保留；星码集单独收藏常用代码。\n• 自主管理数据：记录保存在本机，支持 JSON 导入导出、自选数据目录和完整恢复点。普通历史 JSON 包含记录、分组和图片，不包含应用偏好；星伴成长另有独立存档。\n• 把灵感做成图片：星绘坊提供星码卡（代码分享图片）和月光笺（手写纸笺）。23 个字体选项按需下载，下载后可本地生成月光笺；完整字体不占用初始安装包。\n• 按范围接入 AI：提供 MCP、CLI 与 Skill 接入方式，不内置 AI 模型。接入每次启动默认关闭；用户选择记录、字段、额度与有效期后授权，剪贴历史始终只读。隐私、待扫描及图片记录不向官方 AI 接口开放，连接可随时撤销，重启后需重新授权。\n• 多一点陪伴：原创星伴星芽可互动、成长和装扮，默认关闭、按需开启；AI 星伴动作与消息另行授权，可不开放任何记录。\n• 自己决定启动方式：登录自启动、启动时收起主窗口、菜单栏 / 托盘图标显隐分别设置。\n\nmacOS 安装包约 8 MB；这是安装包大小，不代表运行内存或下载字体后的占用，实际以下载版本为准。\n\n无需账户，无云端同步。首次使用默认暂停记录，由你决定何时开启。数据与备份为本机明文；更新检查、字体下载和可关闭的功能统计可能联网。向外部 AI 发出的内容无法撤回，后续处理由相应客户端或服务决定。\n\n项目、源码与下载：https://github.com/cpython666/starclip\n具体功能与平台支持以对应版本的项目说明为准。"
+      "content": "星笺 Starclip｜开源的本地剪贴板管理工具 ✦\n\n让剪贴板不止记住上一次复制。\n\n• 找回复制历史：文字、图片与代码，搜索后再次复制，减少重复查找。\n• 整理重要内容：星标、分组和永久保留；星码集单独收藏常用代码。\n• 自主管理数据：记录保存在本机，支持 JSON 导入导出、自选数据目录，升级前自动备份。普通历史 JSON 包含记录、分组和图片，不包含应用偏好；星伴成长另有独立存档。\n• 把灵感做成图片：星绘坊提供星码卡（代码分享图片）和月光笺（手写纸笺）。23 个字体选项按需下载，下载后可本地生成月光笺；完整字体不占用初始安装包。\n• 按范围接入 AI：提供 MCP、CLI 与 Skill 接入方式，不内置 AI 模型。接入每次启动默认关闭；用户选择记录、字段、额度与有效期后授权，剪贴历史始终只读。隐私、待扫描及图片记录不向官方 AI 接口开放，连接可随时撤销，重启后需重新授权。\n• 多一点陪伴：原创星伴星芽可互动、成长和装扮，默认关闭、按需开启；AI 星伴动作与消息另行授权，可不开放任何记录。\n• 自己决定启动方式：登录自启动、启动时收起主窗口、菜单栏 / 托盘图标显隐分别设置。\n\nmacOS 安装包约 8 MB；这是安装包大小，不代表运行内存或下载字体后的占用，实际以下载版本为准。\n\n无需账户，无云端同步。首次使用默认暂停记录，由你决定何时开启。数据与备份为本机明文；更新检查、字体下载和可关闭的功能统计可能联网。向外部 AI 发出的内容无法撤回，后续处理由相应客户端或服务决定。\n\n项目、源码与下载：https://github.com/cpython666/starclip\n具体功能与平台支持以对应版本的项目说明为准。"
     },
     {
       "id": "short-en",
@@ -22,7 +22,7 @@
       "id": "detailed-en",
       "locale": "en-US",
       "label": "产品介绍",
-      "content": "Starclip ✦ | An open-source, local-first clipboard manager\n\nGive your clipboard a memory beyond the last copy.\n\n• Find earlier copies: search text, images and code, then copy them again without retracing your steps.\n• Keep what matters: star, group or permanently keep clips. Save reusable code separately in Starcode.\n• Manage your own data: history stays on your computer, with JSON import and export, a choice of data folder, and full restore points. History JSON includes clips, groups and images, but not app preferences. StarPet growth has its own save export.\n• Turn ideas into images: Stardraw creates Starcode Cards for code and Moonlight Notes for handwritten text. Choose from 23 font options, download only what you need, and create notes locally once the font is available. Full fonts are not bundled with the installer.\n• Give AI limited access: connect through MCP, CLI or a Skill; no AI model is built in. Access starts off each time you launch the app. Choose clips, fields, limits and an expiry before granting read-only access to clipboard history. Private clips, unscanned clips and images are excluded from the official AI interface. Revoke connections anytime; a restart requires a new grant.\n• Add a little company: the original StarPet can interact, grow and dress up. It is off by default and optional. AI actions and messages for StarPet require a separate grant, which can allow the pet without sharing any clips.\n• Choose how it starts: configure launch at login, a hidden main window at startup, and menu bar or tray visibility independently.\n\nThe macOS installer is about 8 MB. This is download size, not memory use or storage after font downloads; actual size varies by release.\n\nNo account or cloud sync. Recording is paused on first use until you turn it on. Local data and backups are unencrypted. Update checks, font downloads and optional usage statistics can use the network. Content sent to an external AI cannot be recalled; that client or service controls its subsequent handling.\n\nProject, source and downloads: https://github.com/cpython666/starclip\nSee the project documentation for features and platform support in each release."
+      "content": "Starclip ✦ | An open-source, local-first clipboard manager\n\nGive your clipboard a memory beyond the last copy.\n\n• Find earlier copies: search text, images and code, then copy them again without retracing your steps.\n• Keep what matters: star, group or permanently keep clips. Save reusable code separately in Starcode.\n• Manage your own data: history stays on your computer, with JSON import and export, a choice of data folder, and automatic backups before updates. History JSON includes clips, groups and images, but not app preferences. StarPet growth has its own save export.\n• Turn ideas into images: Stardraw creates Starcode Cards for code and Moonlight Notes for handwritten text. Choose from 23 font options, download only what you need, and create notes locally once the font is available. Full fonts are not bundled with the installer.\n• Give AI limited access: connect through MCP, CLI or a Skill; no AI model is built in. Access starts off each time you launch the app. Choose clips, fields, limits and an expiry before granting read-only access to clipboard history. Private clips, unscanned clips and images are excluded from the official AI interface. Revoke connections anytime; a restart requires a new grant.\n• Add a little company: the original StarPet can interact, grow and dress up. It is off by default and optional. AI actions and messages for StarPet require a separate grant, which can allow the pet without sharing any clips.\n• Choose how it starts: configure launch at login, a hidden main window at startup, and menu bar or tray visibility independently.\n\nThe macOS installer is about 8 MB. This is download size, not memory use or storage after font downloads; actual size varies by release.\n\nNo account or cloud sync. Recording is paused on first use until you turn it on. Local data and backups are unencrypted. Update checks, font downloads and optional usage statistics can use the network. Content sent to an external AI cannot be recalled; that client or service controls its subsequent handling.\n\nProject, source and downloads: https://github.com/cpython666/starclip\nSee the project documentation for features and platform support in each release."
     }
   ],
   "images": [
@@ -45,8 +45,8 @@
       "filename": "星笺-数据自主.png",
       "width": 1080,
       "height": 1440,
-      "bytes": 71313,
-      "description": "剪贴板数据留在本机，支持 JSON 导入导出、自选目录与完整恢复点。"
+      "bytes": 70242,
+      "description": "剪贴板数据留在本机，支持 JSON 导入导出、自选目录和升级前自动备份。"
     },
     {
       "id": "companion",
@@ -100,8 +100,8 @@
       "filename": "Starclip-Your-data.png",
       "width": 1080,
       "height": 1440,
-      "bytes": 70681,
-      "description": "剪贴板数据留在本机，支持 JSON 导入导出、自选目录与完整恢复点。"
+      "bytes": 70122,
+      "description": "剪贴板数据留在本机，支持 JSON 导入导出、自选目录和升级前自动备份。"
     },
     {
       "id": "companion-en",

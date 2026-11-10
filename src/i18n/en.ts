@@ -2,6 +2,7 @@
 // translation naturally falls back to Chinese instead of rendering a key.
 // `{name}` placeholders are filled by t(); `|` separates singular/plural.
 export const en: Record<string, string> = {
+  '查看开源项目（GitHub）': 'View source on GitHub',
   '历史分页': 'History pages',
   '第 {page} / {pages} 页 · 共 {count} 条': 'Page {page} of {pages} · {count} clips',
   '每页 {count} 条，只加载当前页': '{count} clips per page; only the current page is loaded',
@@ -245,6 +246,7 @@ export const en: Record<string, string> = {
   "桌面版生效；此处仅预览设置": "Desktop only; previewed here",
   "呼出快捷键": "Global shortcut",
   "从任何应用打开星笺": "Open Starclip from any app",
+  "保存时会检查快捷键注册；若被占用或不可用，会提示并保留原快捷键。": "Saving checks shortcut registration. If the shortcut is unavailable or already in use, Starclip reports it and keeps the previous shortcut.",
   "分类 / 分组切换": "Switch category / constellation",
   "窗口内循环切换；输入文字和弹窗内不触发": "Cycles inside the window; ignored while typing or in dialogs",
   "关闭主窗口后，星笺继续在后台运行，已开启的记录也会继续。可用呼出快捷键、再次打开应用或菜单栏 / 托盘菜单重新打开；要完全退出，可使用上方的「退出星笺」或托盘菜单。Windows 托盘图标可能收在通知区域的折叠菜单中。": "Closing the main window keeps Starclip running in the background, including recording if enabled. Reopen it with the global shortcut, by launching the app again, or from the menu bar / tray menu. To quit fully, use Quit Starclip above or in the tray menu. On Windows, the tray icon may be tucked into the notification area.",

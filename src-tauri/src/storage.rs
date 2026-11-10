@@ -1232,6 +1232,10 @@ mod tests {
             "DROP TRIGGER clips_fts_insert;
             DROP TRIGGER clips_fts_update; DROP TRIGGER clips_fts_delete;
             DROP TABLE clips_fts; DROP TABLE clip_rich; DROP TABLE clip_activity;
+            DROP TRIGGER clip_favorites_insert; DROP TRIGGER clip_favorites_pin; DROP TRIGGER clip_favorites_unpin; DROP TABLE clip_favorites;
+            DROP TRIGGER bundle_images_cleanup; DROP TABLE clip_bundle_items; DROP TABLE clip_bundles; DROP TABLE bundle_images;
+            DROP INDEX clips_text_content; CREATE UNIQUE INDEX clips_text_content ON clips(content) WHERE kind NOT IN ('image','file');
+            DROP INDEX clips_image_content; CREATE UNIQUE INDEX clips_image_content ON clips(content) WHERE kind='image';
             PRAGMA user_version=3;",
         )
         .unwrap();
