@@ -122,6 +122,23 @@ def baseline_comparison(origin, baseline_schema, target_schema, *, release_mode,
     return comparison
 
 
+def fixture_hosts(original):
+    lines = [b"127.0.0.1 github.com # starclip-disposable-release-fixture"]
+    removed = 0
+    for line in original.splitlines():
+        body, separator, comment = line.partition(b"#")
+        fields = body.split()
+        if fields:
+            aliases = [name for name in fields[1:] if name.rstrip(b".").lower() != b"github.com"]
+            if len(aliases) != len(fields) - 1:
+                removed += len(fields) - 1 - len(aliases)
+                line = b" ".join([fields[0], *aliases]) if aliases else b""
+                if separator:
+                    line += b" #" + comment
+        lines.append(line)
+    return b"\n".join(lines) + b"\n", removed
+
+
 @contextlib.contextmanager
 def fixture_transport(directory, temporary):
     """Temporarily trust and route only this disposable runner's update traffic."""
@@ -147,7 +164,9 @@ def fixture_transport(directory, temporary):
     saved.write_bytes(before)
     saved.chmod(0o600)
     mapped = directory / "hosts.fixture"
-    mapped.write_bytes(before + b"\n127.0.0.1 github.com # starclip-disposable-release-fixture\n")
+    mapped_hosts, removed = fixture_hosts(before)
+    mapped.write_bytes(mapped_hosts)
+    event("hosts-fixture-prepared", priorGithubAliases=removed)
     certificate = directory / "ca.crt"
     fingerprint = command("openssl", "x509", "-in", str(certificate), "-noout", "-fingerprint", "-sha1", capture_output=True, text=True).stdout.strip().split("=")[-1].replace(":", "")
     assert re.fullmatch(r"[A-Fa-f0-9]{40}", fingerprint)
@@ -162,6 +181,7 @@ def fixture_transport(directory, temporary):
                                   start_new_session=True, stdout=server_log, stderr=server_log)
         transport_command("map-host", "sudo", "-n", "cp", str(mapped), str(hosts))
         changed_hosts = True
+        assert hosts.read_bytes() == mapped_hosts, "Temporary hosts mapping was not applied"
         transport_command("flush-dns-cache", "sudo", "-n", "dscacheutil", "-flushcache")
         event("signal-dns-responder")
         subprocess.run(["sudo", "-n", "killall", "-HUP", "mDNSResponder"], check=False, capture_output=True, timeout=30)
