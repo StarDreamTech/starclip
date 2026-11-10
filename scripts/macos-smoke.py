@@ -121,6 +121,8 @@ def main():
     target_schema = source_schema(scripts.parent)
 
     def check(mode, schema):
+        if mode == "upgrade" and (scripts.parent / "src-tauri/src/storage/recovery_cleanup.rs").is_file():
+            mode = "upgrade-cleaned"
         command("python3", str(scripts / "installer-fixture.py"), str(database), mode, str(schema))
 
     try:
