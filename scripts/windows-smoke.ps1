@@ -136,15 +136,21 @@ function Wait-ForPausedWindow {
           [System.Windows.Automation.OrCondition]::new(
             [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, '跳过教程'),
             [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Skip tour')))
-        if ($skip -and !$skip.Current.IsOffscreen -and $skip.Current.IsEnabled) {
-          $pattern = $null
-          if ($skip.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
-            $pattern.Invoke() # Never click the capture toggle.
+        if ($skip -and !$skip.Current.IsOffscreen) {
+          if ($skip.Current.IsEnabled) {
+            $pattern = $null
+            if ($skip.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
+              $pattern.Invoke() # Never click the capture toggle.
+            }
           }
+          # Invoke is asynchronous. A visible sidebar is not proof that the
+          # tutorial save has finished or that its window-release guard cleared.
+          Start-Sleep -Milliseconds 500
+          continue
         }
         $nodes = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
         foreach ($node in $nodes) {
-          if (!$node.Current.IsOffscreen -and $node.Current.Name -match '^(?:记录已暂停|Recording paused)(?:\s|/|$)') {
+          if (!$node.Current.IsOffscreen -and $node.Current.IsEnabled -and $node.Current.Name -match '^(?:记录已暂停|Recording paused)(?:\s|/|$)') {
             if (Test-Path -LiteralPath $database -PathType Leaf) {
               Write-Host 'Native window rendered and reports recording paused.'
               return
@@ -317,6 +323,13 @@ function Check-StartupPreferences {
     throw 'Second launch did not hand off after hidden startup.'
   }
   if ($second.ExitCode -ne 0) { throw 'Second launch failed after hidden startup.' }
+  if (Test-Path (Join-Path $PSScriptRoot '../src/navigation.ts')) {
+    # The candidate remembers the settings page used to quit. Verify that it
+    # was restored before returning to the sidebar pause indicator.
+    $null = Wait-NativeControl $hiddenSwitch $true
+    Close-StartupSettings
+    Write-Host 'Native settings page restored after hidden cold start and second launch.'
+  }
   Wait-ForPausedWindow
   Open-StartupSettings
   Assert-NativeSwitch $loginSwitch $false
