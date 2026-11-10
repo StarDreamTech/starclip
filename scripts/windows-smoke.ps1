@@ -390,6 +390,7 @@ function Check-Database([string]$Mode, [int]$Schema) {
     $script:appProcess.Refresh()
     if ($script:appProcess.HasExited) { throw 'Installed application exited during observation.' }
   }
+  if ($Mode -eq 'upgrade' -and (Test-Path (Join-Path $PSScriptRoot '../src-tauri/src/storage/recovery_cleanup.rs'))) { $Mode = 'upgrade-cleaned' }
   & python (Join-Path $PSScriptRoot 'installer-fixture.py') $database $Mode $Schema
   if ($LASTEXITCODE -ne 0) { throw "Fixed database verification failed: $Mode" }
 }
@@ -417,7 +418,7 @@ try {
     "- Windows native $Scenario smoke passed: NSIS $Version, rendered pause status, fixed database checks. No capture toggle was enabled." >> $env:GITHUB_STEP_SUMMARY
     '- Candidate main-window close destroyed the native HWND while the process stayed alive; a second launch recreated the window, restored paused UI and preserved fixed data.' >> $env:GITHUB_STEP_SUMMARY
     '- Startup preferences passed through native UI: quoted current-user Run registration, enable/disable, external StartupApproved disable readback, hidden cold start without a main HWND, second-launch recovery, persisted tray preference and explicit settings quit.' >> $env:GITHUB_STEP_SUMMARY
-    if ($Scenario -eq 'upgrade') { '- Real 0.1.0 → candidate upgrade preserved the fixed record, group, preferences and pre-migration recovery copy.' >> $env:GITHUB_STEP_SUMMARY }
+    if ($Scenario -eq 'upgrade') { '- Real 0.1.0 → candidate upgrade preserved the fixed record, group and preferences; automatic migration backups followed the candidate source retention policy.' >> $env:GITHUB_STEP_SUMMARY }
     '- This does not verify an actual logout/login cycle, Explorer tray rendering, the in-app update download/dialog flow, SmartScreen, or every Windows environment.' >> $env:GITHUB_STEP_SUMMARY
   }
 } finally {

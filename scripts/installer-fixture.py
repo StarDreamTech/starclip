@@ -4,7 +4,7 @@ Never discovers user profiles, reads the clipboard, or creates a missing DB.
 """
 import json, pathlib, sqlite3, sys, time
 path, mode, expected_schema = pathlib.Path(sys.argv[1]), sys.argv[2], int(sys.argv[3])
-assert mode in ('fresh', 'seed', 'upgrade'), 'Unknown smoke database mode'
+assert mode in ('fresh', 'seed', 'upgrade', 'upgrade-cleaned'), 'Unknown smoke database mode'
 assert path.is_file(), 'Smoke database is missing'
 uri = path.as_uri() + ('?mode=rw' if mode == 'seed' else '?mode=ro')
 db = sqlite3.connect(uri, uri=True, timeout=5)
@@ -35,10 +35,27 @@ else:
         assert saved is not None and json.loads(saved[0]) == settings, 'Upgrade did not preserve settings'
         assert db.execute('SELECT content,title,kind,pinned,keep_forever,group_id,copy_count FROM clips').fetchall() == [(content,title,'text',1,0,1001,7)], 'Upgrade changed the fixed record or recorded the canary'
         assert db.execute('SELECT name,color FROM groups WHERE id=1001').fetchone() == (group,'#7BBEB0'), 'Upgrade changed the fixed group'
-        snapshots = list((path.parent / 'recovery').glob('*/snapshot.json'))
-        valid = [p for p in snapshots if json.loads(p.read_text())['reason'] == 'before-migration']
-        assert valid, 'Pre-migration recovery point is missing'
-        with sqlite3.connect((valid[0].parent / 'starclip.sqlite3').as_uri() + '?mode=ro', uri=True) as backup:
-            assert backup.execute('SELECT content,title FROM clips').fetchall() == [(content,title)], 'Recovery point did not preserve the fixed record'
+        def migration_points():
+            snapshots = list((path.parent / 'recovery').glob('*/snapshot.json'))
+            points = []
+            for snapshot in snapshots:
+                try:
+                    reason = json.loads(snapshot.read_text(encoding='utf-8'))['reason']
+                except FileNotFoundError:
+                    continue  # The app may finish cleanup while the harness reads its list.
+                if reason == 'before-migration':
+                    points.append(snapshot)
+            return points
+        valid = migration_points()
+        if mode == 'upgrade-cleaned':
+            deadline = time.monotonic() + 10
+            while valid and time.monotonic() < deadline:
+                time.sleep(0.2)
+                valid = migration_points()
+            assert not valid, 'Validated upgrade left obsolete pre-migration backups'
+        else:
+            assert valid, 'Pre-migration recovery point is missing'
+            with sqlite3.connect((valid[0].parent / 'starclip.sqlite3').as_uri() + '?mode=ro', uri=True) as backup:
+                assert backup.execute('SELECT content,title FROM clips').fetchall() == [(content,title)], 'Recovery point did not preserve the fixed record'
 db.close()
 print('Fixed database check passed: ' + mode)
