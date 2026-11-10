@@ -30,9 +30,11 @@
 
 ## 环境与检查
 
+2026-11-03 用户明确要求日常功能开发减少重复全量测试：开发中按改动入口做定向回归和必要构建；影响共享链路、迁移或准备发版时再集中完整检查。不要把每次小调整都扩成两套重复的 push / PR 双平台安装验收；原生关键路径仍须诚实区分代码、构建与实际验证。对应根目录 `AGENTS.md` 已同步。
+
 历史查询基准使用 `node scripts/benchmark-history.mjs --stage compile`，本地重构建结束后运行同命令的 `--stage measure`；真实旧提交与优化版的固定原创 1 万 / 5 万 / 10 万条数据、完整结果指纹及来源校验见 [查询性能](../../../../docs/query-performance.md)。默认忽略的 Rust benchmark 不是常规测试，不能在其它本地重负载下采样；全局 SQL 诊断与完整链路计时分别解释，不把存储基准称为 GUI / IPC / 锁等待测量。
 
-本地预览打包：`npm run build:preview:mac`（`scripts/build-preview.mjs`）只生成独立 `Starclip Preview` / `com.starclip.preview` 的 macOS app / DMG，移入忽略的 `artifacts/preview-local.noindex/<构建时间>/`，不启动、不安装、不提交或部署；统计编译地址为空、updater endpoints 为空、本地 ad-hoc 签名。2026-11-02 已随 #14 合入 main，打包最后一行单独打印可复制的 `open` 命令，路径按 shell 双引号规则转义，不用 `JSON.stringify` 代替 shell 转义。#12 的 `npm run app` 仍是安装依赖后启动原生开发版，与独立预览打包不同；不要为验证命令存在而直接启动并访问正式数据。预览构建不等于 GUI / 原生操作验收，两者分开记录；本轮证据见 `docs/verification.md` 的「本地工作区并入 main（2026-11-01 至 11-02）」。
+本地预览打包：`npm run build:preview:mac`（`scripts/build-preview.mjs`）只生成独立 `Starclip Preview` / `com.starclip.preview` 的 macOS app / DMG，移入忽略的 `artifacts/preview-local.noindex/<构建时间>/`，不启动、不安装、不提交或部署；统计编译地址为空、updater endpoints 为空、本地 ad-hoc 签名。2026-11-02 已随 #14 合入 main，打包最后一行单独打印可复制的 `open` 命令，路径按 shell 双引号规则转义，不用 `JSON.stringify` 代替 shell 转义。2026-11-06 `npm run app` 已改用 `scripts/dev-preview.mjs`：安装依赖后以 `com.starclip.livepreview` 启动实时桌面预览，端口 1422，与正式版 / com.starclip.preview 数据隔离；统计地址及 updater endpoints 清空。Mac 可双击根目录 `启动实时预览.command`。UI 热更新、Rust 自动重编译，首次仍需工具链。启动前 build 刷新原生资源使用的 dist；原始 `npm run tauri dev` 仍用正式标识，不作为隔离入口。Vite 依赖扫描仅 index.html，忽略监听 src-tauri / artifacts，避免旧产物参与扫描。预览构建不等于 GUI / 原生操作验收，两者分开记录；本轮证据见 `docs/verification.md` 的「本地工作区并入 main（2026-11-01 至 11-02）」。
 
 - 2026-11-02 用户启动预览后截图报告「结构版本 3，当前支持 2」。源码确认 main 的 `store/mod.rs::SCHEMA_VERSION=2`，存档 `wip/local-20261101` 的 `store.rs::SCHEMA_VERSION=3`，两套预览脚本都使用 `com.starclip.preview`。该标识隔离正式应用，却不隔离不同分支或每次构建的数据；产物时间目录不同不代表新数据目录。复用旧预览库是可能原因，未读取用户数据库或定位文件，不能确认其实际来源。现有 `store/schema.rs::check_schema_version` 会拒绝高版本库，不可通过手改 `user_version` 绕过；该截图阶段尚未修复，后续结构 4 修复见下条。用户提供的 `Preview\.app` 在双引号内多了反斜杠，已核对去掉后应用路径存在；打开命令修正与数据库版本不兼容是两件事。
   - 提交历史补充：`27dda2e` 存档的本地实现由 schema 2 增至 3，并引入 `clip_files` 子表；main 的 #13（`f2ea1e4`）前后均为 schema 2，文件引用保存在现有 `clips.content` 的多行路径中，未采用该子表（`store/clips.rs`、`store/backup.rs`）。这是两套实现分叉后选择主线方案，不能表述为 Git 回退提交；#14 没有实现本地 schema 3 到主线的转换。隔离预览目录只能避开旧库，保留已有数据仍须比对结构后实现兼容迁移，不能直接改版本常量或数据库版本号。
@@ -140,3 +142,15 @@ Tauri 资产解析器在正式包中读取嵌入资产，在带 `devUrl` 的开�
 - GA 长期持续观察与 Windows 原生断网；固定范围 `count` 汇总和 macOS 进程级断网 / 重启 / 恢复联网已验收，不承诺永久存储。23 项字体逐款 GUI、图片 OCR、规则试跑 / 扫描暂停续扫等见产品决策；原 9 项来源展示已按用户确认修正。分享 AI / 隐私主题与中英文素材已实现，系统图片剪贴板、跨应用粘贴与 Windows 原生分享仍待验收。
 - 文件引用与文字附带 HTML 已随 0.2.4 发布，验证边界见产品范围；GIF、自动粘贴、云同步 / 账号 / 剪贴内容公开链接、代码执行与内置模型分析尚未实现；已有只读 AI 接口不等于内置模型。稳定版提醒已实现，预览通道未开放，不承诺 LTS 维护年限。
 - 无 Apple 公证或 Windows 发行者代码签名；本地 ad-hoc 与 Tauri 更新签名不等于系统发行者认证。待办不代表排期，后续新方案标「待定」。
+
+
+### 图文组合开发验收（2026-11-03）
+
+严格图片去重、单条图文图集与分享收藏的实现 / 格式边界见 [图文组合](../../../../docs/image-collections.md)，自动检查与 `com.starclip.bundleverify20261103` 隔离原生证据见 [验证记录](../../../../docs/verification.md#严格图片去重与图文组合2026-11-03开发分支未发布)。固定五图 + 原创配文代表采集、严格复用、网格 / 原图、编辑、文件夹粘贴与原字节核对；Finder 文件名 CR 分隔实测修复并回归，JPEG 方向另有固定测试。末态暂停并退出，未替换正式安装；本轮不把旧 PR CI 倒算成新图文的 Windows 验收。
+
+
+### 自动恢复点保留（2026-11-03）
+
+实现入口与保留边界见 [保留策略](../../../../docs/recovery-retention.md)，3 项原创文件系统定向回归、24 项既有存储检查、Node 19 项及 Web / macOS desktop 编译证据见 [验证记录](../../../../docs/verification.md#自动恢复点保留2026-11-03开发分支未发布)。未对正式快照执行删除；不将编译或文件系统夹具测试扩写成定时器 / Windows GUI 已实测。
+
+2026-11-05 开发分支将恢复点收为内部机制，撤下用户控件、三项 API / 命令 / 权限和启动失败的恢复点选择，保留自动备份与校验后清理。定向 Node 37、Rust recovery 10 / migration 10（部分重叠）与 share 2、Python 夹具 8、Web 构建及 macOS desktop 编译通过；中英文两张数据图已同步，见 [验证记录](../../../../docs/verification.md#恢复点收为内部升级备份2026-11-05开发分支未发布)。两平台升级验收脚本对结构 ≥5 目标等待旧自动快照清理，旧应用副本仍独立核对；结构 ≤4 保留历史断言。新增 macOS 脚本分支夹具已运行，Windows PowerShell 本机不可用；实际签名目标的双平台 GUI 升级与首次后台清理仍待发版验收。
