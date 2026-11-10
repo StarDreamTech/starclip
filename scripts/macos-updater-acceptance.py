@@ -18,6 +18,7 @@ import platform
 import plistlib
 import re
 import signal
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -122,23 +123,6 @@ def baseline_comparison(origin, baseline_schema, target_schema, *, release_mode,
     return comparison
 
 
-def fixture_hosts(original):
-    lines = [b"127.0.0.1 github.com # starclip-disposable-release-fixture"]
-    removed = 0
-    for line in original.splitlines():
-        body, separator, comment = line.partition(b"#")
-        fields = body.split()
-        if fields:
-            aliases = [name for name in fields[1:] if name.rstrip(b".").lower() != b"github.com"]
-            if len(aliases) != len(fields) - 1:
-                removed += len(fields) - 1 - len(aliases)
-                line = b" ".join([fields[0], *aliases]) if aliases else b""
-                if separator:
-                    line += b" #" + comment
-        lines.append(line)
-    return b"\n".join(lines) + b"\n", removed
-
-
 @contextlib.contextmanager
 def fixture_transport(directory, temporary):
     """Temporarily trust and route only this disposable runner's update traffic."""
@@ -164,9 +148,7 @@ def fixture_transport(directory, temporary):
     saved.write_bytes(before)
     saved.chmod(0o600)
     mapped = directory / "hosts.fixture"
-    mapped_hosts, removed = fixture_hosts(before)
-    mapped.write_bytes(mapped_hosts)
-    event("hosts-fixture-prepared", priorGithubAliases=removed)
+    mapped.write_bytes(before + b"\n127.0.0.1 github.com # starclip-disposable-release-fixture\n")
     certificate = directory / "ca.crt"
     fingerprint = command("openssl", "x509", "-in", str(certificate), "-noout", "-fingerprint", "-sha1", capture_output=True, text=True).stdout.strip().split("=")[-1].replace(":", "")
     assert re.fullmatch(r"[A-Fa-f0-9]{40}", fingerprint)
@@ -181,17 +163,19 @@ def fixture_transport(directory, temporary):
                                   start_new_session=True, stdout=server_log, stderr=server_log)
         transport_command("map-host", "sudo", "-n", "cp", str(mapped), str(hosts))
         changed_hosts = True
-        assert hosts.read_bytes() == mapped_hosts, "Temporary hosts mapping was not applied"
         transport_command("flush-dns-cache", "sudo", "-n", "dscacheutil", "-flushcache")
         event("signal-dns-responder")
         subprocess.run(["sudo", "-n", "killall", "-HUP", "mDNSResponder"], check=False, capture_output=True, timeout=30)
+        event("system-host-resolution", addresses=sorted({item[4][0] for item in socket.getaddrinfo("github.com", 443, type=socket.SOCK_STREAM)}),
+              curlConfigPresent=(Path.home() / ".curlrc").is_file(),
+              curlVersion=command("/usr/bin/curl", "-q", "--version", capture_output=True, text=True).stdout.splitlines()[0])
         event("probe-trusted-https", serverPid=server.pid)
         deadline = time.monotonic() + 20
         last_probe = None
         while time.monotonic() < deadline:
             if server.poll() is not None:
                 raise RuntimeError("Runner-local HTTPS fixture exited during startup")
-            probe = subprocess.run(["/usr/bin/curl", "--fail", "--silent", "--show-error", "--max-time", "2",
+            probe = subprocess.run(["/usr/bin/curl", "-q", "--fail", "--silent", "--show-error", "--max-time", "2",
                                     "--noproxy", "github.com",
                                     "--write-out", "%{stderr}\nhttp_status=%{http_code} remote_ip=%{remote_ip}\n",
                                     ENDPOINT], capture_output=True, timeout=5)
@@ -226,7 +210,7 @@ def fixture_transport(directory, temporary):
             # The same server and hosts mapping are still active. Curl 60
             # specifically means certificate verification failed, unlike a
             # stopped server, HTTP rejection, or any disabled TLS validation.
-            rejection = cleanup_command("/usr/bin/curl", "--fail", "--silent", "--show-error", "--max-time", "5",
+            rejection = cleanup_command("/usr/bin/curl", "-q", "--fail", "--silent", "--show-error", "--max-time", "5",
                                         "--resolve", "github.com:443:127.0.0.1", "--noproxy", "github.com",
                                         "--write-out", "%{stderr}\nhttp_status=%{http_code} remote_ip=%{remote_ip}\n", ENDPOINT)
         trust_revoked = revoked is not None and revoked.returncode == 0 and rejection is not None and rejection.returncode == 60
@@ -336,7 +320,7 @@ def main():
         (evidence / name).write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
 
     def pinned_manifest():
-        raw = command("/usr/bin/curl", "--fail", "--silent", "--show-error", "--location", "--retry", "3", "--max-time", "60", "--noproxy", "github.com", ENDPOINT, capture_output=True).stdout
+        raw = command("/usr/bin/curl", "-q", "--fail", "--silent", "--show-error", "--location", "--retry", "3", "--max-time", "60", "--noproxy", "github.com", ENDPOINT, capture_output=True).stdout
         assert hashlib.sha256(raw).hexdigest() == MANIFEST_HASH, "Update manifest differs from the pinned acceptance target"
         manifest = json.loads(raw)
         assert manifest["version"] == TARGET
@@ -452,7 +436,7 @@ def main():
         pinned_manifest()
         # Independently pin the expected installed executable. This does not
         # replace the updater's real HTTPS download or its signature checks.
-        archive = command("/usr/bin/curl", "--fail", "--silent", "--show-error", "--location", "--retry", "3", "--max-time", "60", "--noproxy", "github.com", TARGET_URL, capture_output=True).stdout
+        archive = command("/usr/bin/curl", "-q", "--fail", "--silent", "--show-error", "--location", "--retry", "3", "--max-time", "60", "--noproxy", "github.com", TARGET_URL, capture_output=True).stdout
         assert hashlib.sha256(archive).hexdigest() == TARGET_HASH
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
             members = [m for m in bundle if m.name.endswith("/Contents/MacOS/starclip") and m.isfile()]

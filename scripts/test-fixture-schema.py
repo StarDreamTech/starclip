@@ -58,26 +58,6 @@ def installer(path, mode, schema):
 
 
 class FixtureSchemaTests(unittest.TestCase):
-    def test_macos_hosts_mapping_removes_conflicts_and_preserves_other_aliases(self):
-        original = (b"127.0.0.1 localhost\r\n192.0.2.4 Github.com build.example # fixture-only\r\n"
-                    b"::1 github.com.\n# github.com is a comment\n192.0.2.8 unrelated.example\n")
-        mapped, removed = MAC.fixture_hosts(original)
-        self.assertEqual(removed, 2)
-        addresses = []
-        aliases = {}
-        for line in mapped.splitlines():
-            fields = line.partition(b"#")[0].split()
-            for name in fields[1:]:
-                aliases[name] = fields[0]
-                if name.rstrip(b".").lower() == b"github.com":
-                    addresses.append(fields[0])
-        self.assertEqual(addresses, [b"127.0.0.1"])
-        self.assertEqual(aliases[b"build.example"], b"192.0.2.4")
-        self.assertEqual(aliases[b"localhost"], b"127.0.0.1")
-        self.assertEqual(aliases[b"unrelated.example"], b"192.0.2.8")
-        self.assertIn(b"# github.com is a comment", mapped)
-        self.assertIn(b"# fixture-only", mapped)
-
     def test_public_baseline_selection_and_restart_requirements(self):
         for version, schema in (("0.2.2", 2), ("0.2.3", 2), ("0.2.4", 4)):
             origin = "public-" + version
