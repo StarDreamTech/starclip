@@ -111,7 +111,7 @@ npm run tauri -- signer generate -w /private/path/starclip-updater.key
 
 0.2.4 已于 2026-11-03 按用户授权正式发布，tag 固定 `6d83640`，[签名构建 41579229975](https://github.com/cpython666/starclip/actions/runs/41579229975) 8/8；真实公开 0.2.3 → 此精确签名目标的 [macOS 41580453911](https://github.com/cpython666/starclip/actions/runs/41580453911) / [Windows 41580457922](https://github.com/cpython666/starclip/actions/runs/41580457922) 均自动重启及原创数据 / PNG / 偏好 / 成长 / 暂停 / 统计关闭与恢复副本保留通过。原生 UI 使用一次性 runner 临时可信 HTTPS 服务，保留正式 URL 与签名包原始字节；匿名公开 8 附件及 latest 的完整字节另已核对一致，不扩大为公网 CDN 原生更新 GUI 验收。本机正式应用未替换。完整摘要、清理与证据见 [0.2.4 发布与升级](verification.md#024-正式发布与原生升级验收)。
 
-本轮 updater workflow 默认真实 `public-0.2.3`，包大小 / SHA / 内部版本由 `scripts/updater_baselines.py` 固定；0.2.3 必须自动重启，显式旧 0.2.2 仍可记录历史手动恢复，macOS source-comparison 实验保留并单独标明。下次发布应先更新并核对当时的真实公开基线，不以比较版本实验替代。
+0.2.5 发布准备已将 updater workflow 默认改为真实 `public-0.2.4`，包大小 / SHA / 内部版本由 `scripts/updater_baselines.py` 固定；SQLite 基线为 4，由元数据读取。0.2.4 必须自动重启，显式旧 0.2.2 仍可记录历史手动恢复，macOS source-comparison 实验保留并单独标明。下次发布应先更新并核对当时的真实公开基线，不以比较版本实验替代。
 
 0.2.2 发布时记录的 11 项发布和版本脚本夹具测试，覆盖版本不一致、错误 tag、递增、缺失/重复产物、错误签名结构、密钥与绑定版本、不完整平台、验签失败和更新说明提取。已另用临时原创文件通过官方 Tauri signer → minisign 0.12 → 清单汇总的真实签名验证，并确认篡改文件被拒绝；两个 workflow 通过 actionlint 1.7.12 静态检查。原签名密钥已配置到 GitHub 加密 secret；0.2.2 的两平台签名构建、草稿上传、原生安装与覆盖升级已通过实际工作流，公开更新清单和下载包也已核验。这一阶段的原生安装冒烟只检查临时 runner 的启动和固定数据升级，不能单独证明完整应用内下载 / 弹窗 / 自替换链路。
 

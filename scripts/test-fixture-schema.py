@@ -59,25 +59,25 @@ def installer(path, mode, schema):
 
 class FixtureSchemaTests(unittest.TestCase):
     def test_public_baseline_selection_and_restart_requirements(self):
-        for version in ("0.2.2", "0.2.3"):
+        for version, schema in (("0.2.2", 2), ("0.2.3", 2), ("0.2.4", 4)):
             origin = "public-" + version
             for platform in ("darwin-aarch64", "windows-x86_64"):
                 expected = public_baseline(origin, platform)
-                self.assertEqual((expected["version"], expected["schema"]), (version, 2))
+                self.assertEqual((expected["version"], expected["schema"]), (version, schema))
                 self.assertTrue(expected["url"].endswith("/v" + version + "/" + expected["filename"]))
                 self.assertRegex(expected["sha256"], r"^[a-f0-9]{64}$")
-            self.assertEqual(MAC.baseline_comparison(origin, 2, 4, release_mode=True, allow_manual_recovery=False), version)
+            self.assertEqual(MAC.baseline_comparison(origin, schema, 5, release_mode=True, allow_manual_recovery=False), version)
             with self.assertRaises(AssertionError):
-                MAC.baseline_comparison(origin, 4, 4, release_mode=True, allow_manual_recovery=False)
+                MAC.baseline_comparison(origin, schema + 1, 5, release_mode=True, allow_manual_recovery=False)
         self.assertEqual(MAC.baseline_comparison("public-0.2.2", 2, 4, release_mode=True, allow_manual_recovery=True), "0.2.2")
-        for origin, schema in (("public-0.2.3", 2), ("source-comparison", 4)):
+        for origin, schema in (("public-0.2.3", 2), ("public-0.2.4", 4), ("source-comparison", 4)):
             with self.assertRaisesRegex(AssertionError, "Manual recovery"):
                 MAC.baseline_comparison(origin, schema, 4, release_mode=True, allow_manual_recovery=True)
         self.assertEqual(MAC.baseline_comparison("source-comparison", 4, 4, release_mode=True, allow_manual_recovery=False), "0.2.2")
         self.assertEqual(MAC.baseline_comparison("source-comparison", 2, 2, release_mode=False, allow_manual_recovery=False), "0.2.1")
         metadata = subprocess.run([sys.executable, str(SCRIPTS / "updater_baselines.py"), "metadata", "--platform", "windows-x86_64"],
                                   check=True, capture_output=True, text=True, timeout=15)
-        self.assertEqual(json.loads(metadata.stdout)["origin"], "public-0.2.3")
+        self.assertEqual(json.loads(metadata.stdout)["origin"], "public-0.2.4")
 
     def test_pinned_public_package_rejects_bytes_and_wrong_internal_version(self):
         binary = b"Starclip original synthetic executable; never run."
@@ -120,16 +120,17 @@ class FixtureSchemaTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 download_package(output, expected)
 
-    def test_updater_workflows_keep_public_three_default_and_manual_two_explicit(self):
+    def test_updater_workflows_keep_public_four_default_and_manual_two_explicit(self):
         workflows = SCRIPTS.parent / ".github/workflows"
         for name in ("macos-updater-acceptance.yml", "windows-updater-acceptance.yml"):
             text = (workflows / name).read_text(encoding="utf-8")
-            self.assertIn("default: public-0.2.3", text)
-            self.assertIn("public-0.2.3, public-0.2.2", text)
+            self.assertIn("default: public-0.2.4", text)
+            self.assertIn("public-0.2.4, public-0.2.3, public-0.2.2", text)
             self.assertIn("scripts/updater_baselines.py download", text)
         text = (workflows / "macos-updater-acceptance.yml").read_text(encoding="utf-8")
         self.assertIn('if [ "$BASELINE" = public-0.2.2 ]; then\n            flags=(--allow-manual-recovery)', text)
         self.assertIn("source-comparison", text)
+        self.assertIn('scripts/updater_baselines.py metadata --origin "$BASELINE"', text)
 
     def test_target_schema_is_exact_source_not_installed_database(self):
         self.assertEqual(source_schema(SCRIPTS.parent), 5)
