@@ -856,3 +856,7 @@ main 上本地重新执行 `npm test`：204 通过；`cargo test --locked --mani
 ## Markdown 图片拆分验收（2026-11-10）
 
 从图集集成分支单独加入 Markdown 图片，保留主界面三种并列创作入口。Markdown 安全渲染 / 尺寸限制、多语言与代码卡定向回归及前端类型检查 / 生产构建通过；本轮未新增 macOS WebKit 或 Windows WebView 原生 PNG 导出验收，既有 Chromium 原创三主题证据和功能限制见 `docs/markdown-images.md`。
+
+## 实时预览拆分检查（2026-11-10）
+
+`dev-preview.mjs` 的 Node 语法与 `--check` 输出断言通过，确认独立标识、1422 dev URL、空 updater endpoints 和不生成更新签名产物；macOS 双击启动脚本的 zsh 语法检查通过。沿用既有独立预览启动记录，本轮未重复启动应用、读取真实剪贴板或宣称热更新交互已完成验收。
