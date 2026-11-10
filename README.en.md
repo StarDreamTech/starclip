@@ -6,7 +6,7 @@
 
 Save important clips to favorites or groups, then turn text and code into images with Stardraw. No account is required; clipboard history stays on your computer.
 
-[Project](https://github.com/cpython666/starclip) · [Downloads: v0.2.4](https://github.com/cpython666/starclip/releases/tag/v0.2.4) · [Report an issue](https://github.com/cpython666/starclip/issues/new)
+[Project](https://github.com/cpython666/starclip) · [Downloads: v0.2.5](https://github.com/cpython666/starclip/releases/tag/v0.2.5) · [Report an issue](https://github.com/cpython666/starclip/issues/new)
 
 The GitHub icon in the top-right corner opens the source repository. **Preferences → Help** also provides project and issue-reporting links. Issue reports are public; remove private clipboard content from screenshots before posting.
 
@@ -34,7 +34,7 @@ Each PNG is 1080 × 1440. Use the Share page to select and copy the correspondin
 
 ## Install and update
 
-Starclip v0.2.4 is available for **Apple Silicon macOS 11+** and **Windows x64**. Download an installer from the [v0.2.4 release](https://github.com/cpython666/starclip/releases/tag/v0.2.4).
+Starclip v0.2.5 is available for **Apple Silicon macOS 11+** and **Windows x64**. Download an installer from the [v0.2.5 release](https://github.com/cpython666/starclip/releases/tag/v0.2.5).
 
 On an Apple Silicon Mac, you can also use the project-maintained Homebrew tap:
 
@@ -57,7 +57,7 @@ Update packages have Tauri signature and version verification. macOS builds use 
 
 For a manual macOS upgrade, quit Starclip, replace `Starclip.app` in Applications and reopen it. On Windows, quit the app and run the new installer. Keep the data directory and app identifier; uninstalling first is unnecessary. Existing history limits and retention settings remain active after upgrading.
 
-The v0.2.4 release passed the recorded macOS and Windows upgrade checks from the genuine public v0.2.3 packages. Those checks used temporary trusted HTTPS services on disposable runners, rather than a public GitHub/CDN delivery test. See the [release guide](docs/releases.md) and [verification records](docs/verification.md), currently in Chinese, for precise scope.
+The v0.2.5 release passed [signed builds](https://github.com/cpython666/starclip/actions/runs/42848254909) and genuine public v0.2.4 upgrades on [macOS](https://github.com/cpython666/starclip/actions/runs/42856720920) and [Windows](https://github.com/cpython666/starclip/actions/runs/42851606421), including automatic restart, fixed data and preferences, schema 4 → 5 and obsolete automatic snapshot cleanup. The old application backup remains. Native checks used temporary trusted HTTPS services on disposable runners. All eight public attachments and the stable manifest were separately downloaded and matched the tested bytes; this is separate from a native public GitHub/CDN delivery test. [Homebrew is synchronized](https://github.com/cpython666/starclip/actions/runs/42861273222); no local production app was installed. See the [release guide](docs/releases.md) and [verification records](docs/verification.md), currently in Chinese, for precise scope.
 
 ## Features
 
@@ -85,9 +85,9 @@ File records store paths, entry types and order. They do not copy the referenced
 
 Fonts download only when selected, with fixed-size and SHA-256 verification, and can then render locally. They are not bundled as full font files in the initial installer. The macOS installer is about 8 MB; actual size varies by release and is separate from runtime memory or downloaded fonts. Animated StarPet has not reached the desired tens-of-MiB memory target.
 
-## Unreleased changes on main
+## New in v0.2.5
 
-The current source also includes:
+This release includes:
 
 - Markdown images with three adapted MIT-licensed Drake themes, width and font-size controls and 2× PNG export. The main screen provides direct entries alongside code cards and handwriting notes. Embedded images, math and automatic pagination are not supported; see [scope and platform verification limits](docs/markdown-images.md).
 - Strict image deduplication using a hash to find candidates, followed by exact PNG or decoded RGBA comparison.
@@ -99,9 +99,9 @@ The current source also includes:
 - Restoring your last category, page and settings tab; left-clicking the tray/menu bar icon opens the window, while right-clicking opens the menu. Platform GUI validation remains scenario-specific.
 - Internal pre-upgrade backups with cleanup of obsolete automatic snapshots after the new app opens and validates its database. Recovery-point lists, manual creation and restore controls are no longer exposed.
 
-The unreleased source uses **SQLite schema 5 and history JSON 5**, with import support for JSON 1–5. Released v0.2.4 uses schema/JSON 4. Migrations save a consistent snapshot first, support recognized older layouts directly, and reject unknown, damaged or future layouts. Never open a newer database with an older app; a program rollback requires compatible data.
+v0.2.5 uses **SQLite schema 5 and history JSON 5**, with import support for JSON 1–5. Earlier v0.2.4 uses schema/JSON 4. Migrations save a consistent snapshot first, support recognized older layouts directly, and reject unknown, damaged or future layouts. Never open a newer database with an older app; a program rollback requires compatible data.
 
-These changes are on main and are not included in the v0.2.4 download. See [image collections](docs/image-collections.md), [backup cleanup](docs/recovery-retention.md) and [verification](docs/verification.md), currently in Chinese.
+These changes are included in the v0.2.5 download. See [image collections](docs/image-collections.md), [backup cleanup](docs/recovery-retention.md) and [verification](docs/verification.md), currently in Chinese.
 
 ## Keyboard shortcuts
 
@@ -115,7 +115,7 @@ These changes are on main and are not included in the v0.2.4 download. See [imag
 | Cycle categories or groups | `⌘/Ctrl + Shift + ←/→` |
 | Save preferences | `⌘/Ctrl + S` |
 
-Change the global shortcut in **Preferences → Habits → Global shortcut**, then save. A value such as `CommandOrControl+Shift+V` works across the supported desktop platforms. Starclip tries to register the new shortcut before replacing the old one. If registration fails, it reports that another app may be using it and keeps the existing shortcut. This uses the operating system's registration result; it does not identify the app that owns a shortcut or enumerate every shortcut in other apps. The development branch adds a status icon beside the field: a green check for the confirmed binding, gray for an unchecked draft, a saving indicator, and a red warning after registration fails. Hover for details. New combinations are checked when saved; the browser demo cannot test system shortcut registration.
+Change the global shortcut in **Preferences → Habits → Global shortcut**, then save. A value such as `CommandOrControl+Shift+V` works across the supported desktop platforms. Starclip tries to register the new shortcut before replacing the old one. If registration fails, it reports that another app may be using it and keeps the existing shortcut. This uses the operating system's registration result; it does not identify the app that owns a shortcut or enumerate every shortcut in other apps. v0.2.5 adds a status icon beside the field: a green check for the confirmed binding, gray for an unchecked draft, a saving indicator, and a red warning after registration fails. Hover for details. New combinations are checked when saved; the browser demo cannot test system shortcut registration.
 
 Other shortcuts operate inside Starclip. Typing, tutorials and dialogs do not trigger history copying or category changes. Quick-copy can hide the window and return focus to your previous app; Starclip writes to the clipboard without injecting an automatic paste.
 

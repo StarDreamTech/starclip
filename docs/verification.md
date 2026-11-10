@@ -1,4 +1,28 @@
-# 星笺验证记录（当前公开版 0.2.4，更新至 2026-11-10）
+# 星笺验证记录（当前公开版 0.2.5，更新至 2026-11-11）
+
+## 0.2.5 正式发布与原生升级验收
+
+- 用户 2026-11-10 授权「发布下」。[PR #35](https://github.com/cpython666/starclip/pull/35) 合并版本 / CHANGELOG 与真实升级基线，tag `v0.2.5` 固定 `948dfd4d94ac976091558fdfa64e55f02499d071`；[正式 Release](https://github.com/cpython666/starclip/releases/tag/v0.2.5) 于 **2026-11-11 00:42:14（北京时间，UTC 2026-11-10 16:42:14）** 公开，非草稿、非预发布并为 latest。本轮未替换或启动本机正式安装。
+- [签名发布 42848254909](https://github.com/cpython666/starclip/actions/runs/42848254909) **8/8** 通过：Node **233**、Web 构建、Rust core **171**（4 项忽略），macOS / Windows desktop **189 / 184**（各 4 项忽略）及分别独立的 CLI 检查；23 款字体真实下载校验与离线渲染、签名打包、两平台 fresh / 真实 0.1.0 覆盖安装及固定数据保留、minisign 实际验签与附件汇总。发布准备定向 Python 夹具 **9 项**、发布 / 版本脚本 **11 项**通过。
+- 真实公开 **0.2.4 → 精确签名 0.2.5**：[macOS 42856720920](https://github.com/cpython666/starclip/actions/runs/42856720920) 与 [Windows 42851606421](https://github.com/cpython666/starclip/actions/runs/42851606421) 均 `passed` / 自动重启，检查更新、签名下载、稍后、确认安装后替换通过；固定文本 / 原创 PNG 与缩略图、分组、偏好、成长 / 装备、暂停与统计关闭保留，SQLite 4 → 5。新版验证当前库后清理旧自动数据快照，旧程序副本独立保留并核对原字节。两包还通过真实签名正例和篡改字节拒绝负例。结果、安装前后固定数据、目标签名与清理证据已逐项核对。
+- macOS 环境排查 [42851610156](https://github.com/cpython666/starclip/actions/runs/42851610156)、`42852790903`、`42855211528`、`42855865646` 均在旧 app 启动前停止。系统解析未采用临时 hosts，排除同名别名与用户 curl 配置；试验中的别名改写和夹具已撤回。[PR #36](https://github.com/cpython666/starclip/pull/36) / [#37](https://github.com/cpython666/starclip/pull/37) 改用实际解析探测，并在一次性 VM 中重启 mDNSResponder 后等待真实 HTTPS / 精确摘要。最终 `42856720920` 记录系统解析与实际 HTTPS 均为 127.0.0.1、完整升级通过。此前失败不计通过，未移动 tag 或更改签名产物。
+- 基线来自真实公开 0.2.4，`scripts/updater_baselines.py` 固定大小 / SHA / schema 4 与 macOS 内部版本、二进制摘要；两份包实际下载核对。macOS tar 8,391,207 B / `f44ebe5de73bcc479b16e9dfaa43ea26a8a6e841a055621c767fb17d26234273`；Windows NSIS 6,917,240 B / `a0f712d2d8d6f9bcb18656f8287e540475e1f31c4b3dca217fbcd7601ab541f1`。不使用比较版本重编译来代替真实旧包。
+- 原生 UI 在一次性 runner 上使用临时受信任 HTTPS 服务，保留正式 URL、TLS / 主机名验证与签名包原始字节；未注入更新结果。临时服务 / hosts / 信任清理证据通过。匿名公开 **8 个附件**完整下载，大小与 SHA-256 同已验收草稿、GitHub digest 及 `SHA256SUMS`；稳定 `/releases/latest/download/latest.json` 字节完全一致、version=0.2.5。公网附件下载与原生临时 HTTPS 为两份独立证据，不扩大为公网 CDN 原生 GUI 更新测试。
+- [Homebrew 42861273222](https://github.com/cpython666/starclip/actions/runs/42861273222) **2/2**：公开 DMG、内部版本 / 标识 / arm64、strict/deep ad-hoc 签名与 Homebrew style / online audit / fetch 通过。[Tap 提交](https://github.com/cpython666/homebrew-tap/commit/52a9d65d938742c2188f15f9f12fc2ec0a842005) 和远端 main `Casks/starclip.rb` 已回读为 0.2.5 / 下表 DMG SHA。首轮 `42857222258` 因 GitHub ARM runner 容量不足未取得任务，[PR #38](https://github.com/cpython666/starclip/pull/38) 改用不启动 app 的 Intel 包检查、audit / fetch 显式 `--arch=arm`，Homebrew 定向 **10 项**通过；不替代上面的原生 ARM 升级。首轮 Intel `42860484178` 包检查与 style 通过，在线审计要求使用 `--arch=arm`，按实际提示修正后上述同步完成。未执行本机安装。
+- 本版包含 Markdown 图片 / 三主题、图集 / 严格去重、批量图片文件传出、图片查看 / 分页 / 收藏排序、页面位置记忆与内部备份清理。Markdown PNG 证据仍来自 Chromium；macOS WebKit / Windows WebView 原生导出、Windows 多图粘贴与两平台最终拖放收件尚未专项完整验收。保留单段配文 + 有序图片限制，不支持任意图文交错；macOS 无 Apple 公证，Windows 无发行者证书。
+
+以下为实际签名草稿与公开附件的相同字节：
+
+| 附件 | 字节 | SHA-256 |
+| --- | ---: | --- |
+| `SHA256SUMS` | 652 | `ccf3cce82709f7559554e7b51351ac1fb39328e3a37b8c5401633e51ed4997df` |
+| `Starclip_0.2.5_aarch64.app.tar.gz` | 8,622,787 | `d84b91c021e6805374b7034e36c62a0a2054e6a889a793206d7c66dc36fec6d8` |
+| `Starclip_0.2.5_aarch64.app.tar.gz.sig` | 424 | `2c725ce476320bc01638c8c913ae4c33634c13aa21a8e1bc853b8a901eac8822` |
+| `Starclip_0.2.5_aarch64.dmg` | 8,406,871 | `7094d2c0b34cd1f8943e9fc42ad049198cb42ac82828ca81a3efe93eb4d775b2` |
+| `Starclip_0.2.5_x64-setup.exe` | 7,128,086 | `c80060f343ea57715fd923edfe850162bc5374f9ac940c4843df9e3fa793eeff` |
+| `Starclip_0.2.5_x64-setup.exe.sig` | 436 | `6491eff0ef40dfe5a5741b29d50ca2f438e75c5e97d570231807a48f71fe486c` |
+| `latest.json` | 3,554 | `63c651793b1ecd96aa7ad102a0a28dbacbb2df2458b5946944bffc15b1c48aeb` |
+| `release-notes.md` | 2,253 | `9875c7e17197daee9a7f20c52b39b1a2003b8f2aa8611a1b00610b10cf1d7c08` |
 
 ## 主窗 GitHub 图标（2026-11-10）
 
