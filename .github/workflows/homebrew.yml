@@ -25,7 +25,7 @@ concurrency:
 jobs:
   verify:
     if: github.repository == 'cpython666/starclip'
-    runs-on: macos-15
+    runs-on: macos-15-intel
     outputs:
       skip: ${{ steps.plan.outputs.skip }}
       tag: ${{ steps.plan.outputs.tag }}
@@ -118,8 +118,8 @@ jobs:
           node scripts/homebrew-release.mjs cask evidence.json "$tap_path/Casks/starclip.rb"
           brew style --cask cpython666/tap/starclip
           brew trust --cask cpython666/tap/starclip
-          brew audit --cask --strict --online cpython666/tap/starclip
-          brew fetch --cask cpython666/tap/starclip
+          brew audit --cask --strict --online --arch=arm cpython666/tap/starclip
+          brew fetch --cask --arch=arm cpython666/tap/starclip
           cp "$tap_path/Casks/starclip.rb" starclip.rb
       - uses: actions/upload-artifact@v4
         if: steps.plan.outputs.skip != 'true'
