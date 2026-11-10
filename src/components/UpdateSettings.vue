@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { errorText, formatDate, t } from '../i18n';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { createRecoveryPoint, getUpdatePreferences, initialUpdatePreferences, initialUpdateStatus, listRecoveryPoints, onUpdatePreferencesChanged, recoveryPendingPath, restartAfterUpdate, setAutoUpdateCheck, restoreRecoveryPoint, updateDesktopAvailable, watchStarclipUpdates } from '../update-api';
-import type { RecoveryPoint, UpdatePreferences } from '../update-api';
+import { getUpdatePreferences, initialUpdatePreferences, initialUpdateStatus, onUpdatePreferencesChanged, pendingDataDirectory, restartAfterUpdate, setAutoUpdateCheck, updateDesktopAvailable, watchStarclipUpdates } from '../update-api';
+import type { UpdatePreferences } from '../update-api';
 import { downloadProgress, fileSize, updateInProgress, updatePhaseText } from '../update-state';
 
 const props = withDefaults(defineProps<{ disabled?: boolean; unsavedChanges?: boolean }>(), { disabled: false, unsavedChanges: false });
@@ -11,18 +11,13 @@ const status = ref(initialUpdateStatus());
 const preferences = ref<UpdatePreferences>(initialUpdatePreferences());
 const statusLoaded = ref(false);
 const preferencesLoaded = ref(false);
-const points = ref<RecoveryPoint[]>([]);
-const pointsLoaded = ref(false);
 const pendingLoaded = ref(false);
 const pendingPath = ref<string | null>(null);
-const operation = ref<'load' | 'check' | 'download' | 'install' | 'snapshot' | 'restore' | 'restart' | null>(null);
+const operation = ref<'load' | 'check' | 'download' | 'install' | 'restart' | null>(null);
 const preferencesOperation = ref(false);
 const error = ref('');
-const recoveryError = ref('');
 const notice = ref('');
 const installVersion = ref<string | null>(null);
-const restoreSelected = ref<RecoveryPoint | null>(null);
-const confirmation = ref<HTMLElement>();
 const installDialog = ref<HTMLDialogElement>();
 let disposed = false;
 const monitor = watchStarclipUpdates(value => { status.value = value; statusLoaded.value = true; });
@@ -33,13 +28,13 @@ const blocked = computed(() => props.disabled || working.value || needsRestart.v
 const progress = computed(() => downloadProgress(status.value));
 const canDownload = computed(() => !!status.value.available && ['available', 'error'].includes(status.value.phase));
 const canInstall = computed(() => !!status.value.available && status.value.phase === 'ready');
-const canRelease = computed(() => (!updateDesktopAvailable || (statusLoaded.value && pointsLoaded.value && pendingLoaded.value))
-  && (!updateDesktopAvailable || preferencesLoaded.value) && !working.value && !preferencesOperation.value && !needsRestart.value && !installVersion.value && !restoreSelected.value);
+const canRelease = computed(() => (!updateDesktopAvailable || (statusLoaded.value && pendingLoaded.value))
+  && (!updateDesktopAvailable || preferencesLoaded.value) && !working.value && !preferencesOperation.value && !needsRestart.value && !installVersion.value);
 watch(() => working.value || needsRestart.value, value => emit('busy', value), { immediate: true, flush: 'sync' });
 watch(needsRestart, value => { if (value) emit('restart-required'); }, { flush: 'sync' });
 watch([() => status.value.phase, () => status.value.available?.version], ([phase, version]) => {
   if (phase === 'ready' && version) {
-    restoreSelected.value = null; installVersion.value = version;
+    installVersion.value = version;
   } else dismissInstall();
 });
 watch(installVersion, async version => {
@@ -58,9 +53,6 @@ function date(value: number | string) {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? t('日期未提供') : formatDate(parsed, { dateStyle: 'medium', timeStyle: 'short' });
 }
-function reasonLabel(reason: string) {
-  return ({ manual: t('手动保存'), 'before-update': t('升级前'), 'before-restore': t('恢复前'), 'before-migration': t('数据升级前') } as Record<string, string>)[reason] || t('恢复点');
-}
 async function perform(name: NonNullable<typeof operation.value>, action: () => Promise<void>) {
   if (disposed || !updateDesktopAvailable || props.disabled || working.value || (needsRestart.value && name !== 'restart')) return;
   operation.value = name; error.value = ''; notice.value = '';
@@ -69,17 +61,16 @@ async function perform(name: NonNullable<typeof operation.value>, action: () => 
 }
 function refresh() {
   return perform('load', async () => {
-    recoveryError.value = '';
-    const results = await Promise.allSettled([monitor.read(), getUpdatePreferences(), listRecoveryPoints(), recoveryPendingPath()]);
+    const results = await Promise.allSettled([monitor.read(), getUpdatePreferences(), pendingDataDirectory()]);
     if (disposed) return;
-    const [update, preference, recovery, pending] = results;
-    if (update.status === 'rejected') error.value = t('更新状态读取失败：{error}', { error: message(update.reason) });
+    const [update, preference, pending] = results;
+    const errors: string[] = [];
+    if (update.status === 'rejected') errors.push(t('更新状态读取失败：{error}', { error: message(update.reason) }));
     if (preference.status === 'fulfilled') acceptPreferences(preference.value);
-    else recoveryError.value = t('更新偏好读取失败：{error}', { error: message(preference.reason) });
-    if (recovery.status === 'fulfilled') { points.value = recovery.value; pointsLoaded.value = true; }
-    else recoveryError.value = [recoveryError.value, t('恢复点读取失败：{error}', { error: message(recovery.reason) })].filter(Boolean).join('\n');
+    else errors.push(t('更新偏好读取失败：{error}', { error: message(preference.reason) }));
     if (pending.status === 'fulfilled') { pendingPath.value = pending.value; pendingLoaded.value = true; }
-    else recoveryError.value = [recoveryError.value, t('数据位置读取失败：{error}', { error: message(pending.reason) })].filter(Boolean).join('\n');
+    else errors.push(t('数据位置读取失败：{error}', { error: message(pending.reason) }));
+    error.value = errors.join('\n');
   });
 }
 async function toggleAutomaticChecks() {
@@ -104,16 +95,7 @@ function download() {
 }
 function confirmInstall() {
   if (blocked.value || !canInstall.value) return;
-  restoreSelected.value = null; installVersion.value = status.value.available!.version;
-}
-async function confirmRestore(point: RecoveryPoint) {
-  if (blocked.value || !point.compatible) return;
-  dismissInstall(); restoreSelected.value = point;
-  await nextTick(); if (!disposed) confirmation.value?.focus();
-}
-function cancelConfirmation() {
-  if (blocked.value) return;
-  restoreSelected.value = null;
+  installVersion.value = status.value.available!.version;
 }
 function dismissInstall() {
   installDialog.value?.close();
@@ -130,36 +112,6 @@ function install() {
       if (status.value.phase !== 'installed') throw reason;
     }
     if (!disposed && status.value.phase === 'installed') await restartInstalled();
-  });
-}
-function createSnapshot() {
-  if (props.unsavedChanges) return;
-  return perform('snapshot', async () => {
-    const point = await createRecoveryPoint();
-    if (disposed) return;
-    points.value = [point, ...points.value.filter(item => item.id !== point.id)]; pointsLoaded.value = true;
-    notice.value = t('恢复点已保存在本机。');
-  });
-}
-function restore() {
-  const selected = restoreSelected.value;
-  if (!selected?.compatible || props.unsavedChanges) return;
-  return perform('restore', async () => {
-    try {
-      await restoreRecoveryPoint(selected.id);
-      const pending = await recoveryPendingPath();
-      if (disposed) return;
-      pendingPath.value = pending; restoreSelected.value = null;
-      if (!pending) throw new Error(t('未能确认恢复后的数据位置，请刷新状态后重试。'));
-      notice.value = t('恢复数据已准备好，重启星笺后生效。');
-    } catch (reason) {
-      // A lost response must not unlock writes after the backend has switched directories.
-      try {
-        const pending = await recoveryPendingPath();
-        if (!disposed && pending) { pendingPath.value = pending; restoreSelected.value = null; }
-      } catch { /* Preserve the restore error; the backend continues to guard writes. */ }
-      throw reason;
-    }
   });
 }
 async function restartInstalled() {
@@ -183,10 +135,10 @@ onBeforeUnmount(() => { disposed = true; installDialog.value?.close(); stopPrefe
 
 <template>
   <section class="update-settings" aria-labelledby="software-update-heading" :aria-busy="working">
-    <div class="update-heading"><h3 id="software-update-heading">{{ t('软件更新与恢复') }}</h3><span class="update-version">{{ t('当前版本') }} {{ status.currentVersion }}</span></div>
+    <div class="update-heading"><h3 id="software-update-heading">{{ t('软件更新') }}</h3><div class="update-heading-actions"><span class="update-version">{{ t('当前版本') }} {{ status.currentVersion }}</span><button v-if="updateDesktopAvailable" type="button" class="update-refresh" :disabled="blocked" @click="refresh">{{ t('刷新状态') }}</button></div></div>
     <div v-if="!updateDesktopAvailable" class="update-card">
       <strong>{{ t('请在星笺桌面版检查更新') }}</strong>
-      <p>{{ t('浏览器演示没有已安装的软件和本机恢复点，不会检查、下载或安装桌面更新。') }}</p>
+      <p>{{ t('浏览器演示没有已安装的软件，不会检查、下载或安装桌面更新。') }}</p>
     </div>
     <template v-else>
       <p v-if="!statusLoaded" class="update-hint" role="status">{{ operation === 'load' ? t('正在读取本机状态…') : t('尚未读取更新状态。') }}</p>
@@ -196,7 +148,7 @@ onBeforeUnmount(() => { disposed = true; installDialog.value?.close(); stopPrefe
         <div><strong>{{ t('自动检查稳定版更新') }}</strong><p>{{ t('立即保存，可随时关闭；当前仅提供稳定版更新，预览通道尚未开放。') }}</p></div>
         <button type="button" class="switch" :class="{ on: preferences.autoCheck }" role="switch" :aria-checked="preferences.autoCheck" :aria-label="t('自动检查稳定版更新')" :disabled="preferencesOperation || blocked || !preferencesLoaded" @click="toggleAutomaticChecks"><span /></button>
       </div>
-      <p class="update-hint">{{ t('也可随时手动检查。更新只提醒，不会自动下载或安装；确认安装时先保存恢复点，再安装并重启，历史、偏好和星伴成长保留在本机。') }}</p>
+      <p class="update-hint">{{ t('也可随时手动检查。更新只提醒，不会自动下载或安装；确认安装时会自动备份数据，再安装并重启，历史、偏好和星伴成长保留在本机。') }}</p>
       <div v-if="status.available" class="update-card update-release">
         <div class="update-release-heading"><strong>{{ t('新版本') }} {{ status.available.version }}</strong><span v-if="status.available.date">{{ date(status.available.date) }}</span></div>
         <p v-if="status.available.notes" class="update-notes">{{ status.available.notes }}</p>
@@ -212,7 +164,7 @@ onBeforeUnmount(() => { disposed = true; installDialog.value?.close(); stopPrefe
         <button v-if="canInstall" type="button" class="update-button update-primary" :disabled="blocked" @click="confirmInstall">{{ t('安装并重启') }}</button>
       </div>
       <div v-if="needsRestart" class="update-confirmation" role="status">
-        <strong>{{ pendingPath ? t('恢复数据已准备好，重启后继续') : status.phase === 'installed' ? t('新版已安装，重启后继续') : t('安装未完成，请先重启星笺') }}</strong>
+        <strong>{{ pendingPath ? t('数据位置已变更，重启后继续') : status.phase === 'installed' ? t('新版已安装，重启后继续') : t('安装未完成，请先重启星笺') }}</strong>
         <p>{{ t('当前编辑已暂停，请重启星笺后继续使用。') }}</p>
         <details v-if="pendingPath"><summary>{{ t('下次启动的数据位置') }}</summary><code>{{ pendingPath }}</code></details>
         <button type="button" class="update-button update-primary" :disabled="operation !== null || disabled" @click="restart">{{ operation === 'restart' ? t('正在重启…') : t('重启星笺') }}</button>
@@ -220,35 +172,13 @@ onBeforeUnmount(() => { disposed = true; installDialog.value?.close(); stopPrefe
       <dialog v-if="installVersion && !needsRestart" ref="installDialog" class="update-ready-dialog" aria-labelledby="update-ready-heading" aria-describedby="update-ready-description" @cancel.prevent.stop="dismissInstall" @close.stop @keydown.stop @click="event => { if (event.target === installDialog) dismissInstall() }">
         <div class="update-ready-content">
           <div class="update-ready-heading"><h3 id="update-ready-heading">{{ t('新版本') }} {{ installVersion }} {{ t('已准备就绪') }}</h3><button type="button" class="update-ready-close" :aria-label="t('稍后安装更新')" @click="dismissInstall">×</button></div>
-          <p id="update-ready-description">{{ t('更新包已下载并通过验证。安装前会保存当前数据的恢复点，随后暂时关闭星笺，完成后自动打开。') }}</p>
+          <p id="update-ready-description">{{ t('更新包已下载并通过验证。安装前会自动备份当前数据，随后暂时关闭星笺，完成后自动打开。') }}</p>
           <p v-if="unsavedChanges" class="update-warning">{{ t('有尚未保存的偏好，请先选择「稍后再说」并保存，再安装更新。') }}</p>
           <div class="update-actions update-confirm-actions"><button type="button" class="update-button" autofocus @click="dismissInstall">{{ t('稍后再说') }}</button><button type="button" class="update-button update-primary" :disabled="blocked || unsavedChanges" @click="install">{{ t('安装并重启') }}</button></div>
         </div>
       </dialog>
-      <div class="update-recovery">
-        <div class="update-heading"><h4>{{ t('恢复点') }}</h4><button type="button" class="update-refresh" :disabled="blocked" @click="refresh">{{ t('刷新状态') }}</button></div>
-        <p class="update-hint">{{ t('恢复点保存历史、分组、已保存的偏好与星伴成长。恢复会在新目录中使用旧数据，当前目录保留；不会合并之后新增的记录。') }}</p>
-        <button type="button" class="update-button" :disabled="blocked || unsavedChanges" @click="createSnapshot">{{ operation === 'snapshot' ? t('正在保存…') : t('保存当前恢复点') }}</button>
-        <p v-if="unsavedChanges" class="update-hint update-warning">{{ t('请先点击下方「保存全部偏好」，再安装更新或创建、恢复数据。') }}</p>
-        <p v-if="pointsLoaded && !points.length" class="update-hint">{{ t('还没有恢复点。可以手动保存，安装更新前也会自动保存。') }}</p>
-        <ul v-if="points.length" class="recovery-list" :aria-label="t('本机恢复点')">
-          <li v-for="point in points" :key="point.id" class="update-card">
-            <div class="recovery-row"><div><strong>{{ date(point.createdAt) }}</strong><span>{{ reasonLabel(point.reason) }} · v{{ point.appVersion }} · {{ fileSize(point.totalBytes) }}</span></div><button type="button" class="update-button" :disabled="blocked || unsavedChanges || !point.compatible" @click="confirmRestore(point)">{{ t('恢复此时数据') }}</button></div>
-            <p v-if="!point.compatible" class="update-warning">{{ t('此恢复点暂不可用，可能是数据损坏或版本不兼容。请查看下方原因；若由较新版本创建，请先升级星笺。') }}</p>
-            <details><summary>{{ t('查看保存位置') }}</summary><code>{{ point.path }}</code></details>
-            <ul v-if="point.warnings.length" class="update-warnings"><li v-for="warning in point.warnings" :key="warning">{{ warning }}</li></ul>
-          </li>
-        </ul>
-        <div v-if="restoreSelected && !needsRestart" ref="confirmation" class="update-confirmation" tabindex="-1" role="region" :aria-label="t('确认恢复旧数据')">
-          <strong>{{ t('恢复到') }} {{ date(restoreSelected.createdAt) }}？</strong>
-          <p>{{ t('将使用这份恢复点中的') }}<strong>{{ t('旧历史、旧偏好与旧星伴成长') }}</strong>{{ t('，之后新增或修改的内容不会合并。星笺会先保存当前数据的恢复点，并保留当前目录。确认后需重启。') }}</p>
-          <div class="update-actions update-confirm-actions"><button type="button" class="update-button" :disabled="blocked" @click="cancelConfirmation">{{ t('取消') }}</button><button type="button" class="update-button update-primary" :disabled="blocked || unsavedChanges" @click="restore">{{ t('确认恢复旧数据') }}</button></div>
-        </div>
-        <p v-if="recoveryError" class="update-error" role="alert">{{ recoveryError }}</p>
-      </div>
       <p v-if="error" class="update-error" role="alert">{{ error }}</p>
       <p v-else-if="notice" class="update-feedback" role="status">{{ notice }}</p>
-      <p class="update-privacy">{{ t('恢复点以明文保存在本机，不上传。重要数据也建议另存到其他磁盘。') }}</p>
     </template>
   </section>
 </template>
@@ -256,6 +186,6 @@ onBeforeUnmount(() => { disposed = true; installDialog.value?.close(); stopPrefe
 <style scoped>
 .update-settings{min-width:0;padding:16px 0;border-top:1px solid var(--line);color:var(--text)}
 .update-ready-dialog{width:min(440px,calc(100vw - 40px));max-height:calc(100dvh - 40px);padding:0;border:1px solid var(--line);border-radius:18px;background:var(--panel);color:var(--text);box-shadow:0 24px 80px #0005;overflow:auto}.update-ready-dialog::backdrop{background:#080b1866;backdrop-filter:blur(3px)}.update-ready-content{padding:26px}.update-ready-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.update-ready-heading h3{margin:0;font-size:17px;line-height:1.6;font-weight:500;overflow-wrap:anywhere}.update-ready-close{flex-shrink:0;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:6px;color:var(--muted);background:transparent;font-size:25px;cursor:pointer}.update-ready-close:hover{background:var(--input);color:var(--text)}.update-ready-content>p{margin:16px 0;color:var(--muted);font-size:12px;line-height:1.9}.update-ready-content>.update-warning{color:var(--gold)}.update-ready-dialog .update-actions{margin-top:24px}.update-ready-dialog .update-button{font-size:12px;min-height:40px;padding:9px 16px}.update-ready-dialog .update-primary{flex:1}.update-ready-dialog :focus-visible{outline:2px solid var(--gold);outline-offset:3px}
-.update-heading,.update-release-heading,.recovery-row{display:flex;align-items:center;justify-content:space-between;gap:12px}.update-heading{margin-bottom:10px}.update-heading h3,.update-heading h4{margin:0;font-size:11px;font-weight:500;color:var(--gold)}.update-version,.update-release-heading>span{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}.update-hint,.update-card p,.update-confirmation p{font-size:10px;line-height:1.8;color:var(--muted);margin:9px 0}.update-card,.update-confirmation{padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--input);margin-top:12px;min-width:0}.update-card strong,.update-confirmation>strong{font-size:11px;font-weight:500}.update-card p:last-child{margin-bottom:0}.update-notes{white-space:pre-wrap;overflow-wrap:anywhere;max-height:200px;overflow-y:auto;user-select:text}.update-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.update-button{display:inline-flex;align-items:center;justify-content:center;font-size:10px;line-height:1.5;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);cursor:pointer}.update-button:hover{border-color:var(--muted);background:var(--input)}.update-primary{color:var(--gold);border-color:var(--gold)}.update-settings button:disabled{opacity:.45;cursor:default}.update-refresh{font-size:10px;color:var(--muted);padding:5px;border-radius:4px}.update-refresh:hover{background:var(--input);color:var(--text)}.update-confirmation{border-color:var(--gold);background:var(--panel)}.update-confirmation>strong{display:block;color:var(--gold)}.update-confirmation p strong{font-weight:500;color:var(--text)}.update-confirm-actions{justify-content:flex-end}.update-recovery{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}.recovery-list{margin:12px 0 0;padding:0;list-style:none}.recovery-list>.update-card{margin-top:8px}.recovery-row>div{display:flex;flex-direction:column;gap:7px;min-width:0}.recovery-row>div>span{font-size:9px;color:var(--muted);line-height:1.5}.recovery-row .update-button{flex-shrink:0}.update-settings details{font-size:10px;line-height:1.8;color:var(--muted);margin-top:9px}.update-settings summary{cursor:pointer}.update-settings code{display:block;font:10px/1.8 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;margin-top:6px}.update-warning,.update-settings .update-warning{color:var(--gold)}.update-warnings{font-size:10px;color:var(--gold);line-height:1.8;padding-left:18px}.update-error,.update-settings .update-error,.update-feedback{font-size:10px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:12px}.update-error,.update-settings .update-error{color:var(--danger)}.update-feedback{color:var(--mint)}.update-privacy{font-size:9px;color:var(--faint);line-height:1.8;margin:12px 0 0}.update-download{display:flex;flex-direction:column;gap:7px;margin-top:12px}.update-download progress{width:100%;height:7px;accent-color:var(--gold)}.update-download span{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}.update-settings :focus-visible{outline:2px solid var(--gold);outline-offset:3px}
-@media(max-width:600px){.update-heading,.update-release-heading,.recovery-row{align-items:flex-start;flex-wrap:wrap}.update-actions .update-button{flex:1}.recovery-row .update-button{width:100%}}
+.update-heading,.update-release-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.update-heading{margin-bottom:10px}.update-heading-actions{display:flex;align-items:center;gap:12px}.update-heading h3,.update-heading h4{margin:0;font-size:11px;font-weight:500;color:var(--gold)}.update-version,.update-release-heading>span{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}.update-hint,.update-card p,.update-confirmation p{font-size:10px;line-height:1.8;color:var(--muted);margin:9px 0}.update-card,.update-confirmation{padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--input);margin-top:12px;min-width:0}.update-card strong,.update-confirmation>strong{font-size:11px;font-weight:500}.update-card p:last-child{margin-bottom:0}.update-notes{white-space:pre-wrap;overflow-wrap:anywhere;max-height:200px;overflow-y:auto;user-select:text}.update-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.update-button{display:inline-flex;align-items:center;justify-content:center;font-size:10px;line-height:1.5;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);cursor:pointer}.update-button:hover{border-color:var(--muted);background:var(--input)}.update-primary{color:var(--gold);border-color:var(--gold)}.update-settings button:disabled{opacity:.45;cursor:default}.update-refresh{font-size:10px;color:var(--muted);padding:5px;border-radius:4px}.update-refresh:hover{background:var(--input);color:var(--text)}.update-confirmation{border-color:var(--gold);background:var(--panel)}.update-confirmation>strong{display:block;color:var(--gold)}.update-confirmation p strong{font-weight:500;color:var(--text)}.update-confirm-actions{justify-content:flex-end}.update-settings details{font-size:10px;line-height:1.8;color:var(--muted);margin-top:9px}.update-settings summary{cursor:pointer}.update-settings code{display:block;font:10px/1.8 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;margin-top:6px}.update-warning,.update-settings .update-warning{color:var(--gold)}.update-error,.update-settings .update-error,.update-feedback{font-size:10px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:12px}.update-error,.update-settings .update-error{color:var(--danger)}.update-feedback{color:var(--mint)}.update-download{display:flex;flex-direction:column;gap:7px;margin-top:12px}.update-download progress{width:100%;height:7px;accent-color:var(--gold)}.update-download span{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}.update-settings :focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+@media(max-width:600px){.update-heading,.update-release-heading{align-items:flex-start;flex-wrap:wrap}.update-actions .update-button{flex:1}}
 </style>

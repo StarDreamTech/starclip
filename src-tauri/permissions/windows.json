@@ -17,8 +17,7 @@
           "get_data_location", "choose_data_directory", "apply_data_directory",
           "open_data_directory", "open_project_link", "restart_app",
           "export_starpet_growth", "import_starpet_growth", "reset_starpet_growth",
-          "get_update_status", "get_update_preferences", "set_auto_update_check", "skip_update_version", "check_starclip_update", "download_starclip_update", "install_starclip_update",
-          "list_recovery_points", "create_recovery_point", "restore_recovery_point"
+          "get_update_status", "get_update_preferences", "set_auto_update_check", "skip_update_version", "check_starclip_update", "download_starclip_update", "install_starclip_update"
         ]
       }
     },

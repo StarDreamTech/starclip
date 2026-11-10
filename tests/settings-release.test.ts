@@ -143,13 +143,12 @@ test('update and sharing release preserve all in-progress work and explicit conf
     async getUpdatePreferences() { return { revision: 0, autoCheck: true, skippedVersion: null, lastCheckAt: null }; },
     async onUpdatePreferencesChanged() { return () => {}; },
     watchStarclipUpdates: (receive: (value: unknown) => void) => ({ async read() { receive(initial); }, dispose() {} }),
-    async listRecoveryPoints() { return []; }, async recoveryPendingPath() { return null; },
+    async pendingDataDirectory() { return null; },
   });
   try {
     assert.equal(update.exposed.canRelease, false); await flush(); assert.equal(update.exposed.canRelease, true);
-    update.vm.restoreSelected = { id: 'fixed-point' }; assert.equal(update.exposed.canRelease, false);
-    update.vm.restoreSelected = null; update.vm.installVersion = '0.0.1-test'; assert.equal(update.exposed.canRelease, false);
-    update.vm.installVersion = null; update.vm.pendingPath = '/fixed-fixture/recovery'; assert.equal(update.exposed.canRelease, false);
+    update.vm.installVersion = '0.0.1-test'; assert.equal(update.exposed.canRelease, false);
+    update.vm.installVersion = null; update.vm.pendingPath = '/fixed-fixture/pending-directory'; assert.equal(update.exposed.canRelease, false);
     update.vm.pendingPath = null; update.vm.operation = 'download'; assert.equal(update.exposed.canRelease, false);
   } finally { update.cleanup(); }
   const share = await mount('ProductShare');

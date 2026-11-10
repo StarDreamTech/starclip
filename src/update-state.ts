@@ -15,7 +15,7 @@ export function updatePhaseText(state: UpdateStatus): string {
     case 'available': return state.available ? t('发现新版本 {version}。', { version: state.available.version }) : t('有新版本可用。');
     case 'downloading': return t('正在下载更新…');
     case 'ready': return state.available ? t('新版本 {version} 已下载并验证，等待安装。', { version: state.available.version }) : t('更新已下载并验证，等待安装。');
-    case 'backing-up': return t('正在保存升级前的恢复点…');
+    case 'backing-up': return t('正在备份升级前的数据…');
     case 'installing': return t('正在安装更新，请稍候…');
     case 'installed': return t('新版已安装，重启星笺后生效。');
     case 'restart-required': return state.error ? errorText(state.error) : t('安装器未能启动，请重启星笺后再试。');

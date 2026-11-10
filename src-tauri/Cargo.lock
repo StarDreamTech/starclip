@@ -3892,6 +3892,7 @@ dependencies = [
  "rusqlite",
  "rustls",
  "rustybuzz",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

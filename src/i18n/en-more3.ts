@@ -401,4 +401,12 @@ export const enMore3: Record<string, string> = {
   "备份文件记录与路径列表不一致。": "The file clip does not match its path list.",
   "备份中非文件记录带有路径列表。": "A non-file clip contains a path list.",
   "隐私、图片、文件与待扫描记录不会出现在可授权列表。": "Private clips, images, files and clips awaiting review are excluded from AI authorization.",
+
+  "软件更新": "Software update",
+  "软件更新需要在星笺桌面版使用。": "Software updates require the Starclip desktop app.",
+  "浏览器演示没有已安装的软件，不会检查、下载或安装桌面更新。": "The browser demo has no installed app and won't check, download or install desktop updates.",
+  "也可随时手动检查。更新只提醒，不会自动下载或安装；确认安装时会自动备份数据，再安装并重启，历史、偏好和星伴成长保留在本机。": "You can also check manually. Updates only notify you; they are not downloaded or installed automatically. Confirming installation backs up your data, installs the update and restarts. History, preferences and StarPet growth stay on this device.",
+  "更新包已下载并通过验证。安装前会自动备份当前数据，随后暂时关闭星笺，完成后自动打开。": "The update was downloaded and verified. Your current data is backed up before installation; Starclip then closes briefly and reopens automatically.",
+  "数据位置已变更，重启后继续": "Data location changed; restart to continue",
+  "正在备份升级前的数据…": "Backing up data before upgrading…",
 }

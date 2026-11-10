@@ -3,7 +3,7 @@ use crate::appearance::Appearance;
 use crate::capture::{CaptureKey, CaptureState};
 use crate::privacy::{PrivacyRescan, PrivacyRules};
 use crate::starpet_growth::{self, GrowthChange, GrowthState};
-use crate::storage::{DataDirectoryPlan, DataLocation, DirectoryMode, RecoveryPoint, Storage};
+use crate::storage::{DataDirectoryPlan, DataLocation, DirectoryMode, Storage};
 use crate::store::{
     starpet_dock_position, starpet_resize_position, CleanupFilter, CleanupPreview, CleanupResult,
     CleanupSnapshot, Clip, Group, HistoryQuery, HistorySummary, Result, Settings,
@@ -2059,30 +2059,6 @@ fn offer_storage_recovery(app: &AppHandle, default: PathBuf, error: String) {
         });
 }
 
-fn offer_upgrade_recovery(app: &AppHandle, default: PathBuf, error: String) {
-    let latest = Storage::recovery_points_at_startup(&default)
-        .ok()
-        .and_then(|points| points.into_iter().find(|point| point.compatible));
-    let Some(point) = latest else {
-        offer_storage_recovery(app, default, error);
-        return;
-    };
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
-    let handle = app.clone();
-    app.dialog().message(format!("{error}\n\n可恢复到最近的恢复点 {}（应用版本 {}）。恢复将在新目录中完成并重启，当前目录和恢复点均保留；恢复点之后的变动不会出现在还原结果中。", point.id, point.app_version))
-        .title("星笺数据升级与恢复")
-        .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom("恢复并重启".into(), "其他方式".into()))
-        .show(move |restore| {
-            if !restore { offer_storage_recovery(&handle, default, error); return; }
-            thread::spawn(move || match Storage::restore_recovery_point_at_startup(&default, &point.id) {
-                Ok(_) => handle.restart(),
-                Err(error) => offer_storage_recovery(&handle, default, error),
-            });
-        });
-}
-
 #[tauri::command]
 fn get_update_status(app: AppHandle) -> Result<UpdateStatus> {
     app.state::<Updates>().status()
@@ -2248,14 +2224,14 @@ async fn install_starclip_update(
             schedule_telemetry_flush(&worker_app, &worker_context);
             update
                 .install(bytes)
-                .map_err(|error| format!("安装未完成，旧版应用和数据恢复点已保留：{error}"))?;
+                .map_err(|error| format!("安装未完成，旧版应用和数据备份已保留：{error}"))?;
             worker_app
                 .state::<Updates>()
                 .phase(&worker_app, "installed")?;
             Ok(())
         })
         .await
-        .map_err(|_| "更新任务异常终止；已生成的恢复点仍保留。".to_string())?
+        .map_err(|_| "更新任务异常终止；已生成的数据备份仍保留。".to_string())?
     }
     .await;
     if let Err(error) = result {
@@ -2269,44 +2245,6 @@ async fn install_starclip_update(
         return app.state::<Updates>().failed(&app, error);
     }
     app.state::<Updates>().status()
-}
-
-#[tauri::command]
-async fn list_recovery_points(context: AppContext<'_>) -> Result<Vec<RecoveryPoint>> {
-    let context = context.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || lock(&context.storage)?.recovery_points())
-        .await
-        .map_err(|_| "读取恢复点失败。".to_string())?
-}
-
-#[tauri::command]
-async fn create_recovery_point(app: AppHandle, context: AppContext<'_>) -> Result<RecoveryPoint> {
-    app.state::<Updates>().ensure_idle()?;
-    let context = context.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let storage = write_guard(&context)?;
-        storage.create_recovery_point(&*lock(&context.store)?, "manual")
-    })
-    .await
-    .map_err(|_| "创建恢复点失败。".to_string())?
-}
-
-#[tauri::command]
-async fn restore_recovery_point(
-    app: AppHandle,
-    context: AppContext<'_>,
-    id: String,
-) -> Result<RecoveryPoint> {
-    app.state::<Updates>().ensure_idle()?;
-    let context = context.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut storage = write_guard(&context)?;
-        let point = storage.restore_recovery_point(&*lock(&context.store)?, &id)?;
-        changed(&app);
-        Ok(point)
-    })
-    .await
-    .map_err(|_| "恢复任务异常，请检查当前目录状态。".to_string())?
 }
 
 fn refresh_tray(app: &AppHandle, context: &Context, settings: &Settings) {
@@ -2411,7 +2349,7 @@ pub fn run() {
             let storage = match Storage::open(&default, &app.path().app_config_dir()?) {
                 Ok(storage) => storage,
                 Err(error) => {
-                    offer_upgrade_recovery(app.handle(), default, error);
+                    offer_storage_recovery(app.handle(), default, error);
                     return Ok(());
                 }
             };
@@ -2419,7 +2357,7 @@ pub fn run() {
             let store = match storage.open_store() {
                 Ok(store) => store,
                 Err(error) => {
-                    offer_upgrade_recovery(app.handle(), default, error);
+                    offer_storage_recovery(app.handle(), default, error);
                     return Ok(());
                 }
             };
@@ -2693,9 +2631,6 @@ pub fn run() {
             check_starclip_update,
             download_starclip_update,
             install_starclip_update,
-            list_recovery_points,
-            create_recovery_point,
-            restore_recovery_point,
             restart_app
         ])
         .build(app_context)

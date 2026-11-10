@@ -10,6 +10,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod recovery_cleanup;
+
 const DATABASE: &str = "starclip.sqlite3";
 const SELECTION: &str = "handwriting-app.json";
 const LOCATOR: &str = "data-location.json";
@@ -58,6 +60,7 @@ pub struct Storage {
     update_pending: bool,
     _active_lock: File,
     pending_lock: Option<File>,
+    recovery_cleanup_error: Option<String>,
 }
 
 fn display(path: &Path) -> String {
@@ -347,7 +350,7 @@ struct RecoveryFile {
     bytes: u64,
     sha256: String,
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct RecoveryManifest {
     format_version: u32,
@@ -405,10 +408,18 @@ fn recovery_id(id: &str) -> Result<()> {
     Ok(())
 }
 fn collect_recovery_files(directory: &Path) -> Result<BTreeMap<String, RecoveryFile>> {
+    recovery_inventory(directory, true)
+}
+// Cleanup checks file types and sizes without reading clipboard payloads or hashing whole backups.
+fn recovery_inventory(
+    directory: &Path,
+    hash_contents: bool,
+) -> Result<BTreeMap<String, RecoveryFile>> {
     fn visit(
         root: &Path,
         directory: &Path,
         files: &mut BTreeMap<String, RecoveryFile>,
+        hash_contents: bool,
     ) -> Result<()> {
         for entry in fs::read_dir(directory).map_err(io_error)? {
             let path = entry.map_err(io_error)?.path();
@@ -430,21 +441,26 @@ fn collect_recovery_files(directory: &Path) -> Result<BTreeMap<String, RecoveryF
                 if !managed {
                     return Err("恢复点文件类型无效。".into());
                 }
-                visit(root, &path, files)?;
+                visit(root, &path, files, hash_contents)?;
             } else if metadata.is_file() {
                 if files.len() >= 10_000 {
                     return Err("恢复点超过 10000 个托管文件，未继续操作。".into());
                 }
-                let mut input = File::open(&path).map_err(io_error)?;
-                let mut hash = Sha256::new();
-                let mut buffer = [0u8; 64 * 1024];
-                loop {
-                    let length = input.read(&mut buffer).map_err(io_error)?;
-                    if length == 0 {
-                        break;
+                let sha256 = if hash_contents {
+                    let mut input = File::open(&path).map_err(io_error)?;
+                    let mut hash = Sha256::new();
+                    let mut buffer = [0u8; 64 * 1024];
+                    loop {
+                        let length = input.read(&mut buffer).map_err(io_error)?;
+                        if length == 0 {
+                            break;
+                        }
+                        hash.update(&buffer[..length]);
                     }
-                    hash.update(&buffer[..length]);
-                }
+                    format!("{:x}", hash.finalize())
+                } else {
+                    String::new()
+                };
                 let key = relative
                     .to_str()
                     .ok_or("恢复点文件名不是有效的 Unicode。")?
@@ -453,7 +469,7 @@ fn collect_recovery_files(directory: &Path) -> Result<BTreeMap<String, RecoveryF
                     key,
                     RecoveryFile {
                         bytes: metadata.len(),
-                        sha256: format!("{:x}", hash.finalize()),
+                        sha256,
                     },
                 );
             } else {
@@ -463,7 +479,7 @@ fn collect_recovery_files(directory: &Path) -> Result<BTreeMap<String, RecoveryF
         Ok(())
     }
     let mut files = BTreeMap::new();
-    visit(directory, directory, &mut files)?;
+    visit(directory, directory, &mut files, hash_contents)?;
     if !files.contains_key(DATABASE) {
         return Err("恢复点缺少数据库。".into());
     }
@@ -686,6 +702,7 @@ impl Storage {
             update_pending: false,
             _active_lock: active_lock,
             pending_lock: None,
+            recovery_cleanup_error: None,
         })
     }
 
@@ -749,11 +766,14 @@ impl Storage {
     pub fn info(&self) -> Result<DataLocation> {
         let selection = self.handwriting_directory();
         let (total_bytes, database_bytes) = managed_bytes(&self.current, &selection)?;
-        let warnings = match selection_data(&self.current, &selection) {
+        let mut warnings = match selection_data(&self.current, &selection) {
             Ok(Some((_, true))) => vec!["当前手写渲染器位于数据目录外，仅迁移其路径设置，不复制外部程序；在其他电脑上可能需要重新选择渲染器。".into()],
             Err(error) => vec![error],
             _ => vec![],
         };
+        if let Some(error) = &self.recovery_cleanup_error {
+            warnings.push(error.clone());
+        }
         Ok(DataLocation {
             current_path: display(&self.current),
             default_path: display(&self.default),
@@ -993,9 +1013,9 @@ mod tests {
     use super::*;
     use rusqlite::Connection;
     use std::sync::atomic::{AtomicU64, Ordering};
-    struct Scratch(PathBuf);
+    pub(super) struct Scratch(pub(super) PathBuf);
     impl Scratch {
-        fn new() -> Self {
+        pub(super) fn new() -> Self {
             static SEQUENCE: AtomicU64 = AtomicU64::new(0);
             let path = std::env::temp_dir().join(format!(
                 "starclip-storage-test-{}-{}-{}",
@@ -1720,6 +1740,10 @@ mod tests {
                 .len(),
             1
         );
+        let mut storage = Storage::open(&scratch.0, &scratch.0).unwrap();
+        assert!(storage.cleanup_automatic_recovery_points(u64::MAX).is_err());
+        assert_eq!(storage.recovery_points().unwrap().len(), 1);
+        assert_eq!(before, fs::read(&path).unwrap());
     }
 
     #[test]
