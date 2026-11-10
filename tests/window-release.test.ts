@@ -5,7 +5,7 @@ import ts from 'typescript';
 import { compileScript, parse } from '@vue/compiler-sfc';
 import { createRenderer, nextTick } from 'vue';
 import { defaultAppearance } from '../src/appearance.ts';
-import type { AppState, Settings } from '../src/types.ts';
+import type { AppState, HistoryQuery, Settings } from '../src/types.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -62,12 +62,155 @@ test('image checkboxes reflect selection, reject overflow and never invoke singl
   } finally { fixture.cleanup(); }
 });
 
-async function mount(options: { delayedRead?: boolean; delayedCloseListener?: boolean; initialCloseRequest?: number; delayedCloseQuery?: boolean } = {}) {
+test('shortcut status distinguishes confirmed binding, unsaved draft, saving and a rejected registration', async () => {
+  const fixture = await mount(), { vm, mock } = fixture;
+  let rejectSave!: (reason: Error) => void;
+  const saving = new Promise<void>((_resolve, reject) => { rejectSave = reject; });
+  (mock as any).saveSettings = () => saving;
+  try {
+    vm.openSettings();
+    const previous = vm.state.settings.shortcut;
+    assert.equal(vm.shortcutStatus.kind, 'active');
+    vm.settingsDraft.shortcut = 'CommandOrControl+Shift+L';
+    assert.equal(vm.shortcutStatus.kind, 'pending', 'an unchecked draft cannot show a green check');
+    const save = vm.saveSettings(); await flush();
+    assert.equal(vm.shortcutStatus.kind, 'checking');
+    // The native command rejects before saving when OS registration fails.
+    rejectSave(new Error('该快捷键无法注册，可能被其他应用占用。'));
+    await save;
+    assert.equal(vm.shortcutStatus.kind, 'error');
+    assert.match(vm.shortcutStatus.label, /占用|already use/);
+    assert.equal(vm.state.settings.shortcut, previous);
+    assert.equal(vm.settingsDraft.shortcut, 'CommandOrControl+Shift+L');
+    vm.settingsDraft.shortcut = 'CommandOrControl+Shift+K';
+    assert.equal(vm.shortcutStatus.kind, 'pending', 'editing clears only the previous candidate error');
+    vm.settingsDraft.shortcut = previous;
+    assert.equal(vm.shortcutStatus.kind, 'active');
+    vm.state.shortcutError = '快捷键注册失败，可在偏好设置中更换。';
+    assert.equal(vm.shortcutStatus.kind, 'error');
+  } finally { fixture.cleanup(); }
+});
+
+test('shortcut status is never confirmed before the native state has loaded', async () => {
+  const fixture = await mount({ delayedRead: true });
+  try {
+    assert.equal(fixture.vm.shortcutStatus.kind, 'checking');
+    fixture.vm.loading = false;
+    assert.equal(fixture.vm.shortcutStatus.kind, 'unknown');
+    fixture.finishRead(); await flush();
+    assert.equal(fixture.vm.shortcutStatus.kind, 'active');
+  } finally { fixture.cleanup(); }
+});
+
+test('expanded images retain the detail dialog, suppress copy keys and close when privacy or selection changes', async () => {
+  const fixture = await mount(), { vm } = fixture;
+  const image = { id: 7, kind: 'image', title: 'Original viewer fixture', image: { width: 100, height: 80, bytes: 200 }, content: '' };
+  try {
+    vm.openClip(image); vm.openImageViewer(); assert.equal(vm.imageViewerPosition, 0);
+    vm.keyboard({ key: 'Enter' }); assert.deepEqual(fixture.copiedIds, []);
+    vm.closeModal(); assert.equal(vm.imageViewerPosition, null); assert.equal(vm.modal, 'clip');
+    vm.openClip({ ...image, isPrivate: true }); vm.openImageViewer(); assert.equal(vm.imageViewerPosition, null);
+    vm.privateRevealed = true; vm.openImageViewer(); assert.equal(vm.imageViewerPosition, 0);
+    vm.privateRevealed = false; assert.equal(vm.imageViewerPosition, null);
+    vm.openClip({ ...image, id: 8, kind: 'bundle', images: [image.image, image.image, image.image] });
+    vm.openImageViewer(2); assert.equal(vm.imageViewerPosition, 2);
+    vm.openClip(image); assert.equal(vm.imageViewerPosition, null);
+    vm.clipDetailsLoading = true; vm.openImageViewer(); assert.equal(vm.imageViewerPosition, null);
+  } finally { fixture.cleanup(); }
+});
+
+test('App restores the last category, group, page and open settings tab after reconstruction', async () => {
+  const cache = new Map<string, string>();
+  const state = {
+    groups: [{ id: 8, name: '原创导航分组', color: '#8b93d9' }],
+    history: { page: 1, pageSize: 50, total: 150, counts: { all: 150 }, groupCounts: { 8: 150 }, sources: [], hosts: [], tags: [] },
+  };
+  for (const filter of ['pinned', 'kept', 'image', 'link', 'file', 'code', 'group-8']) {
+    const first = await mount({ cache, state });
+    try {
+      first.vm.filter = filter;
+      await first.vm.refresh();
+      first.vm.changeHistoryPage(3); await flush();
+      assert.equal(first.vm.historyPage, 3);
+    } finally { first.cleanup(); }
+    const reopened = await mount({ cache, state });
+    try {
+      assert.equal(reopened.vm.filter, filter);
+      assert.equal(reopened.vm.historyPage, 3);
+      assert.equal(reopened.requests[0]!.filter, filter, 'the first read already uses the restored category');
+      assert.equal(reopened.requests[0]!.page, 3);
+      assert.equal(reopened.vm.modal, '');
+    } finally { reopened.cleanup(); }
+  }
+  const settings = await mount({ cache, state });
+  try {
+    settings.vm.openSettings(); settings.vm.changeSettingsTab('data'); await flush();
+  } finally { settings.cleanup(); }
+  const reopenedSettings = await mount({ cache, state });
+  try {
+    assert.equal(reopenedSettings.vm.modal, 'settings');
+    assert.equal(reopenedSettings.vm.settingsTab, 'data');
+    assert.equal(reopenedSettings.vm.dataTabVisited, true);
+    assert.deepEqual({ ...reopenedSettings.vm.settingsDraft }, { ...reopenedSettings.vm.state.settings });
+    reopenedSettings.vm.closeModal(); await flush();
+  } finally { reopenedSettings.cleanup(); }
+  const closedSettings = await mount({ cache, state });
+  try {
+    assert.equal(closedSettings.vm.modal, '');
+    closedSettings.vm.openSettings(); assert.equal(closedSettings.vm.settingsTab, 'data');
+  } finally { closedSettings.cleanup(); }
+  const opening = await mount({ cache, state: { settings: { ...(await settings.mock.getState()).settings, showStartup: true } } });
+  try {
+    assert.equal(opening.vm.startupVisible, true);
+    assert.equal(opening.vm.modal, '', 'settings restoration waits for the startup animation');
+    assert.equal(JSON.parse(cache.get('starclip.navigation.v1')!).settingsOpen, true);
+    opening.vm.finishStartup(); await flush();
+    assert.equal(opening.vm.modal, 'settings'); assert.equal(opening.vm.settingsTab, 'data');
+  } finally { opening.cleanup(); }
+  const firstUse = await mount({ cache, state: { onboardingCompleted: false } });
+  try {
+    assert.equal(firstUse.vm.guideVisible, true);
+    assert.equal(firstUse.vm.modal, '', 'first-use onboarding takes precedence over an old settings location');
+  } finally { firstUse.cleanup(); }
+});
+
+test('restored navigation handles missing groups, reduced pages and temporary searches', async () => {
+  const key = 'starclip.navigation.v1';
+  const cache = new Map([[key, JSON.stringify({ filter: 'group-8', page: 3, settingsTab: 'appearance', settingsOpen: false })]]);
+  const history = { page: 1, pageSize: 50, total: 60, counts: { all: 60 }, groupCounts: {}, sources: [], hosts: [], tags: [] };
+  const missing = await mount({ cache, state: { history } });
+  try {
+    assert.equal(missing.vm.filter, 'all'); assert.equal(missing.vm.historyPage, 1);
+    assert.deepEqual(missing.requests.map(request => [request.filter, request.page]), [['group-8', 3], ['all', 1]]);
+    assert.equal(JSON.parse(cache.get(key)!).filter, 'all');
+  } finally { missing.cleanup(); }
+  cache.set(key, JSON.stringify({ filter: 'image', page: 3, settingsTab: 'appearance', settingsOpen: false }));
+  const reduced = await mount({ cache, state: { history } });
+  try {
+    assert.equal(reduced.vm.historyPage, 2);
+    assert.equal(JSON.parse(cache.get(key)!).page, 2, 'the backend-clamped page replaces the cached page');
+    reduced.vm.query = '原创临时搜索'; await flush();
+    reduced.vm.historyLoading = false;
+    reduced.vm.changeHistoryPage(2); await flush();
+    reduced.vm.openClip(); reduced.vm.clipContent = '原创未保存正文';
+    assert.deepEqual(JSON.parse(cache.get(key)!), { filter: 'image', page: 1, settingsTab: 'appearance', settingsOpen: false });
+  } finally { reduced.cleanup(); }
+  const clean = await mount({ cache, state: { history } });
+  try {
+    assert.equal(clean.vm.filter, 'image'); assert.equal(clean.vm.historyPage, 1);
+    assert.equal(clean.vm.query, ''); assert.equal(clean.vm.modal, ''); assert.equal(clean.vm.clipContent, '');
+  } finally { clean.cleanup(); }
+});
+
+async function mount(options: { delayedRead?: boolean; delayedCloseListener?: boolean; initialCloseRequest?: number; delayedCloseQuery?: boolean; cache?: Map<string, string>; state?: Partial<AppState> } = {}) {
   const state: AppState = {
     onboardingCompleted: true, clips: [], groups: [],
     settings: { paused: true, pauseRevision: 0, uiLanguage: 'system', theme: 'dark', layout: 'grid', maxHistory: 0, retentionDays: 0, alwaysOnTop: false, showStartup: false, stickerPack: 'none', shortcut: 'CommandOrControl+Shift+V' },
     clipboardError: null, shortcutError: null, windowError: null,
+    ...options.state,
   };
+  const cache = options.cache ?? new Map<string, string>();
+  const requests: HistoryQuery[] = [];
   const windowEvents = eventHub(), themeEvents = eventHub();
   const read = deferred<AppState>(), listening = deferred<() => void>();
   const closeQuery = deferred<number | null>();
@@ -77,7 +220,13 @@ async function mount(options: { delayedRead?: boolean; delayedCloseListener?: bo
   const stopped = { change: 0, close: 0, growth: 0, quit: 0 };
   const stopClose = () => { stopped.close++; };
   const mock = {
-    async getState() { return options.delayedRead ? read.promise : structuredClone(state); },
+    async getState(query?: HistoryQuery) {
+      if (query) requests.push(structuredClone(query));
+      if (options.delayedRead) return read.promise;
+      const next = structuredClone(state);
+      if (next.history && query) next.history.page = Math.min(query.page, Math.max(1, Math.ceil(next.history.total / next.history.pageSize)));
+      return next;
+    },
     async setNativeLanguage() {},
     async privacyRules() { return { revision: 1, rules: [] }; },
     async onChange() { return () => { stopped.change++; }; },
@@ -91,6 +240,7 @@ async function mount(options: { delayedRead?: boolean; delayedCloseListener?: bo
     window: { ...windowEvents, matchMedia: () => ({ ...themeEvents, matches: false }) },
     document: { documentElement: { dataset: {}, style: { setProperty() {}, removeProperty() {} } } },
     navigator: { platform: 'MacIntel' },
+    localStorage: { getItem: (key: string) => cache.get(key) ?? null, setItem: (key: string, value: string) => cache.set(key, value) },
     windowReleaseMock: {
       api: mock, getAppearance: async () => defaultAppearance(),
       recordStudioOpened() {}, async quitStarclip() { stopped.quit++; },
@@ -110,6 +260,7 @@ async function mount(options: { delayedRead?: boolean; delayedCloseListener?: bo
     .replaceAll("'./appearance'", `'${new URL('../src/appearance.ts', import.meta.url).href}'`)
     .replaceAll("'./privacy'", `'${new URL('../src/privacy.ts', import.meta.url).href}'`)
     .replaceAll("'./clip-selection'", `'${new URL('../src/clip-selection.ts', import.meta.url).href}'`)
+    .replaceAll("'./navigation'", `'${new URL('../src/navigation.ts', import.meta.url).href}'`)
     .replaceAll("'./theme'", `'${new URL('../src/theme.ts', import.meta.url).href}'`).replaceAll("'../i18n'", `'${new URL('../src/i18n/index.ts', import.meta.url).href}'`).replaceAll("'./i18n'", `'${new URL('../src/i18n/index.ts', import.meta.url).href}'`);
   const component = await import(moduleUrl(source));
   const app = renderer.createApp({ ...component.default, render() { return null; } });
@@ -118,7 +269,7 @@ async function mount(options: { delayedRead?: boolean; delayedCloseListener?: bo
   let unmounted = false;
   const unmount = () => { if (!unmounted) { unmounted = true; app.unmount(); } };
   return {
-    vm, mock, calls, focusCalls, copiedIds, stopped, windowEvents, themeEvents, unmount,
+    vm, mock, calls, focusCalls, copiedIds, stopped, windowEvents, themeEvents, unmount, requests,
     finishRead: () => read.resolve(structuredClone(state)), finishListener: () => listening.resolve(stopClose),
     finishCloseQuery: (requestId: number | null) => closeQuery.resolve(requestId),
     async close(requestId: number) { assert(closeRequest, 'native close handler registered'); closeRequest(requestId); await flush(); },

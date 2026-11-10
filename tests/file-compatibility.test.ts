@@ -26,7 +26,7 @@ test('legacy file backups keep path types, order and separate text identities wi
   await assert.rejects(api.saveCode(file.id, '', 'original code', 'plaintext', null));
   assert.equal(await api.importBackup(backup([base])), 0);
   const exported = JSON.parse(await api.exportBackup());
-  assert.equal(exported.version, 4);
+  assert.equal(exported.version, 5);
   assert.deepEqual(exported.clips.find((clip: { id: number }) => clip.id === file.id).entries, entries);
 
   for (const broken of [

@@ -116,6 +116,8 @@ impl Store {
             counts.insert(kind, count);
         }
         counts.insert("all".into(), counts.values().sum());
+        let bundles = counts.remove("bundle").unwrap_or(0);
+        *counts.entry("image".into()).or_default() += bundles;
         for (key, predicate) in [
             ("pinned", "c.pinned=1"),
             ("kept", "c.keep_forever=1"),

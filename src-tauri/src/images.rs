@@ -34,6 +34,28 @@ impl PreparedImage {
     pub fn digest(&self) -> &str {
         &self.digest
     }
+
+    /// The common path compares lossless PNG bytes without allocating decoded pixels.
+    /// Different encodings may still represent the same image, so verify RGBA then.
+    pub(crate) fn matches_png(&self, width: u32, height: u32, png: &[u8]) -> Result<bool> {
+        if (width, height) != (self.metadata.width, self.metadata.height) {
+            return Ok(false);
+        }
+        if self.png == png {
+            return Ok(true);
+        }
+        let (stored_width, stored_height, stored) = decode_png(png)?;
+        if (stored_width, stored_height) != (width, height) {
+            return Err("图片数据与尺寸不符，原数据未更改。".into());
+        }
+        let (_, _, incoming) = decode_png(&self.png)?;
+        Ok(incoming.as_slice() == stored.as_slice())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn force_test_digest(&mut self, digest: &str) {
+        self.digest = digest.into();
+    }
 }
 
 fn rgba_length(width: u32, height: u32) -> Result<usize> {
@@ -143,6 +165,37 @@ pub fn decode_png(png: &[u8]) -> Result<(u32, u32, Vec<u8>)> {
     Ok((width, height, rgba))
 }
 
+/// Only local, bounded static PNG/JPEG files are accepted for clipboard collections.
+pub fn prepare_file(bytes: &[u8]) -> Result<PreparedImage> {
+    if bytes.len() > MAX_PNG_BYTES {
+        return Err("图片文件超过 20 MiB。".into());
+    }
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return prepare_png(bytes);
+    }
+    if !bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Err("图集仅支持静态 PNG 或 JPEG 图片。".into());
+    }
+    let mut reader = image::ImageReader::with_format(Cursor::new(bytes), image::ImageFormat::Jpeg);
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_EDGE);
+    limits.max_image_height = Some(MAX_EDGE);
+    limits.max_alloc = Some(MAX_RGBA_BYTES as u64);
+    reader.limits(limits);
+    let mut decoder = reader
+        .into_decoder()
+        .map_err(|_| "JPEG 图片损坏或超过限制。")?;
+    let (width, height) = decoder.dimensions();
+    rgba_length(width, height)?;
+    let orientation = decoder
+        .orientation()
+        .map_err(|_| "JPEG 图片方向信息损坏。")?;
+    let mut decoded = DynamicImage::from_decoder(decoder).map_err(|_| "JPEG 图片无法解码。")?;
+    decoded.apply_orientation(orientation);
+    let rgba = decoded.into_rgba8();
+    prepare_rgba(rgba.width(), rgba.height(), rgba.as_raw())
+}
+
 pub fn prepare_png(png: &[u8]) -> Result<PreparedImage> {
     let (width, height, rgba) = decode_png(png)?;
     prepare_rgba(width, height, &rgba)
@@ -151,6 +204,52 @@ pub fn prepare_png(png: &[u8]) -> Result<PreparedImage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn exact_comparison_accepts_other_encodings_and_checks_every_rgba_byte() {
+        let pixels = [15, 40, 90, 255, 42, 80, 50, 0];
+        let image = prepare_rgba(2, 1, &pixels).unwrap();
+        let mut alternate = Vec::new();
+        PngEncoder::new_with_quality(
+            &mut alternate,
+            image::codecs::png::CompressionType::Best,
+            image::codecs::png::FilterType::NoFilter,
+        )
+        .write_image(&pixels, 2, 1, image::ExtendedColorType::Rgba8)
+        .unwrap();
+        assert_ne!(alternate, image.png);
+        assert!(image.matches_png(2, 1, &alternate).unwrap());
+        assert!(image.matches_png(2, 1, &image.png).unwrap());
+        for index in 0..pixels.len() {
+            let mut different = pixels;
+            different[index] ^= 1;
+            let other = prepare_rgba(2, 1, &different).unwrap();
+            assert!(!image.matches_png(2, 1, &other.png).unwrap());
+        }
+        assert!(!image.matches_png(1, 2, &alternate).unwrap());
+        assert!(prepare_file(&image.png).is_ok());
+        assert!(prepare_file(b"invalid original fixture").is_err());
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut jpeg)
+            .encode(
+                &[20, 40, 60, 80, 100, 120],
+                2,
+                1,
+                image::ExtendedColorType::Rgb8,
+            )
+            .unwrap();
+        assert_eq!(prepare_file(&jpeg).unwrap().metadata().width, 2);
+        let exif = b"Exif\0\0II*\0\x08\0\0\0\x01\0\x12\x01\x03\0\x01\0\0\0\x06\0\0\0\0\0\0\0";
+        let mut rotated = jpeg[..2].to_vec();
+        rotated.extend_from_slice(&[0xff, 0xe1]);
+        rotated.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
+        rotated.extend_from_slice(exif);
+        rotated.extend_from_slice(&jpeg[2..]);
+        let rotated = prepare_file(&rotated).unwrap();
+        assert_eq!(
+            (rotated.metadata().width, rotated.metadata().height),
+            (1, 2)
+        );
+    }
     #[test]
     fn png_roundtrip_thumbnail_identity_and_corruption_limits() {
         let rgba: Vec<u8> = (0..640 * 160)

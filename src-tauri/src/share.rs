@@ -18,6 +18,7 @@ struct ShareText {
 #[derive(Clone, Deserialize)]
 pub struct ShareImage {
     pub id: String,
+    pub locale: String,
     pub path: String,
     pub filename: String,
     width: u32,
@@ -61,6 +62,23 @@ pub fn image(id: &str) -> Result<ShareImage> {
         .ok_or("未找到这张产品介绍图。")?;
     validate_image(&image)?;
     Ok(image)
+}
+pub fn images_for_locale(locale: &str) -> Result<Vec<ShareImage>> {
+    if !matches!(locale, "zh-CN" | "en-US") {
+        return Err("分享素材语言无效。".into());
+    }
+    let images: Vec<_> = catalog()?
+        .images
+        .into_iter()
+        .filter(|i| i.locale == locale)
+        .collect();
+    if images.is_empty() || images.len() > crate::image_transfer::MAX_IMAGES {
+        return Err("分享图片目录无效。".into());
+    }
+    for image in &images {
+        validate_image(image)?;
+    }
+    Ok(images)
 }
 fn validate_image(image: &ShareImage) -> Result<()> {
     if !valid_id(&image.id)
@@ -136,6 +154,7 @@ mod tests {
         let prepared = images::prepare_rgba(2, 2, &[255; 16]).unwrap();
         let mut image = ShareImage {
             id: "fixture".into(),
+            locale: "zh-CN".into(),
             path: "share/fixture.png".into(),
             filename: "starclip-fixture.png".into(),
             width: 2,

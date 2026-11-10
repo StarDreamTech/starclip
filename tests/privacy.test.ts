@@ -69,7 +69,7 @@ test('browser privacy changes, scan tokens and v3 backup import cannot erase man
   await api.setClipPrivacy(item.id, false, true);
   assert.equal((await api.getState()).clips.find((entry: Clip) => entry.id === item.id).isPrivate, true, 'active rules still protect after local review');
   await api.setClipPrivacy(item.id, true);
-  const backup = JSON.parse(await api.exportBackup()); assert.equal(backup.version, 4);
+  const backup = JSON.parse(await api.exportBackup()); assert.equal(backup.version, 5);
   for (const entry of backup.clips) { entry.privacyManual = false; entry.isPrivate = false; entry.privacyReasons = []; }
   await api.importBackup(JSON.stringify(backup));
   const restored = (await api.getState()).clips.find((entry: Clip) => entry.id === item.id);

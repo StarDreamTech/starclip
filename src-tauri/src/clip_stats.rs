@@ -246,7 +246,7 @@ fn library(conn: &Connection, private_predicate: &str) -> Result<LibraryStats> {
     };
     let mut stats = LibraryStats::default();
     let mut statement = conn
-        .prepare("SELECT kind,COUNT(*) FROM clips GROUP BY kind")
+        .prepare("SELECT CASE WHEN kind='bundle' THEN 'image' ELSE kind END,COUNT(*) FROM clips GROUP BY 1")
         .map_err(sql_error)?;
     for row in statement
         .query_map([], |row| {
@@ -266,7 +266,7 @@ fn library(conn: &Connection, private_predicate: &str) -> Result<LibraryStats> {
     ))?;
     stats.reused_clips = count("SELECT COUNT(*) FROM clips WHERE copy_count>0")?;
     stats.copy_total = count("SELECT COALESCE(SUM(MAX(copy_count,0)),0) FROM clips")?;
-    stats.image_bytes = count("SELECT COALESCE(SUM(bytes),0) FROM clip_images")?;
+    stats.image_bytes = count("SELECT (SELECT COALESCE(SUM(bytes),0) FROM clip_images)+(SELECT COALESCE(SUM(image_bytes),0) FROM clip_bundles)")?;
     stats.oldest_created_at = conn
         .query_row("SELECT MIN(created_at) FROM clips", [], |row| row.get(0))
         .map_err(sql_error)?;

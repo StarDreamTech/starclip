@@ -20,7 +20,8 @@ impl Store {
             "kept" => predicates.push("c.keep_forever=1".into()),
             "link" => predicates
                 .push("(c.kind='link' OR json_array_length(p.metadata,'$.linkHosts')>0)".into()),
-            "text" | "code" | "color" | "image" | "file" => {
+            "image" => predicates.push("c.kind IN ('image','bundle')".into()),
+            "text" | "code" | "color" | "file" => {
                 predicates.push("c.kind=?".into());
                 values.push(query.filter.clone().into());
             }
@@ -75,7 +76,7 @@ impl Store {
         }
         let private = PRIVATE_PREDICATE;
         let pending = format!(
-            "(c.kind='image' OR COALESCE(json_extract(p.metadata,'$.scanVersion'),0)!={revision})"
+            "(c.kind IN ('image','bundle') OR COALESCE(json_extract(p.metadata,'$.scanVersion'),0)!={revision})"
         );
         match query.privacy.as_str() {
             "all" => {}
@@ -86,7 +87,7 @@ impl Store {
         }
         if query.ai_eligible {
             predicates.push(format!(
-                "c.kind NOT IN ('image','file') AND NOT {private} AND NOT {pending}"
+                "c.kind NOT IN ('image','file','bundle') AND NOT {private} AND NOT {pending}"
             ));
         }
         let from = "FROM clips c LEFT JOIN clip_privacy p ON p.clip_id=c.id";
@@ -117,7 +118,18 @@ impl Store {
             .min(u64::from(u32::MAX)) as u32;
         let page = query.page.max(1).min(last);
         let offset = u64::from(page - 1) * u64::from(HISTORY_PAGE_SIZE);
-        let mut statement = self.conn.prepare(&format!("{CLIP_SELECT} WHERE {where_sql} ORDER BY c.updated_at DESC,c.id DESC LIMIT {HISTORY_PAGE_SIZE} OFFSET {offset}")).map_err(sql_error)?;
+        let order = if query.filter == "pinned" {
+            match query.sort.as_str() {
+                "updated" => "f.on_top DESC,c.updated_at DESC,c.id DESC",
+                "created" => "f.on_top DESC,c.created_at DESC,c.id DESC",
+                "copies" => "f.on_top DESC,c.copy_count DESC,c.updated_at DESC,c.id DESC",
+                "manual" => "f.on_top DESC,f.position ASC,c.id DESC",
+                _ => return Err("未知的收藏排序方式。".into()),
+            }
+        } else {
+            "c.updated_at DESC,c.id DESC"
+        };
+        let mut statement = self.conn.prepare(&format!("{CLIP_SELECT} WHERE {where_sql} ORDER BY {order} LIMIT {HISTORY_PAGE_SIZE} OFFSET {offset}")).map_err(sql_error)?;
         let mut clips = statement
             .query_map(rusqlite::params_from_iter(values.iter()), clip_from_row)
             .map_err(sql_error)?
@@ -199,7 +211,7 @@ impl Store {
 
     pub fn has_pending_ai_history(&self) -> Result<bool> {
         let revision = self.privacy_rules()?.revision;
-        self.conn.query_row("SELECT EXISTS(SELECT 1 FROM clips c LEFT JOIN clip_privacy p ON p.clip_id=c.id WHERE c.kind NOT IN ('image','file') AND COALESCE(json_extract(p.metadata,'$.scanVersion'),0) != ?1)", [revision], |row| row.get(0)).map_err(sql_error)
+        self.conn.query_row("SELECT EXISTS(SELECT 1 FROM clips c LEFT JOIN clip_privacy p ON p.clip_id=c.id WHERE c.kind NOT IN ('image','file','bundle') AND COALESCE(json_extract(p.metadata,'$.scanVersion'),0) != ?1)", [revision], |row| row.get(0)).map_err(sql_error)
     }
 
     pub fn clip(&self, id: i64) -> Result<Clip> {

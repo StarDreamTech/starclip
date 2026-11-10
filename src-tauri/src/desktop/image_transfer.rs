@@ -1,7 +1,12 @@
 use super::*;
 use crate::image_transfer::{self, Batch};
 
-fn stage_cache(app: &AppHandle, store: &Store, ids: &[i64], allow_private: bool) -> Result<Batch> {
+pub(super) fn stage_cache(
+    app: &AppHandle,
+    store: &Store,
+    ids: &[i64],
+    allow_private: bool,
+) -> Result<Batch> {
     let cache = app
         .path()
         .app_cache_dir()

@@ -32,6 +32,7 @@ async function mount(mock: Record<string, unknown>, props: Record<string, unknow
   const script = compileScript(descriptor, { id: 'product-share-test', inlineTemplate: true });
   const code = ts.transpileModule(script.content, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText
     .replace(/from (['"])vue\1/g, `from '${import.meta.resolve('vue')}'`)
+    .replace("import { api } from '../api';", 'const api=globalThis.productSharePanelMock;')
     .replaceAll("'../product-share'", `'${apiUrl}'`)
     .replaceAll("'./Icon.vue'", "'data:text/javascript,export default {render(){return null}}'").replaceAll("'../i18n'", `'${new URL('../src/i18n/index.ts', import.meta.url).href}'`).replaceAll("'./i18n'", `'${new URL('../src/i18n/index.ts', import.meta.url).href}'`);
   const component = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'));
@@ -50,6 +51,7 @@ function mockApi() {
       return { id, locale, label: ['产品总览', '数据自主', '星伴陪伴', '创作图片', 'AI 授权'][i], description: '原创产品示例', path: `share/${id}.png`, filename: `${id}.png`, width: 1080, height: 1440, bytes: 102400 };
     })),
     shareImageSize: () => '100 KB', shareImageSource: (image: { path: string }) => `/${image.path}`,
+    async favoriteShareImages(language: string) { calls.push(`favoriteImages:${language}`); }, async favoriteShareText(id: string) { calls.push(`favoriteText:${id}`); },
     async copyProductShareText(id: string) { calls.push(`text:${id}`); }, async copyProductShareImage(id: string) { calls.push(`image:${id}`); },
     async saveProductShareImage(id: string): Promise<{ kind: string; path?: string; filename?: string }> { calls.push(`save:${id}`); return { kind: 'cancelled' }; },
   };
@@ -133,4 +135,16 @@ test('share materials follow interface language by default and use the selected 
     assert.match(text(root), /原创详细文案/);
     assert.equal(preview(root).props.src, '/share/companion.png');
   } finally { app.unmount(); }
+});
+
+
+test('share favorites collect the selected text and all images in the chosen material language', async()=>{
+  const mock=mockApi();const {root,app}=await mount(mock);
+  await button(root,'English').props.onClick();await flush();
+  await button(root,'产品介绍').props.onClick();await flush();
+  await button(root,'收藏这段文案').props.onClick();await flush();
+  assert.deepEqual(mock.calls,['favoriteText:detailed-en']);assert.match(text(root),/文案已加入星标收藏/);
+  await button(root,'收藏本语言全部图片').props.onClick();await flush();
+  assert.deepEqual(mock.calls,['favoriteText:detailed-en','favoriteImages:en-US']);assert.match(text(root),/已收藏为一条图集/);
+  app.unmount();
 });

@@ -17,7 +17,7 @@ use std::{
 };
 
 pub type Result<T> = std::result::Result<T, String>;
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 pub const MAX_CONTENT_BYTES: usize = 256 * 1024;
 const MAX_BACKUP_BYTES: usize = 20 * 1024 * 1024;
 const MAX_BACKUP_CLIPS: usize = 10_000;
@@ -34,7 +34,7 @@ fn check_backup_limits(bytes: usize, clips: usize, groups: usize) -> Result<()> 
 fn check_backup_image_limits(clips: &[Clip]) -> Result<()> {
     let pixels = clips
         .iter()
-        .filter_map(|clip| clip.image.as_ref())
+        .flat_map(|clip| clip.image.iter().chain(clip.images.iter()))
         .fold(0u64, |sum, image| {
             sum.saturating_add(u64::from(image.width) * u64::from(image.height))
         });
@@ -49,6 +49,7 @@ pub const HISTORY_PAGE_SIZE: u32 = 50;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct HistoryQuery {
+    pub sort: String,
     pub page: u32,
     pub filter: String,
     pub query: String,
@@ -60,6 +61,7 @@ pub struct HistoryQuery {
 impl Default for HistoryQuery {
     fn default() -> Self {
         Self {
+            sort: "updated".into(),
             page: 1,
             filter: "all".into(),
             query: String::new(),
@@ -123,9 +125,15 @@ pub struct Clip {
     pub language: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<ImageMetadata>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ImageMetadata>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entries: Option<Vec<FileEntry>>,
     pub pinned: bool,
+    #[serde(default)]
+    pub on_top: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub favorite_position: Option<i64>,
     #[serde(default)]
     pub keep_forever: bool,
     pub group_id: Option<i64>,
@@ -488,6 +496,15 @@ struct CleanupCandidate {
 pub const STALE_CLEANUP: &str = "清理预览已过期，请重新预览后确认。";
 static CLEANUP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 fn clip_bytes(clip: &Clip) -> u64 {
+    if clip.kind == "bundle" {
+        return clip
+            .images
+            .iter()
+            .map(|i| i.bytes)
+            .sum::<u64>()
+            .saturating_add(clip.content.len() as u64)
+            .saturating_add(clip.title.len() as u64);
+    }
     clip.image
         .as_ref()
         .map_or(clip.content.len() as u64, |image| image.bytes)
@@ -503,6 +520,7 @@ fn cleanup_fingerprint(clip: &Clip) -> Result<[u8; 32]> {
         &clip.kind,
         &clip.language,
         &clip.image,
+        &clip.images,
         &clip.updated_at,
         &clip.created_at,
         &clip.group_id,
@@ -522,6 +540,8 @@ struct Backup {
     groups: Vec<Group>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     images: Vec<BackupImage>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    bundles: Vec<BackupBundle>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     privacy_rules: Option<PrivacyRules>,
 }
@@ -533,6 +553,13 @@ struct BackupImage {
     png: String,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BackupBundle {
+    clip_id: i64,
+    images: Vec<String>,
+}
+
 // A legacy image capability marker is not a privacy match; image pixels
 // remain unscanned and can never become AI-eligible via this predicate.
 const PRIVATE_PREDICATE: &str = "(COALESCE(json_extract(p.metadata,'$.privacyManual'),0)=1 OR EXISTS(SELECT 1 FROM json_each(p.metadata,'$.privacyReasons') WHERE c.kind!='image' OR value!='图片尚未进行文字识别'))";
@@ -542,7 +569,7 @@ enum CaptureExtra<'a> {
     Html(Option<&'a str>),
     Files,
 }
-const CLIP_SELECT: &str = "SELECT c.id,c.content,c.title,c.kind,c.pinned,c.group_id,c.created_at,c.updated_at,c.copy_count,c.language,c.keep_forever,i.width,i.height,i.bytes,p.metadata,EXISTS(SELECT 1 FROM clip_rich r WHERE r.clip_id=c.id) FROM clips c LEFT JOIN clip_images i ON i.clip_id=c.id LEFT JOIN clip_privacy p ON p.clip_id=c.id";
+const CLIP_SELECT: &str = "SELECT c.id,c.content,c.title,c.kind,c.pinned,c.group_id,c.created_at,c.updated_at,c.copy_count,c.language,c.keep_forever,i.width,i.height,i.bytes,p.metadata,EXISTS(SELECT 1 FROM clip_rich r WHERE r.clip_id=c.id),COALESCE(f.on_top,0),f.position FROM clips c LEFT JOIN clip_images i ON i.clip_id=c.id LEFT JOIN clip_privacy p ON p.clip_id=c.id LEFT JOIN clip_favorites f ON f.clip_id=c.id";
 
 pub struct Store {
     conn: Connection,
@@ -571,6 +598,8 @@ fn clip_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clip> {
         title: row.get(2)?,
         kind,
         pinned: row.get(4)?,
+        on_top: row.get(16)?,
+        favorite_position: row.get(17)?,
         group_id: row.get(5)?,
         created_at: row.get(6)?,
         updated_at: row.get(7)?,
@@ -584,6 +613,7 @@ fn clip_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Clip> {
             }),
             None => None,
         },
+        images: Vec::new(),
         keep_forever: row.get(10)?,
         privacy_manual: metadata.privacy_manual,
         is_private: metadata.is_private(),
@@ -663,7 +693,8 @@ fn identity_predicate(kind: &str) -> &'static str {
     match kind {
         "image" => "kind='image'",
         "file" => "kind='file'",
-        _ => "kind NOT IN ('image','file')",
+        "bundle" => "kind='bundle'",
+        _ => "kind NOT IN ('image','file','bundle')",
     }
 }
 fn ensure_rich_table(conn: &Connection) -> Result<()> {
@@ -768,14 +799,20 @@ pub fn classify(content: &str) -> &'static str {
 mod files;
 use files::{file_content, unknown_entries};
 mod backup;
+mod bundles;
 mod cleanup;
 mod clips;
+mod favorites;
 mod history;
 mod history_cache;
 mod preferences;
 mod privacy_rules;
 mod schema;
 
+#[cfg(test)]
+mod bundle_tests;
+#[cfg(test)]
+mod migration_tests;
 #[cfg(test)]
 mod tests;
 

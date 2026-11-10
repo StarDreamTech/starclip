@@ -198,7 +198,7 @@ impl Metadata {
         }
     }
     pub fn normalize_image_policy(&mut self, kind: &str) {
-        if kind == "image" {
+        if matches!(kind, "image" | "bundle") {
             // This legacy marker described a missing capability, not a secret
             // match. Preserve manual protection and every real rule reason.
             self.privacy_reasons
@@ -435,7 +435,7 @@ pub fn scan_with_origin(
         result.reasons.push("内容超过扫描上限".into());
         return result;
     }
-    if kind == "image" {
+    if matches!(kind, "image" | "bundle") {
         // No OCR is performed here. An unreadable image is pending review,
         // not evidence of a secret; otherwise every screenshot would be
         // hidden before the user has a chance to inspect it.

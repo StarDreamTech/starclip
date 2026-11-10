@@ -385,9 +385,29 @@ def main():
             verify_database(path, expected_schema)
             return dict(schema=expected_schema, paused=True, fixedRecords=1, fixedGroups=1)
         details = verify(database, target_schema if mode == "after-install" else baseline_schema)
-        points = [(p, json.loads(p.read_text())) for p in (data / "recovery").glob("*/snapshot.json")]
-        points = [(p, m) for p, m in points if m["reason"] == "before-update"]
-        if mode == "after-install":
+        def snapshots(reasons):
+            found = []
+            for path in (data / "recovery").glob("*/snapshot.json"):
+                try:
+                    manifest = json.loads(path.read_text())
+                except FileNotFoundError:
+                    continue  # The background cleanup may remove a snapshot during this read.
+                if manifest["reason"] in reasons:
+                    found.append((path, manifest))
+            return found
+        points = snapshots(("before-update",))
+        if mode == "after-install" and target_schema >= 5:
+            # Development schema 5 cleans obsolete automatic snapshots after validation.
+            deadline = time.monotonic() + 10
+            points = snapshots(("before-update", "before-migration"))
+            while points and time.monotonic() < deadline:
+                time.sleep(0.2)
+                points = snapshots(("before-update", "before-migration"))
+            assert not points, "Validated upgrade left obsolete automatic data backups"
+            backups = list((data / "application-backups").glob("*/Starclip.app"))
+            assert len(backups) == 1, "Expected one independently preserved old application"
+            assert verify_app(backups[0], COMPARISON) == baseline_hash, "Original application backup changed"
+        elif mode == "after-install":
             assert len(points) == 1, "Expected one pre-update recovery point"
             path, manifest = points[0]
             assert manifest["schemaVersion"] == baseline_schema

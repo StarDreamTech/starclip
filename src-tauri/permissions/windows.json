@@ -5,10 +5,10 @@
       "description": "Clipboard, history, settings, data and rendering commands are only available to the main window",
       "commands": {
         "allow": [
-          "get_state", "get_clips", "complete_onboarding", "add_clip", "update_clip", "save_code",
+          "get_state", "get_clips", "complete_onboarding", "add_clip", "update_clip", "set_favorite_top", "move_favorite", "save_code",
           "get_startup_preferences", "set_startup_preferences", "quit_starclip",
           "get_telemetry_state", "set_telemetry_enabled", "set_telemetry_mode", "reset_telemetry_identity", "record_usage_event", "flush_telemetry", "clear_telemetry_queue", "reset_telemetry_install",
-          "delete_clip", "copy_clip", "prepare_image_transfer", "copy_image_files", "export_image_files", "drag_image_files", "copy_product_share_text", "copy_product_share_image", "save_product_share_image", "get_clip_image", "create_group", "delete_group", "save_settings", "set_native_language", "set_theme",
+          "delete_clip", "copy_clip", "prepare_image_transfer", "copy_image_files", "export_image_files", "drag_image_files", "copy_product_share_text", "copy_product_share_image", "save_product_share_image", "get_clip_image", "create_clip_bundle", "update_clip_bundle", "favorite_product_share_images", "favorite_product_share_text", "create_group", "delete_group", "save_settings", "set_native_language", "set_theme",
           "get_privacy_rules", "save_privacy_rules", "set_clip_privacy", "set_clip_tags", "preview_privacy_rescan", "apply_privacy_rescan", "get_ai_state", "set_ai_enabled", "create_ai_connection", "revoke_ai_connection", "get_ai_connection_config", "clear_ai_audit",
           "get_appearance", "save_appearance", "import_appearance_sticker", "remove_appearance_sticker",
           "clear_history", "get_clip_stats", "clear_clip_stats", "set_keep_forever", "preview_cleanup", "cancel_cleanup", "execute_cleanup",

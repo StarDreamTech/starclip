@@ -62,6 +62,19 @@ impl Store {
     }
 
     pub(super) fn validate_current_schema(conn: &Connection) -> Result<()> {
+        Self::validate_schema_base(conn)?;
+        for query in [
+            "SELECT clip_id,digest,image_bytes FROM clip_bundles LIMIT 0",
+            "SELECT id,digest,width,height,bytes,png,thumbnail FROM bundle_images LIMIT 0",
+            "SELECT clip_id,position,image_id FROM clip_bundle_items LIMIT 0",
+        ] {
+            conn.prepare(query)
+                .map_err(|_| "数据库结构损坏，请从恢复点恢复。".to_string())?;
+        }
+        Ok(())
+    }
+
+    fn validate_schema_base(conn: &Connection) -> Result<()> {
         for query in [
             "SELECT id,content,title,kind,pinned,group_id,created_at,updated_at,copy_count,language,keep_forever FROM clips LIMIT 0",
             "SELECT id,name,color FROM groups LIMIT 0",
@@ -84,6 +97,9 @@ impl Store {
         }
         if version == 3 {
             Self::validate_legacy_v3(conn)?;
+        }
+        if version == 4 {
+            Self::validate_schema_base(conn)?;
         }
         Ok(version)
     }
@@ -208,7 +224,7 @@ impl Store {
         if foreign_key_errors || triggers {
             return Err(invalid());
         }
-        Self::validate_current_schema(conn).map_err(|_| invalid())?;
+        Self::validate_schema_base(conn).map_err(|_| invalid())?;
         // Validate every legacy list before either snapshot acceptance or migration.
         let mut statement = conn
             .prepare("SELECT id,content FROM clips WHERE kind='file'")
@@ -339,6 +355,7 @@ impl Store {
             Self::validate_current_schema(&conn)?;
             clip_stats::ensure_table(&conn)?;
             ensure_rich_table(&conn)?;
+            super::favorites::ensure(&conn)?;
             crate::search_index::ensure(&conn)?;
             let store = Self {
                 conn,
@@ -417,14 +434,16 @@ impl Store {
         }
         tx.execute_batch("CREATE INDEX IF NOT EXISTS clips_updated ON clips(updated_at DESC);
             DROP INDEX IF EXISTS clips_text_content;
-            CREATE UNIQUE INDEX clips_text_content ON clips(content) WHERE kind NOT IN ('image','file');
+            CREATE UNIQUE INDEX clips_text_content ON clips(content) WHERE kind NOT IN ('image','file','bundle');
             CREATE UNIQUE INDEX IF NOT EXISTS clips_file_content ON clips(content) WHERE kind='file';
-            CREATE UNIQUE INDEX IF NOT EXISTS clips_image_content ON clips(content) WHERE kind='image';
+            DROP INDEX IF EXISTS clips_image_content;
+            CREATE INDEX clips_image_content ON clips(content) WHERE kind='image';
             CREATE TABLE IF NOT EXISTS clip_images (
                 clip_id INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE,
                 width INTEGER NOT NULL CHECK(width>0), height INTEGER NOT NULL CHECK(height>0),
                 bytes INTEGER NOT NULL CHECK(bytes>0), png BLOB NOT NULL, thumbnail BLOB NOT NULL
             );").map_err(sql_error)?;
+        super::bundles::ensure_tables(&tx)?;
         tx.execute_batch("CREATE TABLE IF NOT EXISTS clip_privacy (clip_id INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE, metadata TEXT NOT NULL);").map_err(sql_error)?;
         tx.execute_batch(
             "CREATE TABLE IF NOT EXISTS clip_files (
@@ -518,6 +537,7 @@ impl Store {
         Self::prune_with_settings(&tx, &settings, now())?;
         clip_stats::ensure_table(&tx)?;
         ensure_rich_table(&tx)?;
+        super::favorites::ensure(&tx)?;
         crate::search_index::ensure(&tx)?;
         tx.pragma_update(None, "user_version", SCHEMA_VERSION)
             .map_err(sql_error)?;

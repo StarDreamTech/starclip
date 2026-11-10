@@ -2,6 +2,7 @@
 import { errorText, locale, t } from '../i18n';
 import type { Locale } from '../i18n';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { api } from '../api';
 import Icon from './Icon.vue';
 import { copyProductShareImage, copyProductShareText, saveProductShareImage, shareImages, shareImageSize, shareImageSource, shareTexts } from '../product-share';
 
@@ -16,13 +17,13 @@ const selectedText = ref(shareTexts[0]!.id);
 const topic = (id: string) => id.replace(/-en$/, '');
 const image = computed(() => images.value.find(item => topic(item.id) === selectedImage.value) ?? images.value[0]!);
 const text = computed(() => texts.value.find(item => topic(item.id) === selectedText.value) ?? texts.value[0]!);
-const operation = ref<'text' | 'image' | 'save' | null>(null);
+const operation = ref<'text' | 'image' | 'save' | 'favoriteText' | 'favoriteImages' | null>(null);
 const working = computed(() => operation.value !== null);
 const canRelease = computed(() => !working.value);
 defineExpose({ canRelease });
 const blocked = computed(() => props.disabled || working.value);
 const status = ref('');
-const statusFor = ref<'text' | 'image' | 'save' | null>(null);
+const statusFor = ref<'text' | 'image' | 'save' | 'favoriteText' | 'favoriteImages' | null>(null);
 const error = ref(false);
 let disposed = false;
 watch(working, value => emit('busy', value), { flush: 'sync' });
@@ -52,6 +53,8 @@ function saveImage() {
     return t('已发起下载：{name}。请在浏览器下载列表查看。', { name: result.filename });
   });
 }
+function favoriteText() { const id=text.value.id; return run('favoriteText',async()=>{await api.favoriteShareText(id);return t('文案已加入星标收藏。');}); }
+function favoriteImages() { const language=materialLocale.value; return run('favoriteImages',async()=>{await api.favoriteShareImages(language);return t('当前语言的产品图片已收藏为一条图集。');}); }
 function chooseLanguage(value: typeof language.value) { if (!blocked.value) language.value = value; }
 function chooseImage(id: string) { if (!blocked.value) { selectedImage.value = topic(id); status.value = ''; } }
 function chooseText(id: string) { if (!blocked.value) { selectedText.value = topic(id); status.value = ''; } }
@@ -76,8 +79,9 @@ onBeforeUnmount(() => { disposed = true; emit('busy', false); });
         <button v-for="item in texts" :key="item.id" type="button" :aria-pressed="text.id === item.id" :class="{ chosen: text.id === item.id }" :disabled="blocked" @click="chooseText(item.id)">{{ t(item.label) }}</button>
       </div>
       <p class="share-copy" :lang="materialLocale" tabindex="0" :aria-label="t('分享文案内容')">{{ text.content }}</p>
+      <button type="button" class="button subtle share-action" :disabled="blocked" @click="favoriteText"><Icon name="star" :size="14" />{{ t('收藏这段文案') }}</button>
       <button type="button" class="button subtle share-action" :disabled="blocked" @click="copyText"><Icon name="copy" :size="14" />{{ operation === 'text' ? t('正在复制…') : t('复制文案') }}</button>
-      <p v-if="status && statusFor === 'text'" :class="['share-status', { error }]" :role="error ? 'alert' : 'status'">{{ status }}</p>
+      <p v-if="status && (statusFor === 'text' || statusFor === 'favoriteText')" :class="['share-status', { error }]" :role="error ? 'alert' : 'status'">{{ status }}</p>
 
       <div class="share-section-heading share-image-heading"><h3>{{ t('选一张产品介绍图') }}</h3><span>{{ t('已压缩 PNG · {count} 张', { count: images.length }) }}</span></div>
       <div class="share-image-options" role="group" :aria-label="t('产品介绍图')">
@@ -93,8 +97,9 @@ onBeforeUnmount(() => { disposed = true; emit('busy', false); });
       <div class="share-actions">
         <button type="button" class="button primary share-action" :disabled="blocked" @click="copyImage"><Icon name="copy" :size="14" />{{ operation === 'image' ? t('正在复制…') : t('复制图片') }}</button>
         <button type="button" class="button subtle share-action" :disabled="blocked" @click="saveImage"><Icon name="down" :size="14" />{{ operation === 'save' ? t('正在保存…') : t('保存图片') }}</button>
+        <button type="button" class="button subtle share-action" :disabled="blocked" @click="favoriteImages"><Icon name="star" :size="14" />{{ t('收藏本语言全部图片') }}</button>
       </div>
-      <p v-if="status && statusFor !== 'text'" :class="['share-status', { error }]" :role="error ? 'alert' : 'status'">{{ status }}</p>
+      <p v-if="status && statusFor !== 'text' && statusFor !== 'favoriteText'" :class="['share-status', { error }]" :role="error ? 'alert' : 'status'">{{ status }}</p>
       <p class="share-note">{{ t('图片使用原创示例，不包含你的剪贴记录。复制或保存后，由你选择分享到哪里。') }}</p>
     </div>
   </section>

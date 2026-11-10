@@ -25,7 +25,7 @@ use std::{
 };
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use tauri_plugin_dialog::DialogExt;
@@ -35,6 +35,10 @@ use tauri_plugin_updater::UpdaterExt;
 struct Reader {
     clipboard: Option<Clipboard>,
     capture: CaptureState,
+    last_image_id: Option<i64>,
+    last_bundle_id: Option<i64>,
+    copy_image_png: Option<Vec<u8>>,
+    own_bundle: Option<String>,
 }
 struct Context {
     storage: Mutex<Storage>,
@@ -397,6 +401,17 @@ fn show_window_inner(app: &AppHandle, reopened: bool) -> Result<()> {
         .and_then(|_| window.unminimize())
         .and_then(|_| window.set_focus())
         .map_err(|error| format!("无法打开主窗口：{error}"))
+}
+
+fn tray_opens_main_window(event: &TrayIconEvent) -> bool {
+    matches!(
+        event,
+        TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        }
+    )
 }
 
 fn show_window(app: &AppHandle) {
@@ -1003,6 +1018,26 @@ fn update_clip(
     Ok(())
 }
 #[tauri::command]
+fn set_favorite_top(app: AppHandle, context: AppContext<'_>, id: i64, on_top: bool) -> Result<()> {
+    let _write = write_guard(&context)?;
+    lock(&context.store)?.set_favorite_top(id, on_top)?;
+    changed(&app);
+    Ok(())
+}
+#[tauri::command]
+fn move_favorite(
+    app: AppHandle,
+    context: AppContext<'_>,
+    id: i64,
+    target: Option<i64>,
+    before: bool,
+) -> Result<()> {
+    let _write = write_guard(&context)?;
+    lock(&context.store)?.move_favorite(id, target, before)?;
+    changed(&app);
+    Ok(())
+}
+#[tauri::command]
 fn save_code(
     app: AppHandle,
     context: AppContext<'_>,
@@ -1027,10 +1062,98 @@ fn delete_clip(app: AppHandle, context: AppContext<'_>, id: i64) -> Result<()> {
     Ok(())
 }
 #[tauri::command]
-async fn get_clip_image(context: AppContext<'_>, id: i64, thumbnail: bool) -> Result<String> {
+async fn create_clip_bundle(
+    app: AppHandle,
+    context: AppContext<'_>,
+    ids: Vec<i64>,
+    text: String,
+    title: String,
+    allow_private: bool,
+) -> Result<Clip> {
     let context = context.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let png = lock(&context.store)?.image_png(id, thumbnail)?;
+        let _write = write_guard(&context)?;
+        let clip = lock(&context.store)?.bundle_from_clips(&ids, &text, &title, allow_private)?;
+        changed(&app);
+        Ok(clip)
+    })
+    .await
+    .map_err(|_| "图文组合保存失败，请重试。".to_string())?
+}
+#[tauri::command]
+fn update_clip_bundle(
+    app: AppHandle,
+    context: AppContext<'_>,
+    id: i64,
+    text: String,
+    title: String,
+    group_id: Option<i64>,
+    pinned: bool,
+) -> Result<()> {
+    let _write = write_guard(&context)?;
+    lock(&context.store)?.update_bundle(id, &text, &title, group_id, pinned)?;
+    changed(&app);
+    Ok(())
+}
+#[tauri::command]
+async fn favorite_product_share_images(
+    app: AppHandle,
+    context: AppContext<'_>,
+    locale: String,
+) -> Result<Clip> {
+    let context = context.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _write = write_guard(&context)?;
+        let images = share::images_for_locale(&locale)?
+            .iter()
+            .map(|image| {
+                let png = product_share_png(&app, image)?;
+                share::decode_image(image, &png)?;
+                images::prepare_png(&png)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let title = if locale == "en-US" {
+            "Starclip · Product images"
+        } else {
+            "星笺 · 产品分享图"
+        };
+        let clip = lock(&context.store)?.add_bundle("", &images, title, true, false, None)?;
+        changed(&app);
+        Ok(clip)
+    })
+    .await
+    .map_err(|_| "分享图片收藏失败，请重试。".to_string())?
+}
+#[tauri::command]
+fn favorite_product_share_text(
+    app: AppHandle,
+    context: AppContext<'_>,
+    id: String,
+) -> Result<Clip> {
+    let _write = write_guard(&context)?;
+    let text = share::text(&id)?;
+    let store = lock(&context.store)?;
+    let title = if id.ends_with("-en") {
+        "Starclip · Share text"
+    } else {
+        "星笺 · 分享文案"
+    };
+    let clip = store.add(&text, title, None)?;
+    store.update(clip.id, title, clip.group_id, true)?;
+    let clip = store.clip(clip.id)?;
+    changed(&app);
+    Ok(clip)
+}
+#[tauri::command]
+async fn get_clip_image(
+    context: AppContext<'_>,
+    id: i64,
+    thumbnail: bool,
+    position: Option<usize>,
+) -> Result<String> {
+    let context = context.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let png = lock(&context.store)?.image_member_png(id, position.unwrap_or(0), thumbnail)?;
         Ok(format!(
             "data:image/png;base64,{}",
             base64::engine::general_purpose::STANDARD.encode(png)
@@ -1075,7 +1198,7 @@ async fn copy_product_share_image(
         let _write = write_guard(&context)?;
         let png = product_share_png(&app, &image)?;
         let pixels = share::decode_image(&image, &png)?;
-        write_clipboard(&context, ClipboardWrite::Image(pixels))?;
+        write_clipboard(&context, ClipboardWrite::Image(pixels, png))?;
         set_clipboard_error(&app, &context, None);
         Ok(())
     })
@@ -1139,8 +1262,11 @@ async fn copy_clip(
             };
             (clip, png, html)
         };
+        if clip.kind == "bundle" && !plain {
+            return media::copy_bundle(&app, &context, id);
+        }
         let content = match (png, html) {
-            (Some(png), _) => ClipboardWrite::Image(images::decode_png(&png)?),
+            (Some(png), _) => ClipboardWrite::Image(images::decode_png(&png)?, png),
             (None, Some(html)) => ClipboardWrite::Html(html, clip.content),
             (None, None) if clip.kind == "file" && !plain => {
                 let paths: Vec<String> = clip.content.lines().map(str::to_owned).collect();
@@ -2408,6 +2534,10 @@ pub fn run() {
                 reader: Mutex::new(Reader {
                     clipboard: None,
                     capture: CaptureState::default(),
+                    last_image_id: None,
+                    last_bundle_id: None,
+                    copy_image_png: None,
+                    own_bundle: None,
                 }),
                 clipboard_error: Mutex::new(None),
                 shortcut_error: Mutex::new(shortcut_error),
@@ -2439,7 +2569,12 @@ pub fn run() {
             let mut tray = TrayIconBuilder::with_id("main-tray")
                 .tooltip("星笺 Starclip")
                 .menu(&menu)
-                .show_menu_on_left_click(true)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    if tray_opens_main_window(&event) {
+                        show_window(tray.app_handle());
+                    }
+                })
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => show_window(app),
                     "pause" => {
@@ -2573,6 +2708,8 @@ pub fn run() {
             complete_onboarding,
             add_clip,
             update_clip,
+            set_favorite_top,
+            move_favorite,
             save_code,
             delete_clip,
             copy_clip,
@@ -2584,6 +2721,10 @@ pub fn run() {
             copy_product_share_image,
             save_product_share_image,
             get_clip_image,
+            create_clip_bundle,
+            update_clip_bundle,
+            favorite_product_share_images,
+            favorite_product_share_text,
             create_group,
             delete_group,
             save_settings,
@@ -2665,6 +2806,7 @@ pub fn run() {
 mod ai_broker;
 mod clipboard;
 mod image_transfer;
+mod media;
 use ai_broker::*;
 use clipboard::*;
 

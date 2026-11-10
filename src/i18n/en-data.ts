@@ -1,6 +1,8 @@
 // Names and descriptions displayed through t(variable): StarPet moods,
 // growth catalog, presets, onboarding copy and other generated labels.
 export const enData: Record<string, string> = {
+  "新版正常启动并通过数据库校验后，清理旧版本自动恢复点；升级失败时保留。手动恢复点由你管理，同版本自动恢复点保留最近 3 份及 7 天内副本。": "Automatic recovery points from older versions are cleaned after the new app starts and validates the database. They are kept if the upgrade fails. You manage manual points. For the current version, the newest 3 automatic points and all points from the last 7 days are kept.",
+  "旧自动恢复点清理未完成，将在下次维护时重试；当前数据未更改。": "Older automatic recovery points could not be fully cleaned. Cleanup will retry during the next maintenance; current data is unchanged.",
   "、": ", ",
   "，": ", ",
   "日常陪伴": "Everyday company",

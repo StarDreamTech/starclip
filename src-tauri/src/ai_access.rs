@@ -114,7 +114,7 @@ fn safe(clip: &Clip, revision: u32) -> bool {
     revision > 0
         && clip.scan_version == revision
         && !clip.is_private
-        && !matches!(clip.kind.as_str(), "image" | "file")
+        && !matches!(clip.kind.as_str(), "image" | "file" | "bundle")
 }
 impl AiAccess {
     pub fn state(&self) -> Value {

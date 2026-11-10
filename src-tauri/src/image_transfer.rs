@@ -35,7 +35,7 @@ pub fn validate(store: &Store, ids: &[i64], allow_private: bool) -> Result<Vec<S
     ids.iter()
         .map(|id| {
             let clip = store.clip(*id)?;
-            if clip.kind != "image" {
+            if !matches!(clip.kind.as_str(), "image" | "bundle") {
                 return Err("所选记录包含非图片或已删除的图片，请重新选择。".into());
             }
             if !allow_private
@@ -121,32 +121,38 @@ pub(crate) fn stage(store: &Store, root: &Path, ids: &[i64], allow_private: bool
     let result = (|| {
         let mut paths = Vec::new();
         let mut bytes = 0usize;
-        for (index, id) in ids.iter().enumerate() {
-            let png = store.image_png(*id, false)?;
-            bytes = bytes.saturating_add(png.len());
-            if bytes > MAX_BYTES {
-                return Err("所选图片总大小超过 100 MiB，请分批操作。".into());
+        for id in ids {
+            for position in 0..store.image_count(*id)? {
+                let index = paths.len();
+                if index >= MAX_IMAGES {
+                    return Err("请选择 1 至 50 张不同的图片。".into());
+                }
+                let png = store.image_member_png(*id, position, false)?;
+                bytes = bytes.saturating_add(png.len());
+                if bytes > MAX_BYTES {
+                    return Err("所选图片总大小超过 100 MiB，请分批操作。".into());
+                }
+                // Validate one original at a time; never expand all selected images in memory.
+                crate::images::decode_png(&png)?;
+                // Numeric names avoid leaking private titles and are safe on both platforms.
+                let path = directory.join(format!("Starclip-{:02}-{id}.png", index + 1));
+                let mut options = OpenOptions::new();
+                options.write(true).create_new(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    options.mode(0o600);
+                }
+                let mut file = options
+                    .open(&path)
+                    .map_err(|_| "无法写入图片，请检查权限与磁盘空间。")?;
+                file.write_all(&png)
+                    .and_then(|_| file.sync_all())
+                    .map_err(|_| "无法写入图片，请检查权限与磁盘空间。")?;
+                paths.push(path);
             }
-            // Validate one original at a time; never expand all selected images in memory.
-            crate::images::decode_png(&png)?;
-            // Numeric names avoid leaking private titles and are safe on both platforms.
-            let path = directory.join(format!("Starclip-{:02}-{id}.png", index + 1));
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            let mut file = options
-                .open(&path)
-                .map_err(|_| "无法写入图片，请检查权限与磁盘空间。")?;
-            file.write_all(&png)
-                .and_then(|_| file.sync_all())
-                .map_err(|_| "无法写入图片，请检查权限与磁盘空间。")?;
-            paths.push(path);
         }
-        let preview = store.image_png(ids[0], true)?;
+        let preview = store.image_member_png(ids[0], 0, true)?;
         let (width, height, _) = crate::images::decode_png(&preview)?;
         if width > 320 || height > 320 {
             return Err("图片缩略图无效，请重新收录图片。".into());

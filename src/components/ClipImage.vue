@@ -4,7 +4,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import Icon from './Icon.vue';
 
-const props = withDefaults(defineProps<{ id: number; alt: string; thumbnail?: boolean }>(), { thumbnail: true });
+const props = withDefaults(defineProps<{ id: number; alt: string; thumbnail?: boolean; position?: number }>(), { thumbnail: true, position: 0 });
 const root = ref<HTMLElement>();
 const source = ref('');
 const error = ref('');
@@ -17,7 +17,7 @@ async function load() {
   source.value = ''; error.value = ''; loading.value = visible.value;
   if (!visible.value) return;
   try {
-    const data = await api.imageData(props.id, props.thumbnail);
+    const data = await api.imageData(props.id, props.thumbnail, props.position);
     if (request !== generation) return;
     if (!data.startsWith('data:image/png;base64,')) throw new Error(t('图片格式不可用'));
     source.value = data;
@@ -25,7 +25,7 @@ async function load() {
   finally { if (request === generation) loading.value = false; }
 }
 function invalidImage() { source.value = ''; error.value = t('图片无法显示，请重试。'); }
-watch([() => props.id, () => props.thumbnail, visible], load);
+watch([() => props.id, () => props.thumbnail, () => props.position, visible], load);
 onMounted(() => {
   if (typeof IntersectionObserver === 'undefined') { visible.value = true; return; }
   observer = new IntersectionObserver(entries => { visible.value = entries.some(entry => entry.isIntersecting); });
