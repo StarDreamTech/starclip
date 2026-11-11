@@ -85,7 +85,7 @@ async function releaseFixture(t) {
   const names = releaseNames('0.2.0'), { pubkey, signature } = signingFixture();
   for (const name of [names.mac, names.dmg, names.windows]) await writeFile(join(artifactsDir, name), 'original fixed test artifact');
   for (const name of [names.mac, names.windows]) await writeFile(join(artifactsDir, name + '.sig'), signature + '\n');
-  return { artifactsDir, outputDir, version: '0.2.0', tag: 'v0.2.0', repository: 'cpython666/starclip', pubkey, notes: '测试更新说明', publishedAt: '2026-10-26T01:00:00Z' };
+  return { artifactsDir, outputDir, version: '0.2.0', tag: 'v0.2.0', repository: 'StarDreamTech/starclip', pubkey, notes: '测试更新说明', publishedAt: '2026-10-26T01:00:00Z' };
 }
 
 test('只在两个平台验签后输出完整 manifest，并保留签名内容与版本下载地址', async t => {
@@ -95,7 +95,7 @@ test('只在两个平台验签后输出完整 manifest，并保留签名内容�
   assert.deepEqual(Object.keys(manifest.platforms), ['darwin-aarch64', 'windows-x86_64']);
   assert.equal(manifest.version, '0.2.0');
   assert.equal(manifest.platforms['windows-x86_64'].signature, signingFixture().signature);
-  assert.equal(manifest.platforms['darwin-aarch64'].url, 'https://github.com/cpython666/starclip/releases/download/v0.2.0/Starclip_0.2.0_aarch64.app.tar.gz');
+  assert.equal(manifest.platforms['darwin-aarch64'].url, 'https://github.com/StarDreamTech/starclip/releases/download/v0.2.0/Starclip_0.2.0_aarch64.app.tar.gz');
   assert.deepEqual(JSON.parse(await readFile(join(options.outputDir, 'latest.json'), 'utf8')), manifest);
   const sums = await readFile(join(options.outputDir, 'SHA256SUMS'), 'utf8');
   assert.equal(sums.trim().split('\n').length, 7);

@@ -57,7 +57,7 @@ def public_baseline(origin, platform):
     release = PUBLIC_BASELINES[origin]
     return dict(origin=origin, version=release["version"], schema=release["schema"],
                 platform=platform, **release[platform],
-                url=f"https://github.com/cpython666/starclip/releases/download/v{release['version']}/{release[platform]['filename']}")
+                url=f"https://github.com/StarDreamTech/starclip/releases/download/v{release['version']}/{release[platform]['filename']}")
 
 
 def verify_package(path, expected):

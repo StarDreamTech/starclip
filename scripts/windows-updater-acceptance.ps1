@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (!$IsWindows -or $env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
-    $env:GITHUB_REPOSITORY -ne 'cpython666/starclip') { throw 'A fresh GitHub-hosted Windows runner is required.' }
+    $env:GITHUB_REPOSITORY -ne 'StarDreamTech/starclip') { throw 'A fresh GitHub-hosted Windows runner is required.' }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($identity)
 if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -37,8 +37,8 @@ $targetVersion = [string]$fixture.targetVersion
 $baselineSchema = [int]$baseline.schema
 $targetSchema = [int]$fixture.targetSchema
 if ($targetSchema -lt 1) { throw 'The signed target schema is missing or invalid.' }
-$endpoint = 'https://github.com/cpython666/starclip/releases/latest/download/latest.json'
-$targetUrl = "https://github.com/cpython666/starclip/releases/download/v$targetVersion/Starclip_${targetVersion}_x64-setup.exe"
+$endpoint = 'https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json'
+$targetUrl = "https://github.com/StarDreamTech/starclip/releases/download/v$targetVersion/Starclip_${targetVersion}_x64-setup.exe"
 if ($fixture.targetUrl -ne $targetUrl -or $fixture.targetFilename -ne "Starclip_${targetVersion}_x64-setup.exe") {
   throw 'Unexpected production update package URL or filename.'
 }

@@ -525,18 +525,18 @@ fn shared_clipboard_writer_suppresses_only_successful_own_writes() {
 fn project_links_only_accept_fixed_targets_without_opening_a_browser() {
     assert_eq!(
         project_link("repository").unwrap(),
-        "https://github.com/cpython666/starclip"
+        "https://github.com/StarDreamTech/starclip"
     );
     assert_eq!(
         project_link("issues").unwrap(),
-        "https://github.com/cpython666/starclip/issues/new"
+        "https://github.com/StarDreamTech/starclip/issues/new"
     );
     for target in [
         "",
         "Repository",
         " issues",
         "repository/../../",
-        "https://github.com/cpython666/starclip",
+        "https://github.com/StarDreamTech/starclip",
         "https://example.com",
         "file:///tmp/test",
         "javascript:alert(1)",

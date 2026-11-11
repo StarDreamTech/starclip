@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stableVersion } from './version.mjs';
 
-export const repository = 'cpython666/starclip';
+export const repository = 'StarDreamTech/starclip';
 const releaseRoot = `https://github.com/${repository}/releases`;
 const shaPattern = /^[a-f0-9]{64}$/;
 function positiveInteger(value) { return Number.isSafeInteger(value) && value > 0; }

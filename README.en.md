@@ -6,7 +6,7 @@
 
 Save important clips to favorites or groups, then turn text and code into images with Stardraw. No account is required; clipboard history stays on your computer.
 
-[Project](https://github.com/cpython666/starclip) · [Downloads: v0.2.5](https://github.com/cpython666/starclip/releases/tag/v0.2.5) · [Report an issue](https://github.com/cpython666/starclip/issues/new)
+[Project](https://github.com/StarDreamTech/starclip) · [Downloads: v0.2.5](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) · [Report an issue](https://github.com/StarDreamTech/starclip/issues/new)
 
 The GitHub icon in the top-right corner opens the source repository. **Preferences → Help** also provides project and issue-reporting links. Issue reports are public; remove private clipboard content from screenshots before posting.
 
@@ -34,7 +34,7 @@ Each PNG is 1080 × 1440. Use the Share page to select and copy the correspondin
 
 ## Install and update
 
-Starclip v0.2.5 is available for **Apple Silicon macOS 11+** and **Windows x64**. Download an installer from the [v0.2.5 release](https://github.com/cpython666/starclip/releases/tag/v0.2.5).
+Starclip v0.2.5 is available for **Apple Silicon macOS 11+** and **Windows x64**. Download an installer from the [v0.2.5 release](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5).
 
 On an Apple Silicon Mac, you can also use the project-maintained Homebrew tap:
 
@@ -57,7 +57,7 @@ Update packages have Tauri signature and version verification. macOS builds use 
 
 For a manual macOS upgrade, quit Starclip, replace `Starclip.app` in Applications and reopen it. On Windows, quit the app and run the new installer. Keep the data directory and app identifier; uninstalling first is unnecessary. Existing history limits and retention settings remain active after upgrading.
 
-The v0.2.5 release passed [signed builds](https://github.com/cpython666/starclip/actions/runs/42848254909) and genuine public v0.2.4 upgrades on [macOS](https://github.com/cpython666/starclip/actions/runs/42856720920) and [Windows](https://github.com/cpython666/starclip/actions/runs/42851606421), including automatic restart, fixed data and preferences, schema 4 → 5 and obsolete automatic snapshot cleanup. The old application backup remains. Native checks used temporary trusted HTTPS services on disposable runners. All eight public attachments and the stable manifest were separately downloaded and matched the tested bytes; this is separate from a native public GitHub/CDN delivery test. [Homebrew is synchronized](https://github.com/cpython666/starclip/actions/runs/42861273222); no local production app was installed. See the [release guide](docs/releases.md) and [verification records](docs/verification.md), currently in Chinese, for precise scope.
+The v0.2.5 release passed [signed builds](https://github.com/StarDreamTech/starclip/actions/runs/42848254909) and genuine public v0.2.4 upgrades on [macOS](https://github.com/StarDreamTech/starclip/actions/runs/42856720920) and [Windows](https://github.com/StarDreamTech/starclip/actions/runs/42851606421), including automatic restart, fixed data and preferences, schema 4 → 5 and obsolete automatic snapshot cleanup. The old application backup remains. Native checks used temporary trusted HTTPS services on disposable runners. All eight public attachments and the stable manifest were separately downloaded and matched the tested bytes; this is separate from a native public GitHub/CDN delivery test. [Homebrew is synchronized](https://github.com/StarDreamTech/starclip/actions/runs/42861273222); no local production app was installed. See the [release guide](docs/releases.md) and [verification records](docs/verification.md), currently in Chinese, for precise scope.
 
 ## Features
 
@@ -165,12 +165,12 @@ npm run build:preview:mac
 
 This creates **Starclip Preview**, with a separate app identifier and data directory, paused recording on a fresh profile, no telemetry endpoint and no update source. It outputs an app and DMG in `artifacts/preview-local.noindex/<build-time>/` and prints a ready-to-copy `open "…/Starclip Preview.app"` command. Use original fixed fixtures for testing, rather than personal history.
 
-[GitHub Actions](https://github.com/cpython666/starclip/actions) runs checks and produces platform artifacts. Compilation and automated checks do not substitute for native clipboard, tray, shortcut or installation testing. OCR, animated GIFs, cloud sync, public clip links, automatic paste, code execution and built-in AI analysis are not implemented.
+[GitHub Actions](https://github.com/StarDreamTech/starclip/actions) runs checks and produces platform artifacts. Compilation and automated checks do not substitute for native clipboard, tray, shortcut or installation testing. OCR, animated GIFs, cloud sync, public clip links, automatic paste, code execution and built-in AI analysis are not implemented.
 
 ## Contributing and support
 
 Keep both READMEs and both language catalogs/materials aligned when changing a feature. User content is not translated. Do not commit real clipboard data, databases, backups, logs or credentials.
 
-Report your app version, operating system, reproduction steps and expected result in an [issue](https://github.com/cpython666/starclip/issues/new). Redact private clipboard content before posting screenshots. Detailed product and acceptance records remain in [docs/product.md](docs/product.md) and [docs/verification.md](docs/verification.md), currently in Chinese.
+Report your app version, operating system, reproduction steps and expected result in an [issue](https://github.com/StarDreamTech/starclip/issues/new). Redact private clipboard content before posting screenshots. Detailed product and acceptance records remain in [docs/product.md](docs/product.md) and [docs/verification.md](docs/verification.md), currently in Chinese.
 
 MIT License.

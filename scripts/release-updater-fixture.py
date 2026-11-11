@@ -24,7 +24,7 @@ import zlib
 from fixture_schema import source_schema
 
 PUBLIC_KEY = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVEQjQ4MUM1NTgxMDBGRjEKUldUeER4Qll4WUcwWFpqaHJOVDZvRGxTcXNZK3FVdGVpTnFxMVNJbmgyRmFNeUVtVFRJcCtVaGEK"
-ENDPOINT = "https://github.com/cpython666/starclip/releases/latest/download/latest.json"
+ENDPOINT = "https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json"
 SETTINGS = dict(paused=True, pauseRevision=0, uiLanguage="system", theme="forest", layout="list",
                 maxHistory=0, shortcut="CommandOrControl+Shift+V", alwaysOnTop=False,
                 retentionDays=0, showStartup=False, stickerPack="none")
@@ -52,7 +52,7 @@ PNG = (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8
 def guard_runner():
     if (os.environ.get("GITHUB_ACTIONS") != "true"
             or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
-            or os.environ.get("GITHUB_REPOSITORY") != "cpython666/starclip"):
+            or os.environ.get("GITHUB_REPOSITORY") != "StarDreamTech/starclip"):
         raise RuntimeError("Only a disposable GitHub-hosted Starclip runner may use these fixtures")
     return Path(os.environ["RUNNER_TEMP"]).resolve(strict=True)
 
@@ -86,7 +86,7 @@ def verify_assets(assets, version):
     for platform, suffix in (("darwin-aarch64", "aarch64.app.tar.gz"), ("windows-x86_64", "x64-setup.exe")):
         name = f"Starclip_{version}_{suffix}"
         item = manifest["platforms"][platform]
-        url = f"https://github.com/cpython666/starclip/releases/download/v{version}/{name}"
+        url = f"https://github.com/StarDreamTech/starclip/releases/download/v{version}/{name}"
         if item["url"] != url or item["signature"] != (assets / (name + ".sig")).read_text(encoding="utf-8").strip():
             raise ValueError("Signed release URL or signature differs from the manifest")
         signature = base64.b64decode(item["signature"], validate=True).decode("utf-8").splitlines()

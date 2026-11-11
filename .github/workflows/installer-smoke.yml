@@ -46,12 +46,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            if (context.repo.owner !== 'cpython666' || context.repo.repo !== 'starclip') throw new Error('Baseline is pinned to the original repository.');
+            if (context.repo.owner !== 'StarDreamTech' || context.repo.repo !== 'starclip') throw new Error('Baseline is pinned to the original repository.');
             const runId = 40356060862, artifactId = 12665574702;
             const revision = '22181c0046b1265908334bc2efd31c0bcaa57110';
             const run = (await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: runId })).data;
             const artifact = (await github.rest.actions.getArtifact({ ...context.repo, artifact_id: artifactId })).data;
-            if (run.status !== 'completed' || run.conclusion !== 'success' || run.head_sha !== revision || run.head_repository?.full_name !== 'cpython666/starclip') throw new Error('Baseline build identity or result does not match.');
+            if (run.status !== 'completed' || run.conclusion !== 'success' || run.head_sha !== revision || run.head_repository?.full_name !== 'StarDreamTech/starclip') throw new Error('Baseline build identity or result does not match.');
             if (artifact.id !== artifactId || artifact.name !== 'starclip-windows-x64' || artifact.expired || artifact.workflow_run?.id !== runId || artifact.workflow_run?.head_sha !== revision) throw new Error('Pinned Windows baseline artifact is unavailable or mismatched.');
       - uses: actions/download-artifact@v4
         if: matrix.scenario == 'upgrade'
@@ -99,7 +99,7 @@ jobs:
         if: matrix.scenario == 'upgrade'
         shell: bash
         run: |
-          curl --fail --location --retry 3 --output "$RUNNER_TEMP/baseline.dmg" 'https://github.com/cpython666/starclip/releases/download/v0.1.0-alpha.2/Starclip_0.1.0-alpha.2_aarch64.dmg'
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/baseline.dmg" 'https://github.com/StarDreamTech/starclip/releases/download/v0.1.0-alpha.2/Starclip_0.1.0-alpha.2_aarch64.dmg'
           printf '%s  %s\n' 'c48568607037ec804613be8b2307e3041806849327b27aacd71d579062133240' "$RUNNER_TEMP/baseline.dmg" | shasum --algorithm 256 --check
       - name: Test DMG startup and fixed-data preservation
         shell: bash

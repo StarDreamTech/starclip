@@ -375,7 +375,7 @@ fn validate_expected_version(actual: &str, expected: &str) -> Result<()> {
 }
 fn validate_download_url(url: &str) -> Result<()> {
     // The signed bytes remain authoritative; restrict metadata's download origin too.
-    if url.starts_with("https://github.com/cpython666/starclip/releases/download/") {
+    if url.starts_with("https://github.com/StarDreamTech/starclip/releases/download/") {
         Ok(())
     } else {
         Err("更新安装包地址不属于星笺正式发布源，已停止更新。".into())
@@ -449,12 +449,12 @@ mod tests {
         assert!(validate_expected_version("0.3.0", "0.2.0").is_err());
         assert!(validate_expected_version("0.3.0", "0.3.0").is_ok());
         assert!(validate_download_url(
-            "https://github.com/cpython666/starclip/releases/download/v0.3.0/app.tar.gz"
+            "https://github.com/StarDreamTech/starclip/releases/download/v0.3.0/app.tar.gz"
         )
         .is_ok());
         for url in [
-            "http://github.com/cpython666/starclip/releases/download/a",
-            "https://github.com.evil/cpython666/starclip/releases/download/a",
+            "http://github.com/StarDreamTech/starclip/releases/download/a",
+            "https://github.com.evil/StarDreamTech/starclip/releases/download/a",
             "https://github.com/other/starclip/releases/download/a",
         ] {
             assert!(validate_download_url(url).is_err());
