@@ -531,6 +531,14 @@ fn project_links_only_accept_fixed_targets_without_opening_a_browser() {
         project_link("issues").unwrap(),
         "https://github.com/StarDreamTech/starclip/issues/new"
     );
+    assert_eq!(
+        project_link("organization").unwrap(),
+        "https://stardreamtech.github.io/"
+    );
+    assert_eq!(
+        project_link("project").unwrap(),
+        "https://stardreamtech.github.io/projects/starclip/"
+    );
     for target in [
         "",
         "Repository",

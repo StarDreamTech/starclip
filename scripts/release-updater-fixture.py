@@ -24,7 +24,14 @@ import zlib
 from fixture_schema import source_schema
 
 PUBLIC_KEY = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVEQjQ4MUM1NTgxMDBGRjEKUldUeER4Qll4WUcwWFpqaHJOVDZvRGxTcXNZK3FVdGVpTnFxMVNJbmgyRmFNeUVtVFRJcCtVaGEK"
-ENDPOINT = "https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json"
+ORGANIZATION_REPOSITORY = "StarDreamTech/starclip"
+# Installed clients through 0.2.5 only accept this download prefix. The signed
+# organization manifest never uses it; the compatibility repository is a separate mirror.
+LEGACY_DOWNLOAD_REPOSITORY = "cpython666/starclip"
+ENDPOINT = f"https://github.com/{ORGANIZATION_REPOSITORY}/releases/latest/download/latest.json"
+LEGACY_ENDPOINT = f"https://github.com/{LEGACY_DOWNLOAD_REPOSITORY}/releases/latest/download/latest.json"
+ORGANIZATION_DOWNLOAD_PREFIX = f"https://github.com/{ORGANIZATION_REPOSITORY}/releases/download/"
+LEGACY_DOWNLOAD_PREFIX = f"https://github.com/{LEGACY_DOWNLOAD_REPOSITORY}/releases/download/"
 SETTINGS = dict(paused=True, pauseRevision=0, uiLanguage="system", theme="forest", layout="list",
                 maxHistory=0, shortcut="CommandOrControl+Shift+V", alwaysOnTop=False,
                 retentionDays=0, showStartup=False, stickerPack="none")
@@ -61,6 +68,20 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def compatibility_manifest(manifest):
+    """Copy of the organization manifest with download URLs rewritten for the compatibility mirror.
+
+    Minisign covers the package bytes, not the URL. The signed latest.json on disk stays unchanged.
+    """
+    rewritten = json.loads(json.dumps(manifest))
+    for item in rewritten["platforms"].values():
+        url = str(item.get("url", ""))
+        if not url.startswith(ORGANIZATION_DOWNLOAD_PREFIX):
+            raise ValueError("Signed release URL is not an organization download address")
+        item["url"] = LEGACY_DOWNLOAD_PREFIX + url[len(ORGANIZATION_DOWNLOAD_PREFIX):]
+    return rewritten
+
+
 def verify_assets(assets, version):
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Expected stable target version")
@@ -82,11 +103,11 @@ def verify_assets(assets, version):
     manifest = json.loads((assets / "latest.json").read_text(encoding="utf-8"))
     if manifest["version"] != version or set(manifest["platforms"]) != {"darwin-aarch64", "windows-x86_64"}:
         raise ValueError("Release manifest target/platform mismatch")
-    mapping = {urlsplit(ENDPOINT).path: "latest.json"}
+    mapping = {urlsplit(ENDPOINT).path: "latest.json", urlsplit(LEGACY_ENDPOINT).path: "latest.json"}
     for platform, suffix in (("darwin-aarch64", "aarch64.app.tar.gz"), ("windows-x86_64", "x64-setup.exe")):
         name = f"Starclip_{version}_{suffix}"
         item = manifest["platforms"][platform]
-        url = f"https://github.com/StarDreamTech/starclip/releases/download/v{version}/{name}"
+        url = f"https://github.com/{ORGANIZATION_REPOSITORY}/releases/download/v{version}/{name}"
         if item["url"] != url or item["signature"] != (assets / (name + ".sig")).read_text(encoding="utf-8").strip():
             raise ValueError("Signed release URL or signature differs from the manifest")
         signature = base64.b64decode(item["signature"], validate=True).decode("utf-8").splitlines()
@@ -95,6 +116,7 @@ def verify_assets(assets, version):
         if not re.search(r"(?:^|\t)version:" + re.escape(version) + r"(?:\t|$)", signature[2]):
             raise ValueError("Tauri signature is not bound to the requested version")
         mapping[urlsplit(url).path] = name
+        mapping[urlsplit(LEGACY_DOWNLOAD_PREFIX + url[len(ORGANIZATION_DOWNLOAD_PREFIX):]).path] = name
     return manifest, hashes, mapping
 
 
@@ -166,17 +188,27 @@ def serve(directory, temporary):
     if hashes != metadata["hashes"] or mapping != metadata["mapping"]:
         raise ValueError("Prepared fixture assets changed")
 
+    legacy_manifest_path = urlsplit(LEGACY_ENDPOINT).path
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if self.headers.get("Host") not in ("github.com", "github.com:443") or self.path not in mapping:
                 self.send_error(404)
                 return
             path = assets / mapping[self.path]
+            if self.path == legacy_manifest_path:
+                body = (json.dumps(compatibility_manifest(json.loads(path.read_text(encoding="utf-8"))), indent=2) + "\n").encode()
+                content_type, length = "application/json", len(body)
+            else:
+                body, content_type, length = None, ("application/json" if path.name == "latest.json" else "application/octet-stream"), path.stat().st_size
             self.send_response(200)
-            self.send_header("Content-Type", "application/json" if path.name == "latest.json" else "application/octet-stream")
-            self.send_header("Content-Length", str(path.stat().st_size))
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(length))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
+            if body is not None:
+                self.wfile.write(body)
+                return
             with path.open("rb") as file:
                 while block := file.read(1024 * 1024):
                     self.wfile.write(block)

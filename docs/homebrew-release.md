@@ -1,6 +1,6 @@
 # 发布后自动更新 Homebrew
 
-`.github/workflows/homebrew.yml` 监听 GitHub Release 的 `published` 事件。维护者发布正式版本并设为 latest 后，工作流验证公开的 macOS 包，再把同一份 `Casks/starclip.rb` 提交到两个 Tap：个人仓库 `cpython666/homebrew-tap` 与组织仓库 `StarDreamTech/homebrew-tap`。它不创建 Release、不移动 tag、不公开草稿，也不重新构建或启动下载的应用。Cask 的 `url` 与 `homepage` 固定指向 `https://github.com/StarDreamTech/starclip` 的 Releases，由 `scripts/homebrew-release.mjs` 的 `renderCask` 生成；仓库里没有单独的 `homebrew-cask.mjs`。
+`.github/workflows/homebrew.yml` 监听 GitHub Release 的 `published` 事件。维护者发布正式版本并设为 latest 后，工作流验证公开的 macOS 包，再把同一份 `Casks/starclip.rb` 提交到两个 Tap：个人仓库 `cpython666/homebrew-tap` 与组织仓库 `StarDreamTech/homebrew-tap`。它不创建 Release、不移动 tag、不公开草稿，也不重新构建或启动下载的应用。Cask 的 `url` 固定指向 `https://github.com/StarDreamTech/starclip` 的 Releases；0.2.6 起 `homepage` 改为 `https://stardreamtech.github.io/projects/starclip/`。两者都由 `scripts/homebrew-release.mjs` 的 `renderCask` 生成；仓库里没有单独的 `homebrew-cask.mjs`。已发布的 0.2.5 Cask 仍把 homepage 指向 GitHub 仓库页，要等下次正式 Release 同步后才会改成介绍页。
 
 ## 发布约定
 

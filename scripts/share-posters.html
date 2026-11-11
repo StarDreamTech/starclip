@@ -23,7 +23,7 @@ const pick = (zh, en) => english ? en : zh;
 document.documentElement.lang = english ? 'en-US' : 'zh-CN';
 document.title = pick('星笺 · 分享图排版源', 'Starclip · Product poster source');
 const top = `<div class="brand"><img src="/starclip.svg" alt=""><div><strong>${pick('星笺 Starclip', 'Starclip')}</strong><small>${pick('本地剪贴板管理工具', 'A local-first clipboard manager')}</small></div><span class="pill">${pick('开源 · 本地优先', 'Open source · Local first')}</span></div>`;
-const footer = hint => `<footer class="footer"><div><strong>github.com/StarDreamTech/starclip</strong><p>${hint}<br>${pick('功能与平台支持以对应版本的项目说明为准', 'See the project documentation for features and platform support.')}</p></div><div class="mark">✦</div></footer>`;
+const footer = hint => `<footer class="footer"><div><strong>${pick('StarDreamTech · 星梦科技', 'StarDreamTech')}</strong><p>github.com/StarDreamTech/starclip<br>${hint}</p></div><div class="mark">✦</div></footer>`;
 const features = list => '<section class="features">' + list.map((x, i) => `<div><small>0${i + 1}</small><h3>${x[0]}</h3><p>${x[1]}</p></div>`).join('') + '</section>';
 const heading = (eyebrow, title, subtitle) => `<div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p class="subtitle">${subtitle}</p>`;
 const poster = document.querySelector('#poster');

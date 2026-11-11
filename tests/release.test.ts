@@ -102,6 +102,27 @@ test('只在两个平台验签后输出完整 manifest，并保留签名内容�
   assert.match(sums, /^[a-f0-9]{64}  Starclip_0.2.0_aarch64.app.tar.gz/m);
 });
 
+function signingFixtureFor(version) {
+  const key = Buffer.alloc(42), signed = Buffer.alloc(74);
+  key.write('Ed'); signed.write('ED'); key.fill(7, 2, 10); signed.fill(7, 2, 10);
+  return {
+    pubkey: Buffer.from(`untrusted comment: fixture\tversion:${version}\n${key.toString('base64')}\n`).toString('base64'),
+    signature: Buffer.from(`untrusted comment: fixture\tversion:${version}\n${signed.toString('base64')}\ntrusted comment: fixture\tversion:${version}\n${Buffer.alloc(64).toString('base64')}\n`).toString('base64'),
+  };
+}
+
+test('0.2.6 清单的安装包地址使用组织仓库', async t => {
+  const root = await temporary(t), artifactsDir = join(root, 'artifacts'), outputDir = join(root, 'output');
+  await mkdir(artifactsDir);
+  const names = releaseNames('0.2.6'), { pubkey, signature } = signingFixtureFor('0.2.6');
+  for (const name of [names.mac, names.dmg, names.windows]) await writeFile(join(artifactsDir, name), 'original fixed test artifact');
+  for (const name of [names.mac, names.windows]) await writeFile(join(artifactsDir, name + '.sig'), signature + '\n');
+  const manifest = await assembleRelease({ artifactsDir, outputDir, version: '0.2.6', tag: 'v0.2.6', repository: 'StarDreamTech/starclip', pubkey, notes: '测试更新说明', publishedAt: '2026-11-11T01:00:00Z', verify: async () => {} });
+  assert.equal(manifest.platforms['darwin-aarch64'].url, 'https://github.com/StarDreamTech/starclip/releases/download/v0.2.6/Starclip_0.2.6_aarch64.app.tar.gz');
+  assert.equal(manifest.platforms['windows-x86_64'].url, 'https://github.com/StarDreamTech/starclip/releases/download/v0.2.6/Starclip_0.2.6_x64-setup.exe');
+  assert.doesNotMatch(JSON.stringify(manifest), /cpython666/);
+});
+
 test('缺少一个平台时拒绝生成 latest.json', async t => {
   const options = await releaseFixture(t);
   await rm(join(options.artifactsDir, releaseNames('0.2.0').windows));

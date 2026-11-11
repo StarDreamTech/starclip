@@ -1,4 +1,7 @@
 name: macOS signed release updater acceptance
+# Installed clients through 0.2.5 read the separate cpython666/starclip compatibility manifest.
+# The signed organization latest.json keeps StarDreamTech/starclip download URLs.
+# The fixture rewrites only that compatibility response at runtime and serves the same package bytes.
 on:
   workflow_dispatch:
     inputs:
@@ -9,14 +12,14 @@ on:
       source_ref:
         description: 'Existing release tag, for example v0.2.4'
         required: true
-        default: 'v0.2.5'
+        default: 'v0.2.6'
         type: string
       baseline:
         description: 'Genuine public baseline; source-comparison rebuilds target source as 0.2.2'
         required: true
-        default: public-0.2.4
+        default: public-0.2.5
         type: choice
-        options: [public-0.2.4, public-0.2.3, public-0.2.2, source-comparison]
+        options: [public-0.2.5, public-0.2.4, public-0.2.3, public-0.2.2, source-comparison]
 permissions:
   contents: read
   actions: read

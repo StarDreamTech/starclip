@@ -1,8 +1,8 @@
 [package]
 name = "starclip"
-version = "0.2.5"
+version = "0.2.6"
 description = "星笺 Starclip — a local-first clipboard manager"
-authors = ["Starclip contributors"]
+authors = ["StarDreamTech"]
 edition = "2021"
 rust-version = "1.90"
 license = "MIT"

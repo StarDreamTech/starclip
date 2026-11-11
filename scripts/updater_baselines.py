@@ -14,6 +14,18 @@ import urllib.request
 
 
 PUBLIC_BASELINES = {
+    "public-0.2.5": {
+        "version": "0.2.5", "schema": 5,
+        "darwin-aarch64": {
+            "filename": "Starclip_0.2.5_aarch64.app.tar.gz", "size": 8622787,
+            "sha256": "d84b91c021e6805374b7034e36c62a0a2054e6a889a793206d7c66dc36fec6d8",
+            "executableSha256": "c21b6d351b7b1dae934262fac48e3aa0d602bdfb2033d38e5740c543430c185e",
+        },
+        "windows-x86_64": {
+            "filename": "Starclip_0.2.5_x64-setup.exe", "size": 7128086,
+            "sha256": "c80060f343ea57715fd923edfe850162bc5374f9ac940c4843df9e3fa793eeff",
+        },
+    },
     "public-0.2.4": {
         "version": "0.2.4", "schema": 4,
         "darwin-aarch64": {
@@ -99,7 +111,7 @@ def download_package(output, expected):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("metadata", "download", "verify"))
-    parser.add_argument("--origin", choices=tuple(PUBLIC_BASELINES), default="public-0.2.4")
+    parser.add_argument("--origin", choices=tuple(PUBLIC_BASELINES), default="public-0.2.5")
     parser.add_argument("--platform", choices=("darwin-aarch64", "windows-x86_64"), required=True)
     parser.add_argument("--package", type=Path)
     args = parser.parse_args()
