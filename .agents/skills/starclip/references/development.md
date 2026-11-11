@@ -2,7 +2,7 @@
 
 ## 仓库地址（2026-11-11）
 
-仓库已转到 `StarDreamTech/starclip`，只换 owner、路径不变。`src-tauri/tauri.conf.json` 的 updater endpoint、`src-tauri/src/updater.rs` 下载白名单、`src-tauri/src/desktop/mod.rs` 与 `src/App.vue` 的仓库 / Issue、`src/product-share-catalog.json`、README、其余文档、工作流里的本仓身份检查，以及 `scripts/share-posters.html` 页脚，都已改为新地址。十张海报仍由该 HTML 经 Vite 以 1080×1440、设备缩放 1 渲染，等 `data-ready` 后截 `#poster`，再用 `scripts/compress-share-images.py` 写成 `public/share/`。2026-11-11 这次渲染机器没有苹方、微软雅黑和楷体，西文用 Noto Sans / Noto Serif，中文回退 Noto Sans CJK SC / Noto Serif CJK SC；十图合计 769,120 字节。页脚为 `github.com/StarDreamTech/starclip`。`docs/verification.md` 的历史验收链接按原文保留。未改：`cpython666/HandwritingGenerator` 的字体与纸张来源、`cpython666/homebrew-tap` 与 `cpython666/tap/starclip`、`desktop-usage-relay.cpython666.workers.dev`。仓库内没有 `cpython666.github.io`。
+仓库已转到 `StarDreamTech/starclip`，只换 owner、路径不变。`src-tauri/tauri.conf.json` 的 updater endpoint、`src-tauri/src/updater.rs` 下载白名单、`src-tauri/src/desktop/mod.rs` 与 `src/App.vue` 的仓库 / Issue、`src/product-share-catalog.json`、README、其余文档、工作流里的本仓身份检查，以及 `scripts/share-posters.html` 页脚，都已改为新地址。十张海报仍由该 HTML 经 Vite 以 1080×1440、设备缩放 1 渲染，等 `data-ready` 后截 `#poster`，再用 `scripts/compress-share-images.py` 写成 `public/share/`。2026-11-11 这次渲染机器没有苹方、微软雅黑和楷体，西文用 Noto Sans / Noto Serif，中文回退 Noto Sans CJK SC / Noto Serif CJK SC；十图合计 769,120 字节。页脚为 `github.com/StarDreamTech/starclip`。`docs/verification.md` 的历史验收链接按原文保留。#40 未改：`cpython666/HandwritingGenerator` 的字体与纸张来源、个人 Tap `cpython666/homebrew-tap` 与安装命令 `cpython666/tap/starclip`、`desktop-usage-relay.cpython666.workers.dev`。仓库内没有 `cpython666.github.io`。随后 Homebrew 发布同时写入组织 Tap `StarDreamTech/homebrew-tap`（`stardreamtech/tap/starclip`），个人 Tap 与其 secret 保留；见 [Homebrew 自动化](../../../../docs/homebrew-release.md)。
 
 ## 当前发布快照（2026-11-11）
 
@@ -129,9 +129,9 @@ Tauri 资产解析器在正式包中读取嵌入资产，在带 `devUrl` 的开�
 
 ## 发布、Homebrew 与更新排障
 
-- GitHub Releases 存实际安装包与签名清单，自有 `cpython666/homebrew-tap` 存 Cask；无需独立 Homebrew 账号。已公开 0.2.2 为 Apple Silicon macOS / Windows x64；Tap 仅提供 Apple Silicon，非官方主仓收录。SourceForge / Codeberg 仅是历史候选，未接更新回退；WinGet 未上架，PyPI 不是任意桌面包附件仓库。平台额度会变化，对外建议需重新核查。
+- GitHub Releases 存实际安装包与签名清单。Cask 同时放在个人 `cpython666/homebrew-tap` 与组织 `StarDreamTech/homebrew-tap`，无需独立 Homebrew 账号。已公开 0.2.2 为 Apple Silicon macOS / Windows x64；两个 Tap 都仅提供 Apple Silicon，非官方主仓收录。SourceForge / Codeberg 仅是历史候选，未接更新回退；WinGet 未上架，PyPI 不是任意桌面包附件仓库。平台额度会变化，对外建议需重新核查。
 - `scripts/version.mjs` 统一 npm / Cargo / Tauri 六处版本，`CHANGELOG.md` 提供发布说明；`release.yml` 验证双平台构建、CLI / MCP、全新安装及旧版覆盖后上传完整草稿，公开需用户确认。详细步骤见 [发布指南](../../../../docs/releases.md)；验证失败不移动旧 tag 或把未完成附件设为 latest。
-- `homebrew.yml` / `homebrew-release.mjs` 仅接受公开 latest 稳定版，核验实际 DMG 大小 / SHA-256 / GitHub digest、签名、版本、标识与架构，再执行 style / audit / fetch；专用单仓 deploy key 最后非强推 Tap。拒绝降级和同版换包，推送前重查资产；`GITHUB_TOKEN` 发布需显式 dispatch 下游。0.2.2 的 [同步运行](https://github.com/StarDreamTech/starclip/actions/runs/40466604899) 已完成实包验证与远端 Cask 更新，不是单纯 dry run。见 [同步说明](../../../../docs/homebrew-release.md)。
+- `homebrew.yml` / `homebrew-release.mjs` 仅接受公开 latest 稳定版，核验实际 DMG 大小 / SHA-256 / GitHub digest、签名、版本、标识与架构，再执行 style / audit / fetch。个人 Tap 用 `HOMEBREW_TAP_DEPLOY_KEY`，组织 Tap 用 `HOMEBREW_ORG_TAP_DEPLOY_KEY`；组织 secret 未配置时该 job 提示并成功跳过，不使个人 Tap job 失败。两路都不强推。拒绝降级和同版换包，推送前重查资产；`GITHUB_TOKEN` 发布需显式 dispatch 下游。0.2.2 的 [同步运行](https://github.com/StarDreamTech/starclip/actions/runs/40466604899) 已完成实包验证与个人 Tap 更新，不是单纯 dry run。组织 Tap 自动推送尚未经过正式 Release 实跑。见 [同步说明](../../../../docs/homebrew-release.md)。
 - Homebrew 检查在 Tap 上下文运行，普通 Ruby 文件会套用错误规则；历史 CI 通过更新 Homebrew、限定信任该 Cask、使用现有只读 `github.token` 解决 style / trust / 匿名 API 限流。没有新增 PAT 或修改本机代理 / 信任。原更新签名私钥与 Tap deploy key 分离；密钥只在仓库外或云端 secret，不将签名资源写入 skill。
 - 程序与数据目录独立，更新保持 `com.starclip.desktop`。无更新器的旧版第一次需覆盖程序，不删除数据；启动仍执行已保存保留规则。schema 2 升级先快照，事务迁移失败回滚；恢复复制到新目录，冻结写入待重启；旧应用副本不是自动二进制降级。流程与格式边界见 [数据安全](data-safety.md)。
 - 下载与安装分开：只下载验签进入同会话 `ready`，用户确认后保存恢复点 / 旧应用，再安装并重启；没有跨进程下载缓存或断点续传。Windows 安装器启动前退出清理后发生失败要保持冻结 / `restart-required`，不能当普通下载失败解冻。独立 NSIS 覆盖升级通过不等于应用内按钮链路通过。

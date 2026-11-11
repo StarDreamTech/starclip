@@ -1,6 +1,6 @@
 # 发布后自动更新 Homebrew
 
-`.github/workflows/homebrew.yml` 监听 GitHub Release 的 `published` 事件。维护者发布正式版本并设为 latest 后，工作流验证公开的 macOS 包，再自动提交 `cpython666/homebrew-tap` 中的 `Casks/starclip.rb`。它不创建 Release、不移动 tag、不公开草稿，也不重新构建或启动下载的应用。
+`.github/workflows/homebrew.yml` 监听 GitHub Release 的 `published` 事件。维护者发布正式版本并设为 latest 后，工作流验证公开的 macOS 包，再把同一份 `Casks/starclip.rb` 提交到两个 Tap：个人仓库 `cpython666/homebrew-tap` 与组织仓库 `StarDreamTech/homebrew-tap`。它不创建 Release、不移动 tag、不公开草稿，也不重新构建或启动下载的应用。Cask 的 `url` 与 `homepage` 固定指向 `https://github.com/StarDreamTech/starclip` 的 Releases，由 `scripts/homebrew-release.mjs` 的 `renderCask` 生成；仓库里没有单独的 `homebrew-cask.mjs`。
 
 ## 发布约定
 
@@ -17,20 +17,24 @@
 
 只读验证 job 从公开 Release 下载文件，重新计算 DMG 的 SHA-256，核对 `SHA256SUMS`、附件大小和可用时的 GitHub digest；随后 `hdiutil verify`、只读挂载、`codesign --verify --deep --strict`、核对应用版本 / 标识 / arm64。应用不会被启动。ad-hoc 签名通过不等于 Apple Developer 公证或 Gatekeeper 首启验收。
 
-生成的 Cask 使用固定仓库和带版本的 URL，写入实际下载字节的 SHA-256；临时 runner 先更新 Homebrew 并输出版本，避免旧镜像的格式与安装包审计规则不一致。生成固定 Cask 且 `brew style --cask` 通过后，只对 `cpython666/tap/starclip` 执行 `brew trust --cask`，再运行 `brew audit --cask --strict --online` 和 `brew fetch --cask`。该名称信任仅存在于本次 runner，不信任整个 Tap、不安装或启动应用；生成后不再修改被审计文件。没有 `zap`、删除用户数据脚本或绕过系统隔离的步骤；不设置 `auto_updates`，保留普通 `brew upgrade --cask cpython666/tap/starclip` 的升级入口。
+生成的 Cask 使用固定仓库和带版本的 URL，写入实际下载字节的 SHA-256；临时 runner 先更新 Homebrew 并输出版本，避免旧镜像的格式与安装包审计规则不一致。生成固定 Cask 且 `brew style --cask` 通过后，只对 `cpython666/tap/starclip` 执行 `brew trust --cask`，再运行 `brew audit --cask --strict --online` 和 `brew fetch --cask`。审计仍借用个人 Tap 的本地检出路径，被审计的是同一份 Ruby 文件，随后原样写入两个远端 Tap。该名称信任仅存在于本次 runner，不信任整个 Tap、不安装或启动应用；生成后不再修改被审计文件。没有 `zap`、删除用户数据脚本或绕过系统隔离的步骤；不设置 `auto_updates`。用户可按安装来源执行 `brew upgrade --cask cpython666/tap/starclip` 或 `brew upgrade --cask stardreamtech/tap/starclip`。
 
-全部检查通过后，独立写入 job 才取得 Tap 凭据，重新查询 Release 是否仍公开、仍为 latest、附件身份是否未改变，再生成 Cask 并提交。所有版本共用串行队列，同时按数字版本检查，避免旧任务覆盖新版本。同版本同摘要无操作，同版本换摘要拒绝；Git push 不使用 force，Tap 同时被别人修改时宁可失败重跑。
+全部检查通过后，两个独立写入 job 才各自取得对应 Tap 凭据，重新查询 Release 是否仍公开、仍为 latest、附件身份是否未改变，再生成 Cask 并提交。`update-tap` 与 `update-org-tap` 都只依赖验证 job，互不阻塞。所有版本共用串行队列，同时按数字版本检查，避免旧任务覆盖新版本。同版本同摘要无操作，同版本换摘要拒绝；Git push 不使用 force，Tap 同时被别人修改时宁可失败重跑。组织 Tap 里还有其他产品的 Formula / Cask，提交只暂存 `Casks/starclip.rb`。
 
 这套同步检查证明下载文件与 Cask 一致，不能代替源代码测试、双平台发布构建成功、Windows / macOS 的安装和升级验收。维护者仍应完成发布前验收。
 
 ## 一次性凭据
 
-仓库自己的 `GITHUB_TOKEN` 只负责读取 Release，不能直接写另一个仓库。使用专用 Ed25519 deploy key：
+仓库自己的 `GITHUB_TOKEN` 只负责读取 Release，不能直接写另一个仓库。两个 Tap 各用一把专用 Ed25519 deploy key，互不代替：
 
-- 公钥放在 `cpython666/homebrew-tap` → Settings → Deploy keys，允许写入。
-- 私钥放在 `StarDreamTech/starclip` → Actions repository secret，名称为 `HOMEBREW_TAP_DEPLOY_KEY`。
-- 此密钥仅用于这个 Tap，不使用本机 GitHub 登录令牌，也不复用应用更新签名私钥；私钥不得提交到 Git、写进日志或 Release。
-- 停用或轮换时同时处理 Tap deploy key 与 Actions secret。默认 PR 验证不会执行写入 job。
+| Tap | 安装命令 | 公钥所在仓库 | `StarDreamTech/starclip` Actions secret | 密钥缺失时 |
+| --- | --- | --- | --- | --- |
+| 个人 Tap | `brew install --cask cpython666/tap/starclip` | `cpython666/homebrew-tap` → Deploy keys，允许写入 | `HOMEBREW_TAP_DEPLOY_KEY` | `update-tap` 失败并保留原 Cask |
+| 组织 Tap | `brew install --cask stardreamtech/tap/starclip` | `StarDreamTech/homebrew-tap` → Deploy keys，允许写入 | `HOMEBREW_ORG_TAP_DEPLOY_KEY` | `update-org-tap` 写入 notice 与 step summary 后成功结束，不推送；`update-tap` 继续，不因此失败 |
+
+- 两把私钥都只放在 `StarDreamTech/starclip` 的 Actions repository secret 中。不使用本机 GitHub 登录令牌，也不复用应用更新签名私钥；私钥不得提交到 Git、写进日志或 Release。
+- 组织 secret 未创建，或值只有空白时，视为未配置。密钥已经配置但检出、校验或推送失败时，只有 `update-org-tap` 失败；已经推送到个人 Tap 的提交不会回滚。
+- 停用或轮换时同时处理对应 Tap 的 deploy key 与 Actions secret。默认 PR 验证不会执行写入 job。
 
 `actions/checkout` 使用严格 SSH 主机校验并在 job 结束时清理凭据。其他工作流若拿到同一 secret，也拥有该 Tap 的写权限，因此仍应保护主仓库的工作流修改权限。
 
@@ -44,14 +48,16 @@
 
 2026-11-03，[0.2.4 正式 Release](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.4) 发布后自动触发 [同步 41580841113](https://github.com/StarDreamTech/starclip/actions/runs/41580841113)，verify / update-tap 两个 job 全部通过。该轮远端 `Casks/starclip.rb` 为 **0.2.4**，DMG SHA-256 为 `640d2bd02a216ccd15a742cf6c47868390ad874440efede9c7c2d470f4df0ad2`，与匿名公开下载、Release digest 及已验收签名包一致。[机器人提交 `2c961507eea106de52b9e667ba029cc39826ab0f`](https://github.com/cpython666/homebrew-tap/commit/2c961507eea106de52b9e667ba029cc39826ab0f) 只改该 Cask，提交内容和远端 main blob 已回读核对。没有安装或启动本机应用；真实公开 0.2.3 到签名 0.2.4 的两平台自动重启与数据保留另有验收，见 [验证记录](verification.md#024-正式发布与原生升级验收)。
 
+上述线上记录只覆盖当时的个人 Tap。2026-11-11 用 GitHub API 只读核对两个 Tap 的 `Casks/starclip.rb`，git blob 同为 `9f51bdec0235e99eb5fae0a1f4e4988ff2d69bc7`，版本 0.2.5，`url` / `homepage` 已指向 `https://github.com/StarDreamTech/starclip`。这不是 `update-org-tap` 的推送验收；组织 secret 配置后的正式 Release 实跑仍待完成。
+
 Homebrew 审计使用步骤范围的 `HOMEBREW_GITHUB_API_TOKEN`，值来自已有只读 `github.token`，避免公共 runner 共用 IP 的匿名 API 限流。没有新建个人令牌、跳过在线审计或修改已公开安装包。
 
 ## 重试与预演
 
 Actions → **Update Homebrew after release** → **Run workflow**：选择 `main`，输入已经公开的 tag。
 
-- `dry_run = true`（默认）：执行完整验证并保留 `verified-homebrew-cask` artifact，不推送 Tap。
-- `dry_run = false`：验证通过后实际更新 Tap。缺少 secret、校验失败、网络失败或推送冲突会报错，保留原 Cask；修复后重跑相同 tag 即可。
+- `dry_run = true`（默认）：执行完整验证并保留 `verified-homebrew-cask` artifact，两个 Tap 都不推送。
+- `dry_run = false`：验证通过后实际更新两个 Tap。个人 Tap 缺少 `HOMEBREW_TAP_DEPLOY_KEY`、校验失败、网络失败或推送冲突会报错，保留该 Tap 原 Cask。组织 Tap 未配置 `HOMEBREW_ORG_TAP_DEPLOY_KEY` 时按上表跳过。组织密钥已配置但推送失败时，只让 `update-org-tap` 失败。修复后重跑相同 tag 即可。
 
 如果未来使用 `GITHUB_TOKEN` 在另一个 workflow 内自动发布 Release，GitHub 不会因此触发后续 `release` workflow；必须显式使用 `workflow_dispatch` 调用本工作流，传入同一 tag 和 `dry_run=false`。人工发布 Release 可直接触发，不需要这一步。
 

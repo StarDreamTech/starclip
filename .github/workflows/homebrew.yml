@@ -131,7 +131,7 @@ jobs:
           if-no-files-found: error
       - name: Report a successful dry run
         if: steps.plan.outputs.skip != 'true' && github.event_name == 'workflow_dispatch' && inputs.dry_run
-        run: echo 'DMG bytes, application identity/signature/architecture and Homebrew checks passed. Dry run only; the Tap was not modified.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'DMG bytes, application identity/signature/architecture and Homebrew checks passed. Dry run only; neither Tap was modified.' >> "$GITHUB_STEP_SUMMARY"
 
   update-tap:
     needs: verify
@@ -189,3 +189,80 @@ jobs:
           git -C tap commit -m "自动更新星笺 Cask 至 $RELEASE_TAG"
           git -C tap push origin HEAD:main
           echo "Updated cpython666/homebrew-tap to $RELEASE_TAG after all package and Cask checks passed." >> "$GITHUB_STEP_SUMMARY"
+
+  # Same verified Cask as update-tap. An absent HOMEBREW_ORG_TAP_DEPLOY_KEY
+  # skips this job successfully and does not fail the personal tap.
+  update-org-tap:
+    needs: verify
+    if: needs.verify.outputs.skip != 'true' && (github.event_name == 'release' || !inputs.dry_run)
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Skip when the organization tap key is absent
+        id: org_key
+        env:
+          ORG_TAP_KEY: ${{ secrets.HOMEBREW_ORG_TAP_DEPLOY_KEY }}
+        run: |
+          stripped="${ORG_TAP_KEY//[[:space:]]/}"
+          if [ -z "$stripped" ]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            message='未配置 HOMEBREW_ORG_TAP_DEPLOY_KEY，已跳过 StarDreamTech/homebrew-tap。个人 Tap cpython666/homebrew-tap（HOMEBREW_TAP_DEPLOY_KEY）不因此失败。'
+            echo "$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=组织 Tap 已跳过::$message"
+          else
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          fi
+          unset stripped ORG_TAP_KEY
+      - uses: actions/checkout@v4
+        if: steps.org_key.outputs.configured == 'true'
+        with:
+          ref: ${{ needs.verify.outputs.source }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: steps.org_key.outputs.configured == 'true'
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        if: steps.org_key.outputs.configured == 'true'
+        with:
+          name: verified-homebrew-cask
+          path: verified
+      - uses: actions/checkout@v4
+        if: steps.org_key.outputs.configured == 'true'
+        with:
+          repository: StarDreamTech/homebrew-tap
+          ref: main
+          path: tap
+          ssh-key: ${{ secrets.HOMEBREW_ORG_TAP_DEPLOY_KEY }}
+      - name: Recheck the public release before changing the organization Tap
+        if: steps.org_key.outputs.configured == 'true'
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+        with:
+          script: |
+            const fs = require('fs');
+            const release = (await github.rest.repos.getReleaseByTag({ ...context.repo, tag: process.env.RELEASE_TAG })).data;
+            const latest = (await github.rest.repos.getLatestRelease(context.repo)).data;
+            fs.writeFileSync('release.json', JSON.stringify(release));
+            fs.writeFileSync('latest.json', JSON.stringify(latest));
+      - name: Commit only a forward version change
+        if: steps.org_key.outputs.configured == 'true'
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          node scripts/homebrew-release.mjs recheck verified/evidence.json release.json latest.json
+          node scripts/homebrew-release.mjs cask verified/evidence.json tap/Casks/starclip.rb
+          if git -C tap diff --quiet -- Casks/starclip.rb; then
+            echo 'StarDreamTech/homebrew-tap already contains this version (or a newer one); no change.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cmp verified/starclip.rb tap/Casks/starclip.rb
+          git -C tap config user.name 'github-actions[bot]'
+          git -C tap config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C tap add -- Casks/starclip.rb
+          git -C tap commit -m "自动更新星笺 Cask 至 $RELEASE_TAG"
+          git -C tap push origin HEAD:main
+          echo "Updated StarDreamTech/homebrew-tap to $RELEASE_TAG after all package and Cask checks passed." >> "$GITHUB_STEP_SUMMARY"
