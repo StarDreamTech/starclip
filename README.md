@@ -6,7 +6,7 @@
 
 把随手复制的文字、链接和代码收进历史，整理成自己的星标与分组，再通过星绘坊做成代码卡片或手写纸笺。
 
-[GitHub 项目](https://github.com/cpython666/starclip) · [反馈问题 / 提交 Issue](https://github.com/cpython666/starclip/issues/new)
+[GitHub 项目](https://github.com/StarDreamTech/starclip) · [反馈问题 / 提交 Issue](https://github.com/StarDreamTech/starclip/issues/new)
 
 软件主窗口右上角的 GitHub 图标可打开开源仓库；「偏好设置 → 帮助」保留项目与问题反馈入口。反馈时请写明软件版本、操作系统、复现步骤与预期结果；公开截图前请遮住私密剪贴内容。
 
@@ -50,9 +50,9 @@ Apple Silicon Mac（M 系列芯片，macOS 11+）可通过星笺维护的 [Homeb
 brew install --cask cpython666/tap/starclip
 ```
 
-Apple Silicon macOS 和 Windows x64 已可从 [0.2.5 GitHub Release](https://github.com/cpython666/starclip/releases/tag/v0.2.5) 下载。Homebrew 已[同步至 0.2.5](https://github.com/cpython666/starclip/actions/runs/42861273222)，远端 Cask 版本与公开 DMG 摘要已回读一致；先退出应用，再运行 `brew update` 和 `brew upgrade --cask cpython666/tap/starclip`，无需先卸载。已有带更新器的版本可在「偏好设置 → 帮助」检查更新。
+Apple Silicon macOS 和 Windows x64 已可从 [0.2.5 GitHub Release](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) 下载。Homebrew 已[同步至 0.2.5](https://github.com/StarDreamTech/starclip/actions/runs/42861273222)，远端 Cask 版本与公开 DMG 摘要已回读一致；先退出应用，再运行 `brew update` 和 `brew upgrade --cask cpython666/tap/starclip`，无需先卸载。已有带更新器的版本可在「偏好设置 → 帮助」检查更新。
 
-**0.2.5 已于 2026-11-11 00:42:14（北京时间，UTC 2026-11-10 16:42:14） 正式发布为 latest**，提供 Apple Silicon macOS 和 Windows x64 安装包与签名更新清单；[签名发布流水线](https://github.com/cpython666/starclip/actions/runs/42848254909) 8 项检查通过。真实公开 0.2.4 → 0.2.5 的 [macOS](https://github.com/cpython666/starclip/actions/runs/42856720920) 与 [Windows](https://github.com/cpython666/starclip/actions/runs/42851606421) 均通过自动重启、原创固定数据 / PNG / 偏好保留、结构 4 → 5 和旧自动快照清理；旧应用副本保留。原生升级使用一次性 runner 的临时受信任 HTTPS 服务；8 个匿名公开附件及稳定 latest 的字节另已核对，不扩大为公网 GitHub / CDN 原生更新验收。本机正式安装未替换。
+**0.2.5 已于 2026-11-11 00:42:14（北京时间，UTC 2026-11-10 16:42:14） 正式发布为 latest**，提供 Apple Silicon macOS 和 Windows x64 安装包与签名更新清单；[签名发布流水线](https://github.com/StarDreamTech/starclip/actions/runs/42848254909) 8 项检查通过。真实公开 0.2.4 → 0.2.5 的 [macOS](https://github.com/StarDreamTech/starclip/actions/runs/42856720920) 与 [Windows](https://github.com/StarDreamTech/starclip/actions/runs/42851606421) 均通过自动重启、原创固定数据 / PNG / 偏好保留、结构 4 → 5 和旧自动快照清理；旧应用副本保留。原生升级使用一次性 runner 的临时受信任 HTTPS 服务；8 个匿名公开附件及稳定 latest 的字节另已核对，不扩大为公网 GitHub / CDN 原生更新验收。本机正式安装未替换。
 
 如果 Homebrew 提示 Cask 未受信任，执行 `brew trust --cask cpython666/tap/starclip` 后重试，只授权星笺这一项。自有 Tap 不等于 Homebrew 官方主仓收录；更新包具备 Tauri 签名校验，但尚无 Apple Developer 公证或 Windows 发行者证书。安装、升级和分发边界见 [发布说明](docs/releases.md)。
 
@@ -239,7 +239,7 @@ npm run build
 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features
 ```
 
-[GitHub Actions](https://github.com/cpython666/starclip/actions) 检查前端、Rust 存储行为，并生成 Apple Silicon macOS DMG 与 Windows x64 安装程序。构建产物从成功运行的 Artifacts 下载。正式更新包具备 Tauri 更新签名，macOS 应用使用 ad-hoc 签名；仍没有 Apple Developer 公证或 Windows 发行者证书。两平台安装 / 升级的固定场景已验证，其他 Windows 原生体验仍按场景验收。
+[GitHub Actions](https://github.com/StarDreamTech/starclip/actions) 检查前端、Rust 存储行为，并生成 Apple Silicon macOS DMG 与 Windows x64 安装程序。构建产物从成功运行的 Artifacts 下载。正式更新包具备 Tauri 更新签名，macOS 应用使用 ad-hoc 签名；仍没有 Apple Developer 公证或 Windows 发行者证书。两平台安装 / 升级的固定场景已验证，其他 Windows 原生体验仍按场景验收。
 
 ### macOS 本地预览包
 
@@ -264,9 +264,9 @@ macOS 更新时先从应用菜单或托盘退出星笺，再把新版 `Starclip.
 - **升级前内部备份**：升级 / 数据迁移前自动保存包含历史、图片、分组、偏好、星伴成长和受管字体等资源的一致快照。0.2.5 不再开放恢复点列表、手动创建或还原；新版成功打开并通过数据库校验后清理旧版本自动快照，失败保留。用户仍可用 JSON 导入导出备份自己的记录。
 - **版本发布管理**：统一版本号、更新记录、两平台构建和签名清单，GitHub Actions 只生成完整发布草稿，人工审核后公开。
 
-[0.2.5 已正式发布](https://github.com/cpython666/starclip/releases/tag/v0.2.5)，提供两平台安装包与签名更新清单；完整发布、原生升级与 Homebrew 证据见 [0.2.5 验证记录](docs/verification.md#025-正式发布与原生升级验收)。0.1.0 没有更新器，第一次仍须退出后手动覆盖安装。
+[0.2.5 已正式发布](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5)，提供两平台安装包与签名更新清单；完整发布、原生升级与 Homebrew 证据见 [0.2.5 验证记录](docs/verification.md#025-正式发布与原生升级验收)。0.1.0 没有更新器，第一次仍须退出后手动覆盖安装。
 
-0.2.3 发布前已使用真实公开 0.2.2 二进制验收本次签名目标：[Windows](https://github.com/cpython666/starclip/actions/runs/40891766297) 自动重启通过；[macOS](https://github.com/cpython666/starclip/actions/runs/40895064653) 验证安装替换完成后手动重新打开成功，明确不记为自动重启通过。两平台均核对暂停状态、原创固定文本与 PNG、分组、成长和偏好，以及更新前快照和旧程序备份。验收在一次性 runner 使用临时受信任 HTTPS 服务、生产 URL 和未修改的签名包；该链路不代表公开 GitHub / CDN 下载验收；完整证据见 [0.2.3 发布与升级验收](docs/verification.md#023-正式发布与原生升级验收)。此前 `22480ca` / `7fbbae5` 的比较版本 0.2.1 → 公开 0.2.2 实验另保留在 [验证记录](docs/verification.md)。2026-10-29 该轮未替换本机正式安装。历史 0.2.4 的恢复点和旧应用副本不自动删除；0.2.5 新增[自动快照清理](docs/recovery-retention.md)，新版正常启动并通过当前库校验后清理旧版本自动快照，同版本保留最近 3 份及 7 天内副本，历史手动点保留，旧程序副本独立管理。不提供自动程序降级；数据仍为本机明文。详见 [软件升级与发布](docs/releases.md)。
+0.2.3 发布前已使用真实公开 0.2.2 二进制验收本次签名目标：[Windows](https://github.com/StarDreamTech/starclip/actions/runs/40891766297) 自动重启通过；[macOS](https://github.com/StarDreamTech/starclip/actions/runs/40895064653) 验证安装替换完成后手动重新打开成功，明确不记为自动重启通过。两平台均核对暂停状态、原创固定文本与 PNG、分组、成长和偏好，以及更新前快照和旧程序备份。验收在一次性 runner 使用临时受信任 HTTPS 服务、生产 URL 和未修改的签名包；该链路不代表公开 GitHub / CDN 下载验收；完整证据见 [0.2.3 发布与升级验收](docs/verification.md#023-正式发布与原生升级验收)。此前 `22480ca` / `7fbbae5` 的比较版本 0.2.1 → 公开 0.2.2 实验另保留在 [验证记录](docs/verification.md)。2026-10-29 该轮未替换本机正式安装。历史 0.2.4 的恢复点和旧应用副本不自动删除；0.2.5 新增[自动快照清理](docs/recovery-retention.md)，新版正常启动并通过当前库校验后清理旧版本自动快照，同版本保留最近 3 份及 7 天内副本，历史手动点保留，旧程序副本独立管理。不提供自动程序降级；数据仍为本机明文。详见 [软件升级与发布](docs/releases.md)。
 
 ## 使用与数据
 

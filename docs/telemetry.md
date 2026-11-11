@@ -1,6 +1,6 @@
 # 可选使用统计：GA4 标准版与 Cloudflare Free
 
-当前方案使用 GA4 标准版与 Cloudflare Workers Free，按用户要求只使用免费服务，不开通 Azure、不绑定银行卡、不升级付费计划。2026-11-02 源码统一为三档统计模式与上报协议 4，已随 [0.2.4](https://github.com/cpython666/starclip/releases/tag/v0.2.4) 于 2026-11-03 正式发布，生产中继已兼容正式 v1/v2、两种历史 v3 与新 v4，当前状态见下文。既有 v1 接收端已部署，固定事件与 macOS 隔离桌面事件已在 GA Realtime 核对。已发布的 0.2.3 新增静默离线缓存和 v2 设备字段；兼容 v1 / v2 的中继已部署，真实 Rust v2 固定批次返回 204，GA 三个设备维度已创建并核对。新设备参数已在 Realtime 核对；2026-10-29 已另行完成 GA4 非实时探索中的 `count` 汇总，以及 macOS 隔离应用进程级断网、重启恢复与恢复联网后的静默补报。长期持续观察和 Windows 原生断网仍未完成，具体证据与边界见下文；不能由 HTTP 成功或实时参数推定其他报表已验收。没有配置接收端地址的构建不收集、不发送统计；接收端缺少 Google 配置时拒绝转发。新安装默认使用每次运行随机编号，可随时关闭；已保存的关闭选择保留。它与默认开启的「检查新版本」是两个独立开关。
+当前方案使用 GA4 标准版与 Cloudflare Workers Free，按用户要求只使用免费服务，不开通 Azure、不绑定银行卡、不升级付费计划。2026-11-02 源码统一为三档统计模式与上报协议 4，已随 [0.2.4](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.4) 于 2026-11-03 正式发布，生产中继已兼容正式 v1/v2、两种历史 v3 与新 v4，当前状态见下文。既有 v1 接收端已部署，固定事件与 macOS 隔离桌面事件已在 GA Realtime 核对。已发布的 0.2.3 新增静默离线缓存和 v2 设备字段；兼容 v1 / v2 的中继已部署，真实 Rust v2 固定批次返回 204，GA 三个设备维度已创建并核对。新设备参数已在 Realtime 核对；2026-10-29 已另行完成 GA4 非实时探索中的 `count` 汇总，以及 macOS 隔离应用进程级断网、重启恢复与恢复联网后的静默补报。长期持续观察和 Windows 原生断网仍未完成，具体证据与边界见下文；不能由 HTTP 成功或实时参数推定其他报表已验收。没有配置接收端地址的构建不收集、不发送统计；接收端缺少 Google 配置时拒绝转发。新安装默认使用每次运行随机编号，可随时关闭；已保存的关闭选择保留。它与默认开启的「检查新版本」是两个独立开关。
 
 本方案不需要自行购买服务器或域名：桌面端通过 HTTPS 向 Cloudflare Worker 发送精简计数，Worker 默认只转给 Google Analytics 4（GA4）。接收端可使用 Cloudflare 提供的 [workers.dev 地址](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)。已有 Microsoft Application Insights 通道仅保留为显式启用的可选模板，不属于当前接入计划；不集成网页录屏、点击热图或自动采集 SDK。
 
@@ -24,7 +24,7 @@
 - macOS 原生：独立应用 `com.starclip.usageverify20261029` 全程暂停，使用 123 条原创固定记录。主列表每页 50 条，第二页显示编号 73–24 的 50 条；全库搜索能找到仅在第三页的编号 1。星伴默认显示 26 个日常表情，额外心情开关未勾选；静默发送后无待发事件，也无成功提示。追加核对：在普通记录筛选中把原创编号 123 标记为隐私后，该记录移出当前页（普通记录共 122 条），已打开的详情立即折叠并显示手动保护依据，验证 `get_clips` IPC 可用。测试应用已退出，全程暂停。
 - 自动检查：`npm test` 166 项通过，Rust 无 desktop 核心测试 106 项通过、另有 3 项默认忽略。该阶段离线缓存、异常与重试由单元测试覆盖，尚未进行原生断网验收；后续 macOS 进程级断网证据另见下文，Windows 本轮未实机验证。最终 Apple Silicon 独立 release 应用为 14.07 MiB，应用标识 `com.starclip.usageverify20261029`，strict/deep 签名核验通过。
 
-上述验收进行时软件尚未发布；0.2.3 已于 2026-10-29 经用户明确授权[正式发布](https://github.com/cpython666/starclip/releases/tag/v0.2.3)。该次 2026-10-29 验收未替换本机正式安装；2026-10-31 只读核对 Info.plist 为 0.2.3，二进制来源尚未核对。
+上述验收进行时软件尚未发布；0.2.3 已于 2026-10-29 经用户明确授权[正式发布](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.3)。该次 2026-10-29 验收未替换本机正式安装；2026-10-31 只读核对 Info.plist 为 0.2.3，二进制来源尚未核对。
 
 ## 补充验收：常规计数汇总与 macOS 进程级断网（2026-10-29）
 
@@ -108,7 +108,7 @@ GA4 的 `client_id` 来自固定编号或运行编号，事件参数 `identity_m
 
 按用户确认的顺序，先实现本地 schema 4 / JSON 4 / 偏好与身份兼容，再于 **2026-11-02 08:12:38 UTC** 更新生产 Worker。回读模块为 11,927 B、SHA-256 `2c5a2a2b9230a1977510f286ea1682d71e407fdc532a8164306c40d85abab827`，部署版本 `9ef49cba-c869-4e63-b6d2-092039a517f7` 占 100% 流量，源码与仓库一致。两个 GA secret 按类型保留，未读取其值；微软仍 false、Logpush false、无 tail consumer，上传显式关闭 observability / logs / traces / issues（settings 回读未返回 observability 字段，不能据此宣称另有 UI 核对）。回退源保存在忽略目录，不改服务名或客户端地址。
 
-新增事件级 `identity_mode`、用户级 `first_seen_day` 已在 GA 自定义定义表格核对，原五个事件维度与标准 `count` 指标保留。真实 Rust sender 已经生产端点发送原创样例：临时模式九种、固定模式十一种，均获 204。GA Realtime 另行核对版本 `0.0.0-telemetry-verification` 的 `app_started=2`，`studio_opened` 的 `identity_mode` 为 session / installation 各一条，`app_active` / `app_running` 各一条，“所有用户”的 First seen day 卡片还显示 `2026-11-02`、一位活跃用户，但历史 main-v3 兼容样例使用同一日期，且此卡片未按版本 / 模式 / 具体用户筛选，不能唯一归属于 Rust v4；v4 首次日期实际入库仍待独立确认。兼容性 HTTP 样例使用另一测试版本，事件版本证据不混作 Rust 证据。摘要为忽略的 `artifacts/schema4-compat-20261102.noindex/ga4-live-acceptance.json`，其中列出逐项快照。新增协议的历史报表 `count` 汇总与跨天 cohort 留存仍待后续处理时间 / 日期，未验收；HTTP 204、离线契约和维度创建均不能单独代替实际入库。上述 2026-11-02 入库核对时客户端尚未发布。客户端现已随 0.2.4 正式发布，[Homebrew 同步](https://github.com/cpython666/starclip/actions/runs/41580841113) 已完成；发布不扩大 GA 验收范围，原生数据升级证据见 [验证记录](verification.md#结构-4-兼容修复与验收2026-11-02)。
+新增事件级 `identity_mode`、用户级 `first_seen_day` 已在 GA 自定义定义表格核对，原五个事件维度与标准 `count` 指标保留。真实 Rust sender 已经生产端点发送原创样例：临时模式九种、固定模式十一种，均获 204。GA Realtime 另行核对版本 `0.0.0-telemetry-verification` 的 `app_started=2`，`studio_opened` 的 `identity_mode` 为 session / installation 各一条，`app_active` / `app_running` 各一条，“所有用户”的 First seen day 卡片还显示 `2026-11-02`、一位活跃用户，但历史 main-v3 兼容样例使用同一日期，且此卡片未按版本 / 模式 / 具体用户筛选，不能唯一归属于 Rust v4；v4 首次日期实际入库仍待独立确认。兼容性 HTTP 样例使用另一测试版本，事件版本证据不混作 Rust 证据。摘要为忽略的 `artifacts/schema4-compat-20261102.noindex/ga4-live-acceptance.json`，其中列出逐项快照。新增协议的历史报表 `count` 汇总与跨天 cohort 留存仍待后续处理时间 / 日期，未验收；HTTP 204、离线契约和维度创建均不能单独代替实际入库。上述 2026-11-02 入库核对时客户端尚未发布。客户端现已随 0.2.4 正式发布，[Homebrew 同步](https://github.com/StarDreamTech/starclip/actions/runs/41580841113) 已完成；发布不扩大 GA 验收范围，原生数据升级证据见 [验证记录](verification.md#结构-4-兼容修复与验收2026-11-02)。
 
 ## 1. 准备 Google Analytics 4 标准版
 

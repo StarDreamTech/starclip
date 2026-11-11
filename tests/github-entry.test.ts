@@ -9,7 +9,7 @@ test('main window GitHub entry reuses the safe project-link handler with an acce
   const template = parse(source).descriptor.template!.content
   const entry = template.match(/<a class="icon-button github-link"[^>]*>[\s\S]*?<\/a>/)?.[0]
   assert.ok(entry)
-  assert.match(entry, /href="https:\/\/github.com\/cpython666\/starclip"/)
+  assert.match(entry, /href="https:\/\/github.com\/StarDreamTech\/starclip"/)
   assert.match(entry, /rel="noopener noreferrer"/)
   assert.match(entry, /:title="t\('查看开源项目（GitHub）'\)"/)
   assert.match(entry, /:aria-label="t\('查看开源项目（GitHub）'\)"/)

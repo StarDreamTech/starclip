@@ -2145,8 +2145,8 @@ fn system_open(target: impl AsRef<std::ffi::OsStr>) -> std::io::Result<()> {
 
 fn project_link(target: &str) -> Result<&'static str> {
     match target {
-        "repository" => Ok("https://github.com/cpython666/starclip"),
-        "issues" => Ok("https://github.com/cpython666/starclip/issues/new"),
+        "repository" => Ok("https://github.com/StarDreamTech/starclip"),
+        "issues" => Ok("https://github.com/StarDreamTech/starclip/issues/new"),
         _ => Err("不支持的项目链接。".into()),
     }
 }

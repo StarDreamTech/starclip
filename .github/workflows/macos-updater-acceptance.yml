@@ -34,13 +34,13 @@ jobs:
           SOURCE_REF: ${{ inputs.source_ref }}
         with:
           script: |
-            if (context.repo.owner !== 'cpython666' || context.repo.repo !== 'starclip') throw new Error('Unexpected repository');
+            if (context.repo.owner !== 'StarDreamTech' || context.repo.repo !== 'starclip') throw new Error('Unexpected repository');
             const tag = process.env.SOURCE_REF, runText = process.env.RELEASE_RUN_ID;
             if (!/^v\d+\.\d+\.\d+$/.test(tag) || !/^\d+$/.test(runText)) throw new Error('Invalid release tag/run input');
             const runId = Number(runText), version = tag.slice(1);
             const commit = (await github.rest.repos.getCommit({...context.repo, ref: tag})).data.sha;
             const run = (await github.rest.actions.getWorkflowRun({...context.repo, run_id: runId})).data;
-            if (run.path !== '.github/workflows/release.yml' || run.status !== 'completed' || run.conclusion !== 'success' || run.head_sha !== commit || run.head_repository?.full_name !== 'cpython666/starclip') throw new Error('Release run is not the successful immutable tag build');
+            if (run.path !== '.github/workflows/release.yml' || run.status !== 'completed' || run.conclusion !== 'success' || run.head_sha !== commit || run.head_repository?.full_name !== 'StarDreamTech/starclip') throw new Error('Release run is not the successful immutable tag build');
             const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {...context.repo, run_id: runId});
             const matches = artifacts.filter(a => a.name === `complete-release-${version}` && !a.expired && a.workflow_run?.head_sha === commit);
             if (matches.length !== 1) throw new Error('Expected one complete release artifact');

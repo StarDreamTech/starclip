@@ -33,7 +33,7 @@ Windows 后续检查确认设置页位置记忆改变了重开后的界面：从
 
 ## 集中验证与核对
 
-最终业务 head `5f4e5da` 的 [42833791956](https://github.com/cpython666/starclip/actions/runs/42833791956) 7/7 成功，含完整 Node / Rust 基础回归、双平台原生单元 / 权限 / CLI、23 款字体实际下载与离线渲染、打包和 fresh / 真实旧版 upgrade 安装。合入 #33 后已逐树核对：main `e3bca33` 与该 head 内容完全一致。
+最终业务 head `5f4e5da` 的 [42833791956](https://github.com/StarDreamTech/starclip/actions/runs/42833791956) 7/7 成功，含完整 Node / Rust 基础回归、双平台原生单元 / 权限 / CLI、23 款字体实际下载与离线渲染、打包和 fresh / 真实旧版 upgrade 安装。合入 #33 后已逐树核对：main `e3bca33` 与该 head 内容完全一致。
 
 各组 PR 的最新检查中，#30 / #31 的 macOS fresh 曾等待 runner；其前一 head 的同一场景已通过，后续 diff 仅 `scripts/windows-smoke.ps1`，不改变 macOS 产品与验收源码。#32 的最后重复 macOS fresh 同样排队，集中验证 #33 已覆盖其全部功能，额外差异仅星伴把手的图标与布局。没有把排队任务或先前失败写成对应 head 的 7/7；最终业务版本的完整结果以上述集中流水线为准。
 
