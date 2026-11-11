@@ -12,7 +12,7 @@
 | `src/App.vue::shortcutStatus` / `saveSettings`、`src/styles.css` | 快捷键输入旁状态图标依赖成功读取的原生结果与当次保存错误；新组合灰色待检查，保存后端仍裁定注册，读取失败 / 浏览器不显示绿勾。错误绑定提交值，改组合即失效；无障碍描述与中英提示同步 |
 | `src/navigation.ts`、`src/App.vue` | 开发分支页面位置记忆：本机 WebView `localStorage` 缓存分类 / 分组、列表页码、设置标签与开关；首次查询使用恢复值，失效分组回退、页码沿用分页钳制。设置恢复等待开屏，教程优先；缓存只存导航字段，与 SQLite 备份独立 |
 | `src/i18n/`、`src/types.ts`、`src/api.ts` | 中文原文作键的简体中文 / English 目录、`t()` 插值与单复数、`errorText()` 原生错误映射；普通偏好保存 `uiLanguage` 后切换 locale；桌面端命令 `set_native_language` 仅主窗可用 |
-| `README.md`、`README.en.md`、`src/product-share-catalog.json`、`public/share/` | 中英文仓库入口互链；两份 README 链接五主题 × 两语言 PNG。宣传文案两类 × 两语言，以固定目录为真源；软件语言与素材语言可独立选择，维护时同步对应文档与素材 |
+| `README.md`、`README.en.md`、`src/product-share-catalog.json`、`public/share/` | 中英文仓库入口互链；两份 README 开头链接[项目介绍页](https://stardreamtech.github.io/projects/starclip/)（中文「项目介绍」、英文 Project site），并链接五主题 × 两语言 PNG。宣传文案两类 × 两语言，以固定目录为真源；软件语言与素材语言可独立选择，维护时同步对应文档与素材 |
 | `src/types.ts`、`src/api.ts` | 前后端数据形状与调用入口；用 `__TAURI_INTERNALS__` 区分桌面 invoke 和原创内存演示。修改行为时检查两条分支及 Rust 类型 |
 | `src/components/ProductShare.vue`、`src/product-share.ts`、`src/product-share-catalog.json` | 独立「分享」页，默认跟随界面 / 手选中英；2 类文案 × 2 语言、5 主题 PNG × 2 语言。按 `locale` 筛选，去掉 `-en` 后缀维持当前主题；预览 / 复制 / 保存使用同一语言，元数据与 Rust 共用 |
 | `src/components/UpdateSettings.vue`、`src/components/UpdateNotice.vue`、`src/update-api.ts`、`src/update-state.ts` | 软件更新界面（无恢复点列表 / 创建 / 还原）、独立自动检查开关、主界面 topbar 下方（右侧内容区顶部）空闲时的稳定版提示 / 单版本忽略、进度订阅、确认版本固定、数据目录变更后的重启保护；浏览器仅说明。偏好按 revision 合并，提示本身不发起网络检查 |

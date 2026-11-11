@@ -6,7 +6,7 @@
 
 把随手复制的文字、链接和代码收进历史，整理成自己的星标与分组，再通过星绘坊做成代码卡片或手写纸笺。
 
-[GitHub 项目](https://github.com/StarDreamTech/starclip) · [反馈问题 / 提交 Issue](https://github.com/StarDreamTech/starclip/issues/new)
+[项目介绍](https://stardreamtech.github.io/projects/starclip/) · [GitHub 项目](https://github.com/StarDreamTech/starclip) · [反馈问题 / 提交 Issue](https://github.com/StarDreamTech/starclip/issues/new)
 
 软件主窗口右上角的 GitHub 图标可打开开源仓库；「偏好设置 → 帮助」保留项目与问题反馈入口。反馈时请写明软件版本、操作系统、复现步骤与预期结果；公开截图前请遮住私密剪贴内容。
 

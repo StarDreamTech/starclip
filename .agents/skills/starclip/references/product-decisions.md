@@ -36,6 +36,7 @@
 - 五套主题为星夜、月白、素白、青苔、暮樱；跟随系统只在星夜/月白间选择。素白是纯白背景、浅灰分区、深灰文字，自动贴纸为空。四套原创贴纸可独立选择或关闭，不能遮挡操作。
 - 界面语言为「跟随系统 / 简体中文 / English」，默认跟随系统；与普通偏好一起保存，保存后立即切换并持久化，桌面端同步托盘菜单与主 / 星伴窗口标题。英文产品名为 Starclip、Starcode、Stardraw、Moonlight Note、StarPet / StarBud；用户内容、分组名和标签不自动翻译。宣传素材另有固定中英版本，默认跟随界面或在分享页手选，不改应用语言偏好。依据：`src/i18n/`、`App.vue`、`ProductShare.vue`、`store::Settings.ui_language`、`desktop::set_native_language`。
 - 2026-11-05 用户要求 README、宣传图 / 文案、软件均支持多语言。已新增 `README.en.md`，与中文 README 顶部互链，两份均给出五个主题中英文 PNG 与语言操作说明；现有每语言两类文案 / 五张图及软件中英切换继续复用。新功能同步维护两份 README / 中英素材；其他技术文档目前主要中文，英文入口标明。验证见 [记录](../../../../docs/verification.md#中英文文档素材与语言切换2026-11-05)。
+- 2026-11-11 用户要求在 README 开头介绍附近加入组织 GitHub Pages 项目介绍页，地址为 [https://stardreamtech.github.io/projects/starclip/](https://stardreamtech.github.io/projects/starclip/)。中文 `README.md` 文案为「项目介绍」，英文 `README.en.md` 为「Project site」，都放在原有仓库链接行最前。仓库目前只有这两份项目 README；主题与词表目录里的 README 不是项目介绍。安装命令、更新地址和白名单未改。同日 `gh repo edit --homepage` 返回 HTTP 403（Resource not accessible by integration），About 的 website 仍为空。
 - 同日用户询问快捷键自定义与占用识别。已核实 `desktop::save_settings` 先注册新键、持久化成功才注销旧键；注册失败提示可能被占用且保留原键。用户随后明确希望在输入旁显示小图标，已实现当前已注册绿勾、未保存组合灰色待检查、保存中转动、注册 / 格式失败红警示及中英悬停说明；未成功读取桌面状态不显示可用，浏览器不伪装检测。新组合仍在保存时检查，不为输入中的组合临时占用系统快捷键。两份 README 同步；不能查占用软件或检测所有应用内部快捷键，本轮没有原生制造占用场景。
 - 主界面主题与星码卡深空/晨光代码配色独立。主题切换即时独立保存；扩散动画支持被输入打断，减少动态效果或不支持 View Transition 时直接切换。
 - 自定义强调色、纯色 / 双色渐变与 0–359° 方向、一张本地静态 PNG 贴纸已实现，入口为外观页。`appearance_v1` 独立保存；恢复配色不删贴纸，停用自定义图恢复内置贴纸。导入前后端有界校验、最长边缩至 512 并保留透明度，失败保留原值；完整快照包含，历史 JSON 排除。配色参考与限额见 [外观说明](../../../../docs/appearance.md)，原生重启恢复及验收边界见验证记录。

@@ -6,7 +6,7 @@
 
 Save important clips to favorites or groups, then turn text and code into images with Stardraw. No account is required; clipboard history stays on your computer.
 
-[Project](https://github.com/StarDreamTech/starclip) · [Downloads: v0.2.5](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) · [Report an issue](https://github.com/StarDreamTech/starclip/issues/new)
+[Project site](https://stardreamtech.github.io/projects/starclip/) · [Project](https://github.com/StarDreamTech/starclip) · [Downloads: v0.2.5](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) · [Report an issue](https://github.com/StarDreamTech/starclip/issues/new)
 
 The GitHub icon in the top-right corner opens the source repository. **Preferences → Help** also provides project and issue-reporting links. Issue reports are public; remove private clipboard content from screenshots before posting.
 
