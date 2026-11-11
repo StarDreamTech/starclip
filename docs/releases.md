@@ -82,12 +82,12 @@ npm run tauri -- signer generate -w /private/path/starclip-updater.key
 
 1. 更新版本和 CHANGELOG，完成检查并审核代码。在已确认的提交上创建并推送匹配 tag，例如 `v0.2.3`；也可以在 Actions 的 **Build signed release draft** 手动运行，输入已经存在的 tag。发布脚本不会创建或移动 tag。
 2. 等待完整流水线成功：版本/tag/说明检查 → Node 与 Rust core 测试 → macOS app/DMG、Windows NSIS → 两平台原生安装 / 固定数据覆盖升级 → updater 签名核验 → 草稿附件上传。
-3. 汇总阶段使用 `minisign` 验证产物的真实签名，并检查其密钥与应用公钥、签名绑定版本与发布版本一致；要求两个平台和 macOS DMG 齐全。签名文件缺失、产物重复、版本不一致或验签失败均停止，不更新公开的 `latest.json`。
+3. 汇总阶段使用 `minisign` 验证产物的真实签名，并检查其密钥与应用公钥、签名绑定版本与发布版本一致；要求两个平台和 macOS DMG 齐全。签名文件缺失、产物重复、版本不一致或验签失败均停止，不更新公开的 `latest.json`。Ubuntu 汇总机优先安装官方 minisign 0.12 静态包并核对 SHA-256（写在 `release.yml`），下载或校验失败才回退系统包。验签命令是 `minisign -V -p -m -x`。
 4. 下载草稿产物，在隔离测试数据上验收安装与升级。至少检查：旧版数据和偏好保留、图片及星伴存档、恢复点失败会阻止安装、正常恢复和不兼容 schema 拒绝写入、签名损坏拒绝安装，以及每个平台安装后能重启。不要读取真实剪贴板来做测试。
 5. 全部 job 成功且实机验收通过后，在 GitHub Release 页面人工审核并 **Publish release**，选择设为最新正式版本；不要标记为 prerelease。发布会让客户端的稳定地址指向这一版。不要在工作流仍上传附件时提前发布。
 6. **Update Homebrew after release** 会验证公开 DMG 和 Cask，再自动推送 Tap。检查此 workflow 结果；若网络或 Tap 推送冲突失败，可在 Actions 输入相同 tag 重试，默认 `dry_run=true` 只预演，确认要同步时设为 false。此同步的包验证不替代上一步的安装与升级验收。
 
-工作流从不自动公开发布，也不覆盖已公开的同 tag Release；需要修复时递增版本。草稿上传中途失败只影响草稿，可重跑同一 tag；在 workflow 成功前不要发布。普通 CI 成功、签名核验成功或草稿已生成，都不能代替 Windows/macOS 的原生升级验收。
+工作流从不自动公开发布，也不覆盖已公开的同 tag Release；需要修复时递增版本。草稿上传中途失败只影响草稿，可重跑同一 tag；在 workflow 成功前不要发布。重跑已有运行仍使用触发那次提交里的 workflow 文件。只改了 workflow 时，要在包含新文件的分支上重新手动运行同一个 tag，不能只重跑旧记录。普通 CI 成功、签名核验成功或草稿已生成，都不能代替 Windows/macOS 的原生升级验收。
 
 发布附件：
 
