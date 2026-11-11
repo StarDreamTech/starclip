@@ -32,9 +32,9 @@ from updater_baselines import PUBLIC_BASELINES, public_baseline
 IDENTIFIER = "com.starclip.desktop"
 COMPARISON = "0.2.1"
 TARGET = "0.2.2"
-ENDPOINT = "https://github.com/cpython666/starclip/releases/latest/download/latest.json"
+ENDPOINT = "https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json"
 MANIFEST_HASH = "10d0e5646027d4bd0804446b477bd6fafc10f232b0d3135b44b46be3595a706d"
-TARGET_URL = "https://github.com/cpython666/starclip/releases/download/v0.2.2/Starclip_0.2.2_aarch64.app.tar.gz"
+TARGET_URL = "https://github.com/StarDreamTech/starclip/releases/download/v0.2.2/Starclip_0.2.2_aarch64.app.tar.gz"
 TARGET_HASH = "83113a8c37739335cbc11d905c5b3bc089bba4aa0ad9b380a5d39199b63d224e"
 PUBLIC_KEY = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVEQjQ4MUM1NTgxMDBGRjEKUldUeER4Qll4WUcwWFpqaHJOVDZvRGxTcXNZK3FVdGVpTnFxMVNJbmgyRmFNeUVtVFRJcCtVaGEK"
 SETTINGS = dict(paused=True, pauseRevision=0, uiLanguage="system", theme="forest", layout="list",
@@ -55,7 +55,7 @@ def fresh_runner():
     if (platform.system() != "Darwin" or platform.machine() != "arm64"
             or os.environ.get("GITHUB_ACTIONS") != "true"
             or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
-            or os.environ.get("GITHUB_REPOSITORY") != "cpython666/starclip"):
+            or os.environ.get("GITHUB_REPOSITORY") != "StarDreamTech/starclip"):
         raise RuntimeError("This experiment requires a disposable GitHub-hosted macOS ARM runner")
     data = Path.home() / "Library/Application Support" / IDENTIFIER
     for path in (data, Path.home() / "Library/Caches" / IDENTIFIER,

@@ -14,7 +14,7 @@ func emit(_ value: Any) {
 let environment = ProcessInfo.processInfo.environment
 guard environment["GITHUB_ACTIONS"] == "true",
       environment["RUNNER_ENVIRONMENT"] == "github-hosted",
-      environment["GITHUB_REPOSITORY"] == "cpython666/starclip" else {
+      environment["GITHUB_REPOSITORY"] == "StarDreamTech/starclip" else {
     fail("Only a disposable GitHub-hosted Starclip runner may use this UI helper")
 }
 let args = CommandLine.arguments

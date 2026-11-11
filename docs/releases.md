@@ -33,7 +33,7 @@ brew update
 brew upgrade --cask cpython666/tap/starclip
 ```
 
-[0.2.5 已公开为最新稳定版](https://github.com/cpython666/starclip/releases/tag/v0.2.5)；[Homebrew 同步](https://github.com/cpython666/starclip/actions/runs/42861273222) 两个 job 已完成，当前 Cask 为 **0.2.5**。公开 DMG、应用身份 / 版本 / 架构及 Homebrew 在线审计通过，[机器人提交](https://github.com/cpython666/homebrew-tap/commit/52a9d65d938742c2188f15f9f12fc2ec0a842005) 和远端 Cask 的 SHA-256 已回读核对。更新包有 Tauri 签名，macOS 为 ad-hoc，仍无 Apple Developer 公证或 Windows 发行者证书。
+[0.2.5 已公开为最新稳定版](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5)；[Homebrew 同步](https://github.com/StarDreamTech/starclip/actions/runs/42861273222) 两个 job 已完成，当前 Cask 为 **0.2.5**。公开 DMG、应用身份 / 版本 / 架构及 Homebrew 在线审计通过，[机器人提交](https://github.com/cpython666/homebrew-tap/commit/52a9d65d938742c2188f15f9f12fc2ec0a842005) 和远端 Cask 的 SHA-256 已回读核对。更新包有 Tauri 签名，macOS 为 ad-hoc，仍无 Apple Developer 公证或 Windows 发行者证书。
 
 如果较新 Homebrew 提示该 Cask 尚未受信任，执行 `brew trust --cask cpython666/tap/starclip` 后重试；这只信任星笺这一项，不需要信任整个 Tap。
 
@@ -57,7 +57,7 @@ npm run version:check -- vX.Y.Z
 
 ## 一次性配置
 
-1. 使用能公开下载附件的 GitHub 仓库。应用当前稳定更新源固定为 `https://github.com/cpython666/starclip/releases/latest/download/latest.json`；更新端点与公钥位于 `src-tauri/tauri.conf.json`。迁移仓库前须保留旧地址的访问路径，或先通过旧地址发布包含新地址的过渡版本。
+1. 使用能公开下载附件的 GitHub 仓库。应用当前稳定更新源固定为 `https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json`；更新端点与公钥位于 `src-tauri/tauri.conf.json`。迁移仓库前须保留旧地址的访问路径，或先通过旧地址发布包含新地址的过渡版本。
 2. 保管与内置公钥对应的 Tauri 更新私钥，在仓库外安全备份。GitHub 仓库 → Settings → Secrets and variables → Actions 增加 `TAURI_SIGNING_PRIVATE_KEY`（完整私钥文件内容）；有密码时另设 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`，无密码时留空。不要把私钥、密码或真实数据加入 Git，不要在命令输出中打印。
 3. GitHub Actions 需要正常运行权限；只有最终创建草稿的 job 请求 `contents: write`。无需个人访问令牌，使用本次 workflow 的 `GITHUB_TOKEN`。建议限制发布 tag 的创建权限。
 4. 如需 macOS 正式签名及公证，可配置 `APPLE_SIGNING_IDENTITY`、`APPLE_CERTIFICATE`（导出的 `.p12` Base64 内容）、`APPLE_CERTIFICATE_PASSWORD`，以及 `APPLE_ID`、`APPLE_PASSWORD`（应用专用密码）、`APPLE_TEAM_ID`。工作流已将这些可选 secrets 交给 Tauri。未配置时使用 `-` ad-hoc 身份；这不等于 Apple Developer 签名或公证。Windows Authenticode 尚未接入。
@@ -109,14 +109,14 @@ npm run tauri -- signer generate -w /private/path/starclip-updater.key
 
 ## 当前验证边界
 
-**0.2.5 已于 2026-11-11 00:42:14（北京时间，UTC 2026-11-10 16:42:14） 正式发布为 latest**，提供 Apple Silicon macOS 和 Windows x64 安装包与签名更新清单；[签名发布流水线](https://github.com/cpython666/starclip/actions/runs/42848254909) 8 项检查通过。真实公开 0.2.4 → 0.2.5 的 [macOS](https://github.com/cpython666/starclip/actions/runs/42856720920) 与 [Windows](https://github.com/cpython666/starclip/actions/runs/42851606421) 均通过自动重启、原创固定数据 / PNG / 偏好保留、结构 4 → 5 和旧自动快照清理；旧应用副本保留。原生升级使用一次性 runner 的临时受信任 HTTPS 服务；8 个匿名公开附件及稳定 latest 的字节另已核对，不扩大为公网 GitHub / CDN 原生更新验收。本机正式安装未替换。完整摘要与证据见 [0.2.5 发布与升级](verification.md#025-正式发布与原生升级验收)。历史 0.2.4 证据见 [对应记录](verification.md#024-正式发布与原生升级验收)。
+**0.2.5 已于 2026-11-11 00:42:14（北京时间，UTC 2026-11-10 16:42:14） 正式发布为 latest**，提供 Apple Silicon macOS 和 Windows x64 安装包与签名更新清单；[签名发布流水线](https://github.com/StarDreamTech/starclip/actions/runs/42848254909) 8 项检查通过。真实公开 0.2.4 → 0.2.5 的 [macOS](https://github.com/StarDreamTech/starclip/actions/runs/42856720920) 与 [Windows](https://github.com/StarDreamTech/starclip/actions/runs/42851606421) 均通过自动重启、原创固定数据 / PNG / 偏好保留、结构 4 → 5 和旧自动快照清理；旧应用副本保留。原生升级使用一次性 runner 的临时受信任 HTTPS 服务；8 个匿名公开附件及稳定 latest 的字节另已核对，不扩大为公网 GitHub / CDN 原生更新验收。本机正式安装未替换。完整摘要与证据见 [0.2.5 发布与升级](verification.md#025-正式发布与原生升级验收)。历史 0.2.4 证据见 [对应记录](verification.md#024-正式发布与原生升级验收)。
 
 0.2.5 发布准备已将 updater workflow 默认改为真实 `public-0.2.4`，包大小 / SHA / 内部版本由 `scripts/updater_baselines.py` 固定；SQLite 基线为 4，由元数据读取。0.2.4 必须自动重启，显式旧 0.2.2 仍可记录历史手动恢复，macOS source-comparison 实验保留并单独标明。下次发布应先更新并核对当时的真实公开基线，不以比较版本实验替代。
 
 0.2.2 发布时记录的 11 项发布和版本脚本夹具测试，覆盖版本不一致、错误 tag、递增、缺失/重复产物、错误签名结构、密钥与绑定版本、不完整平台、验签失败和更新说明提取。已另用临时原创文件通过官方 Tauri signer → minisign 0.12 → 清单汇总的真实签名验证，并确认篡改文件被拒绝；两个 workflow 通过 actionlint 1.7.12 静态检查。原签名密钥已配置到 GitHub 加密 secret；0.2.2 的两平台签名构建、草稿上传、原生安装与覆盖升级已通过实际工作流，公开更新清单和下载包也已核验。这一阶段的原生安装冒烟只检查临时 runner 的启动和固定数据升级，不能单独证明完整应用内下载 / 弹窗 / 自替换链路。
 
-2026-10-29 Windows 验收使用产品提交 `7fbbae5` 的完整源码，将更新比较版本设为 0.2.1，经过真实 GUI 下载公开 0.2.2、选择稍后、再次确认安装、替换 EXE 并自动启动新进程；暂停偏好、原创固定记录 / 分组及更新前恢复点、旧 EXE 备份均核对通过。证据为一次性实验提交 `2b148e9` 的 [run 40821236132](https://github.com/cpython666/starclip/actions/runs/40821236132)。随后 macOS 提交 `22480ca20defb4abe7507a80d527dffca96d676a` 的 [run 40862701839](https://github.com/cpython666/starclip/actions/runs/40862701839) 也完成检查、签名下载、稍后、确认后快照 / 旧 app 备份、应用替换与自动重启；新旧 PID 不同，目标摘要匹配公开包，固定数据与暂停状态保留。macOS 测试在全新 runner 的空白正式命名空间运行，不访问本机正式安装或数据。
+2026-10-29 Windows 验收使用产品提交 `7fbbae5` 的完整源码，将更新比较版本设为 0.2.1，经过真实 GUI 下载公开 0.2.2、选择稍后、再次确认安装、替换 EXE 并自动启动新进程；暂停偏好、原创固定记录 / 分组及更新前恢复点、旧 EXE 备份均核对通过。证据为一次性实验提交 `2b148e9` 的 [run 40821236132](https://github.com/StarDreamTech/starclip/actions/runs/40821236132)。随后 macOS 提交 `22480ca20defb4abe7507a80d527dffca96d676a` 的 [run 40862701839](https://github.com/StarDreamTech/starclip/actions/runs/40862701839) 也完成检查、签名下载、稍后、确认后快照 / 旧 app 备份、应用替换与自动重启；新旧 PID 不同，目标摘要匹配公开包，固定数据与暂停状态保留。macOS 测试在全新 runner 的空白正式命名空间运行，不访问本机正式安装或数据。
 
 上述两平台历史实验只将所列源码的 Tauri / 打包比较版本覆盖为 0.2.1，目标固定为公开签名 0.2.2；不是历史旧 0.2.1 源码二进制升级，也不用于替代下面独立完成的 0.2.3 签名目标验收。Windows 更新通过不扩大为统计联网或字体 GUI 已验收。历史详细步骤见 [macOS 完整链路](verification.md#macos-应用内更新完整链路) / [Windows 完整链路](verification.md#windows-应用内更新完整链路)。
 
-0.2.3 于 2026-10-29 经用户授权[正式发布](https://github.com/cpython666/starclip/releases/tag/v0.2.3)。[签名发布运行](https://github.com/cpython666/starclip/actions/runs/40882819215) 完成两平台构建、安装包与固定数据覆盖升级校验、签名验证及完整附件汇总。本次目标包另经过真实签名正例和改动包字节后拒绝的负例验证。真实公开 0.2.2 → 签名 0.2.3 的 [Windows 运行](https://github.com/cpython666/starclip/actions/runs/40891766297) 自动重启通过；[macOS 运行](https://github.com/cpython666/starclip/actions/runs/40895064653) 的结果为 `passed-with-manual-recovery`：目标程序已替换，旧版未自动重新打开，手动启动后暂停状态、固定文本 / PNG、分组、成长和偏好均保留，快照及旧应用备份也通过核对。两平台使用一次性 runner 上的临时受信任 HTTPS 服务，保留生产 URL 和签名包原始字节；该验收不证明公开 GitHub / CDN 下载链路，macOS 的手动重开也不能写成自动重启通过。临时 HTTPS 清理已验收，本机正式安装仍为 0.2.2，未替换。证据索引见 [0.2.3 正式发布与原生升级验收](verification.md#023-正式发布与原生升级验收)。
+0.2.3 于 2026-10-29 经用户授权[正式发布](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.3)。[签名发布运行](https://github.com/StarDreamTech/starclip/actions/runs/40882819215) 完成两平台构建、安装包与固定数据覆盖升级校验、签名验证及完整附件汇总。本次目标包另经过真实签名正例和改动包字节后拒绝的负例验证。真实公开 0.2.2 → 签名 0.2.3 的 [Windows 运行](https://github.com/StarDreamTech/starclip/actions/runs/40891766297) 自动重启通过；[macOS 运行](https://github.com/StarDreamTech/starclip/actions/runs/40895064653) 的结果为 `passed-with-manual-recovery`：目标程序已替换，旧版未自动重新打开，手动启动后暂停状态、固定文本 / PNG、分组、成长和偏好均保留，快照及旧应用备份也通过核对。两平台使用一次性 runner 上的临时受信任 HTTPS 服务，保留生产 URL 和签名包原始字节；该验收不证明公开 GitHub / CDN 下载链路，macOS 的手动重开也不能写成自动重启通过。临时 HTTPS 清理已验收，本机正式安装仍为 0.2.2，未替换。证据索引见 [0.2.3 正式发布与原生升级验收](verification.md#023-正式发布与原生升级验收)。

@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   verify:
-    if: github.repository == 'cpython666/starclip'
+    if: github.repository == 'StarDreamTech/starclip'
     runs-on: macos-15-intel
     outputs:
       skip: ${{ steps.plan.outputs.skip }}

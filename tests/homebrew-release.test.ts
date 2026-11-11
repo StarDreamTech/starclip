@@ -9,7 +9,7 @@ import { assertReleaseUnchanged, parseChecksums, prepareRelease, renderCask, upd
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 function asset(tag, name, body, id) {
-  return { id, name, size: Buffer.byteLength(body), state: 'uploaded', updated_at: '2026-10-26T01:00:00Z', digest: `sha256:${hash(body)}`, browser_download_url: `https://github.com/cpython666/starclip/releases/download/${tag}/${name}` };
+  return { id, name, size: Buffer.byteLength(body), state: 'uploaded', updated_at: '2026-10-26T01:00:00Z', digest: `sha256:${hash(body)}`, browser_download_url: `https://github.com/StarDreamTech/starclip/releases/download/${tag}/${name}` };
 }
 function releaseFixture(version = '0.2.0') {
   const tag = `v${version}`, name = `Starclip_${version}_aarch64.dmg`;
@@ -17,7 +17,7 @@ function releaseFixture(version = '0.2.0') {
   const sums = `${hash(body)}  ${name}\n`;
   const release = {
     id: 123, tag_name: tag, draft: false, prerelease: false, published_at: '2026-10-26T01:00:00Z',
-    html_url: `https://github.com/cpython666/starclip/releases/tag/${tag}`,
+    html_url: `https://github.com/StarDreamTech/starclip/releases/tag/${tag}`,
     assets: [asset(tag, name, body, 101), asset(tag, 'SHA256SUMS', sums, 102)],
   };
   return { body, sums, release };
@@ -47,7 +47,7 @@ test('Homebrew 只准备指定仓库的最新公开稳定版本，草稿、预�
 test('Homebrew 拒绝错误仓库、注入 tag、缺失或重复及未完成的资产', () => {
   const { release } = releaseFixture();
   for (const mutate of [
-    value => { value.html_url = value.html_url.replace('cpython666', 'someone'); },
+    value => { value.html_url = value.html_url.replace('StarDreamTech', 'someone'); },
     value => { value.tag_name = 'v0.2.0;echo injected'; },
     value => { value.assets = value.assets.slice(1); },
     value => { value.assets.push(value.assets[0]); },
