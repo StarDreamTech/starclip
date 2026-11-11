@@ -271,7 +271,7 @@ def main():
     parser.add_argument("--baseline-schema", type=int, help="Exact baseline schema; defaults to the pinned genuine public baseline metadata")
     parser.add_argument("--allow-manual-recovery", action="store_true")
     args = parser.parse_args()
-    args.baseline_origin = args.baseline_origin or ("public-0.2.4" if args.fixture else "source-comparison")
+    args.baseline_origin = args.baseline_origin or ("public-0.2.5" if args.fixture else "source-comparison")
     if args.baseline_schema is None:
         args.baseline_schema = PUBLIC_BASELINES.get(args.baseline_origin, {}).get("schema", 2)
     runner_temp, data = fresh_runner()

@@ -24,7 +24,12 @@ import zlib
 from fixture_schema import source_schema
 
 PUBLIC_KEY = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVEQjQ4MUM1NTgxMDBGRjEKUldUeER4Qll4WUcwWFpqaHJOVDZvRGxTcXNZK3FVdGVpTnFxMVNJbmgyRmFNeUVtVFRJcCtVaGEK"
-ENDPOINT = "https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json"
+ORGANIZATION_REPOSITORY = "StarDreamTech/starclip"
+# Clients through 0.2.5 reject every other download prefix. Keep this path served.
+LEGACY_DOWNLOAD_REPOSITORY = "cpython666/starclip"
+BRIDGE_RELEASE_VERSION = "0.2.6"
+ENDPOINT = f"https://github.com/{ORGANIZATION_REPOSITORY}/releases/latest/download/latest.json"
+LEGACY_ENDPOINT = f"https://github.com/{LEGACY_DOWNLOAD_REPOSITORY}/releases/latest/download/latest.json"
 SETTINGS = dict(paused=True, pauseRevision=0, uiLanguage="system", theme="forest", layout="list",
                 maxHistory=0, shortcut="CommandOrControl+Shift+V", alwaysOnTop=False,
                 retentionDays=0, showStartup=False, stickerPack="none")
@@ -82,11 +87,12 @@ def verify_assets(assets, version):
     manifest = json.loads((assets / "latest.json").read_text(encoding="utf-8"))
     if manifest["version"] != version or set(manifest["platforms"]) != {"darwin-aarch64", "windows-x86_64"}:
         raise ValueError("Release manifest target/platform mismatch")
-    mapping = {urlsplit(ENDPOINT).path: "latest.json"}
+    mapping = {urlsplit(ENDPOINT).path: "latest.json", urlsplit(LEGACY_ENDPOINT).path: "latest.json"}
+    download_repository = LEGACY_DOWNLOAD_REPOSITORY if version == BRIDGE_RELEASE_VERSION else ORGANIZATION_REPOSITORY
     for platform, suffix in (("darwin-aarch64", "aarch64.app.tar.gz"), ("windows-x86_64", "x64-setup.exe")):
         name = f"Starclip_{version}_{suffix}"
         item = manifest["platforms"][platform]
-        url = f"https://github.com/StarDreamTech/starclip/releases/download/v{version}/{name}"
+        url = f"https://github.com/{download_repository}/releases/download/v{version}/{name}"
         if item["url"] != url or item["signature"] != (assets / (name + ".sig")).read_text(encoding="utf-8").strip():
             raise ValueError("Signed release URL or signature differs from the manifest")
         signature = base64.b64decode(item["signature"], validate=True).decode("utf-8").splitlines()

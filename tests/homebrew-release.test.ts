@@ -128,7 +128,7 @@ test('Homebrew 从 alpha Cask 过渡稳定版，写入固定模板并保持重�
   assert.match(cask, /version "0\.2\.0"/);
   assert.match(cask, new RegExp(`sha256 "${evidence.sha256}"`));
   assert.match(cask, /url "https:\/\/github\.com\/StarDreamTech\/starclip\/releases\/download\/v#\{version\}\/Starclip_#\{version\}_aarch64\.dmg"/);
-  assert.match(cask, /homepage "https:\/\/github\.com\/StarDreamTech\/starclip"/);
+  assert.match(cask, /homepage "https:\/\/stardreamtech\.github\.io\/projects\/starclip\/"/);
   assert.match(cask, /https:\/\/github\.com\/StarDreamTech\/starclip\/releases\/tag\/v#\{version\}/);
   assert.doesNotMatch(cask, /cpython666/);
   assert.match(cask, /depends_on arch: :arm64/);

@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory)][string]$BaselineInstaller,
-  [ValidateSet('public-0.2.4', 'public-0.2.3', 'public-0.2.2')][string]$BaselineOrigin = 'public-0.2.4',
+  [ValidateSet('public-0.2.5', 'public-0.2.4', 'public-0.2.3', 'public-0.2.2')][string]$BaselineOrigin = 'public-0.2.5',
   [Parameter(Mandatory)][string]$FixtureDirectory,
   [Parameter(Mandatory)][string]$RepositoryRoot,
   [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{40}$')][string]$SourceHeadSha,
@@ -38,8 +38,11 @@ $baselineSchema = [int]$baseline.schema
 $targetSchema = [int]$fixture.targetSchema
 if ($targetSchema -lt 1) { throw 'The signed target schema is missing or invalid.' }
 $endpoint = 'https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json'
-$targetUrl = "https://github.com/StarDreamTech/starclip/releases/download/v$targetVersion/Starclip_${targetVersion}_x64-setup.exe"
-if ($fixture.targetUrl -ne $targetUrl -or $fixture.targetFilename -ne "Starclip_${targetVersion}_x64-setup.exe") {
+$packageName = "Starclip_${targetVersion}_x64-setup.exe"
+# 0.2.6 is the bridge release: installed 0.2.5 only accepts the previous repository prefix.
+$downloadOwner = if ($targetVersion -eq '0.2.6') { 'cpython666' } else { 'StarDreamTech' }
+$targetUrl = "https://github.com/$downloadOwner/starclip/releases/download/v$targetVersion/$packageName"
+if ($fixture.targetUrl -ne $targetUrl -or $fixture.targetFilename -ne $packageName) {
   throw 'Unexpected production update package URL or filename.'
 }
 $baselineInstallerHash = [string]$baseline.sha256

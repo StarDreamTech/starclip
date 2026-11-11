@@ -299,7 +299,7 @@ watch([modal, () => editing.value?.id, clipDetailsBlocked, privateRevealed, () =
 watch(visible, clips => { if (!clips.some(c => c.id === selected.value)) selected.value = clips[0]?.id ?? null })
 watch(modal, async value => { await nextTick(); if (value && !dialog.value?.open) dialog.value?.showModal(); if (!value && dialog.value?.open) dialog.value?.close() })
 function notify(message: string, error = false) { clearTimeout(toastTimer); toast.value = message; toastError.value = error; toastTimer = setTimeout(() => { toast.value = '' }, 3600) }
-async function openProjectLink(event: MouseEvent, target: 'repository' | 'issues') {
+async function openProjectLink(event: MouseEvent, target: 'repository' | 'issues' | 'organization' | 'project') {
   if (!isDesktop) return;
   event.preventDefault();
   try { await api.openProjectLink(target) }
@@ -861,12 +861,14 @@ onUnmounted(() => { disposed = true; pendingWindowClose = null; clearTimeout(win
               <UpdateSettings ref="updateSettings" v-if="settingsTab === 'help'" :disabled="busy || themeSaving || dataOperationBusy || shareBusy || appearanceBusy || privacyBusy || telemetryBusy || aiBusy || clipPrivacyBusy" :unsaved-changes="settingsDirty" @busy="updateBusy = $event" />
               <div class="settings-project">
                 <h3>{{ t('一起让星笺更好') }}</h3>
-                <p>{{ t('查看项目进展，或把遇到的问题告诉我们。') }}</p>
+                <p>{{ t('星笺由 StarDreamTech（星梦科技）维护。查看项目进展，或把遇到的问题告诉我们。') }}</p>
                 <div class="settings-project-links">
+                  <a href="https://stardreamtech.github.io/" target="_blank" rel="noopener noreferrer" @click="openProjectLink($event, 'organization')"><Icon name="spark" :size="20" /><span><strong>{{ t('组织主页') }}</strong><small>{{ t('StarDreamTech（星梦科技）') }}</small></span><Icon name="arrow" :size="16" /></a>
+                  <a href="https://stardreamtech.github.io/projects/starclip/" target="_blank" rel="noopener noreferrer" @click="openProjectLink($event, 'project')"><Icon name="file" :size="20" /><span><strong>{{ t('项目介绍') }}</strong><small>{{ t('功能、下载与更新说明') }}</small></span><Icon name="arrow" :size="16" /></a>
                   <a href="https://github.com/StarDreamTech/starclip" target="_blank" rel="noopener noreferrer" @click="openProjectLink($event, 'repository')"><Icon name="code" :size="20" /><span><strong>{{ t('GitHub 项目') }}</strong><small>StarDreamTech / starclip</small></span><Icon name="arrow" :size="16" /></a>
                   <a href="https://github.com/StarDreamTech/starclip/issues/new" target="_blank" rel="noopener noreferrer" @click="openProjectLink($event, 'issues')"><Icon name="edit" :size="20" /><span><strong>{{ t('反馈问题（Issue）') }}</strong><small>{{ t('描述问题与复现步骤') }}</small></span><Icon name="arrow" :size="16" /></a>
                 </div>
-                <p class="field-note">{{ t('将在浏览器打开 GitHub。Issue 内容公开，上传截图前请遮住私密剪贴内容。') }}</p>
+                <p class="field-note">{{ t('将在浏览器打开对应页面。Issue 内容公开，上传截图前请遮住私密剪贴内容。') }}</p>
               </div>
               <div class="settings-help-intro"><span class="settings-help-icon"><Icon name="spark" :size="24" /></span><div><h3>{{ t('初见星笺') }}</h3><p>{{ t('四步认识记录、收藏、卡片和数据管理。随时重看，按自己的节奏熟悉。') }}</p></div></div>
               <button ref="tutorialButton" type="button" class="button subtle tutorial-replay" :disabled="busy || dataBusy" @click="openGuide"><Icon name="play" :size="15" />{{ t('重看新手教程') }}</button>

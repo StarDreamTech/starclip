@@ -375,6 +375,9 @@ fn validate_expected_version(actual: &str, expected: &str) -> Result<()> {
 }
 fn validate_download_url(url: &str) -> Result<()> {
     // The signed bytes remain authoritative; restrict metadata's download origin too.
+    // 0.2.6 and later accept only the organization repository. Clients through
+    // 0.2.5 still require https://github.com/cpython666/starclip/releases/download/;
+    // the 0.2.6 manifest keeps that compatibility prefix so those clients can install it.
     if url.starts_with("https://github.com/StarDreamTech/starclip/releases/download/") {
         Ok(())
     } else {

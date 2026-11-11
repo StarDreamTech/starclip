@@ -6,9 +6,9 @@
 
 Save important clips to favorites or groups, then turn text and code into images with Stardraw. No account is required; clipboard history stays on your computer.
 
-[Project site](https://stardreamtech.github.io/projects/starclip/) · [Project](https://github.com/StarDreamTech/starclip) · [Downloads: v0.2.5](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) · [Report an issue](https://github.com/StarDreamTech/starclip/issues/new)
+[StarDreamTech](https://stardreamtech.github.io/) · [Project site](https://stardreamtech.github.io/projects/starclip/) · [Project](https://github.com/StarDreamTech/starclip) · [Downloads: v0.2.5](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) · [Report an issue](https://github.com/StarDreamTech/starclip/issues/new)
 
-The GitHub icon in the top-right corner opens the source repository. **Preferences → Help** also provides project and issue-reporting links. Issue reports are public; remove private clipboard content from screenshots before posting.
+Starclip is maintained by **StarDreamTech**. The GitHub icon in the top-right corner opens the source repository. **Preferences → Help** also links to the organization site, project page, repository and issue form. Issue reports are public; remove private clipboard content from screenshots before posting.
 
 <img src="public/share/overview-en.png" width="420" alt="Starclip overview: searchable clipboard history, favorites and local storage">
 
@@ -36,12 +36,19 @@ Each PNG is 1080 × 1440. Use the Share page to select and copy the correspondin
 
 Starclip v0.2.5 is available for **Apple Silicon macOS 11+** and **Windows x64**. Download an installer from the [v0.2.5 release](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5).
 
-On an Apple Silicon Mac, you can use either project-maintained Homebrew tap. Both install the same Starclip cask from this repository's GitHub Releases. The organization tap is [StarDreamTech/homebrew-tap](https://github.com/StarDreamTech/homebrew-tap); the original personal tap is [cpython666/homebrew-tap](https://github.com/cpython666/homebrew-tap):
+On an Apple Silicon Mac, install from the organization tap [StarDreamTech/homebrew-tap](https://github.com/StarDreamTech/homebrew-tap). The cask downloads the installer from this repository's GitHub Releases:
 
 ```sh
 brew install --cask stardreamtech/tap/starclip
+```
+
+If you already installed from the personal tap [cpython666/homebrew-tap](https://github.com/cpython666/homebrew-tap), keep using that command. You do not need to uninstall or switch taps:
+
+```sh
 brew install --cask cpython666/tap/starclip
 ```
+
+The published installer is still v0.2.5. Source version 0.2.6 is prepared and not yet released. It moves in-app update checks to the organization repository; installed 0.2.5 clients still read the update manifest from the compatibility repository `cpython666/starclip`.
 
 Quit Starclip before upgrading with Homebrew, then upgrade the tap you originally installed:
 

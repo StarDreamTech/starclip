@@ -59,7 +59,7 @@ def installer(path, mode, schema):
 
 class FixtureSchemaTests(unittest.TestCase):
     def test_public_baseline_selection_and_restart_requirements(self):
-        for version, schema in (("0.2.2", 2), ("0.2.3", 2), ("0.2.4", 4)):
+        for version, schema in (("0.2.2", 2), ("0.2.3", 2), ("0.2.4", 4), ("0.2.5", 5)):
             origin = "public-" + version
             for platform in ("darwin-aarch64", "windows-x86_64"):
                 expected = public_baseline(origin, platform)
@@ -70,14 +70,14 @@ class FixtureSchemaTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 MAC.baseline_comparison(origin, schema + 1, 5, release_mode=True, allow_manual_recovery=False)
         self.assertEqual(MAC.baseline_comparison("public-0.2.2", 2, 4, release_mode=True, allow_manual_recovery=True), "0.2.2")
-        for origin, schema in (("public-0.2.3", 2), ("public-0.2.4", 4), ("source-comparison", 4)):
+        for origin, schema in (("public-0.2.3", 2), ("public-0.2.4", 4), ("public-0.2.5", 5), ("source-comparison", 4)):
             with self.assertRaisesRegex(AssertionError, "Manual recovery"):
                 MAC.baseline_comparison(origin, schema, 4, release_mode=True, allow_manual_recovery=True)
         self.assertEqual(MAC.baseline_comparison("source-comparison", 4, 4, release_mode=True, allow_manual_recovery=False), "0.2.2")
         self.assertEqual(MAC.baseline_comparison("source-comparison", 2, 2, release_mode=False, allow_manual_recovery=False), "0.2.1")
         metadata = subprocess.run([sys.executable, str(SCRIPTS / "updater_baselines.py"), "metadata", "--platform", "windows-x86_64"],
                                   check=True, capture_output=True, text=True, timeout=15)
-        self.assertEqual(json.loads(metadata.stdout)["origin"], "public-0.2.4")
+        self.assertEqual(json.loads(metadata.stdout)["origin"], "public-0.2.5")
 
     def test_pinned_public_package_rejects_bytes_and_wrong_internal_version(self):
         binary = b"Starclip original synthetic executable; never run."
@@ -120,12 +120,12 @@ class FixtureSchemaTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 download_package(output, expected)
 
-    def test_updater_workflows_keep_public_four_default_and_manual_two_explicit(self):
+    def test_updater_workflows_keep_public_five_default_and_manual_two_explicit(self):
         workflows = SCRIPTS.parent / ".github/workflows"
         for name in ("macos-updater-acceptance.yml", "windows-updater-acceptance.yml"):
             text = (workflows / name).read_text(encoding="utf-8")
-            self.assertIn("default: public-0.2.4", text)
-            self.assertIn("public-0.2.4, public-0.2.3, public-0.2.2", text)
+            self.assertIn("default: public-0.2.5", text)
+            self.assertIn("public-0.2.5, public-0.2.4, public-0.2.3, public-0.2.2", text)
             self.assertIn("scripts/updater_baselines.py download", text)
         text = (workflows / "macos-updater-acceptance.yml").read_text(encoding="utf-8")
         self.assertIn('if [ "$BASELINE" = public-0.2.2 ]; then\n            flags=(--allow-manual-recovery)', text)

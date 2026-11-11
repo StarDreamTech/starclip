@@ -112,7 +112,7 @@ export function renderCask(version, sha256) {
   name "Starclip"
   name "星笺"
   desc "Local-first clipboard history and code snippet manager"
-  homepage "https://github.com/${repository}"
+  homepage "https://stardreamtech.github.io/projects/starclip/"
 
   livecheck do
     url :url

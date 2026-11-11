@@ -2147,6 +2147,8 @@ fn project_link(target: &str) -> Result<&'static str> {
     match target {
         "repository" => Ok("https://github.com/StarDreamTech/starclip"),
         "issues" => Ok("https://github.com/StarDreamTech/starclip/issues/new"),
+        "organization" => Ok("https://stardreamtech.github.io/"),
+        "project" => Ok("https://stardreamtech.github.io/projects/starclip/"),
         _ => Err("不支持的项目链接。".into()),
     }
 }

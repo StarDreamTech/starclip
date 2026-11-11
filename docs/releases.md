@@ -6,6 +6,7 @@
 
 - **已有 0.1.0**：该版本没有更新器。升级到 0.2.5 时，退出星笺；macOS 将新的 `Starclip.app` 覆盖到原安装位置，Windows 运行新版安装包。保留数据目录和应用标识 `com.starclip.desktop`。
 - **0.2.0 及以后**：在设置中检查更新、阅读发布说明，再选择「下载更新」。HTTPS 下载并通过应用内置公钥及签名版本校验后，弹出「安装并重启」；可选「稍后再说」继续使用，已下载包保留到本次应用退出或再次手动检查更新。只有确认安装才保存当前数据恢复点和旧应用副本；0.2.3 的 macOS 重启流程会先完成正常退出清理，Windows 由安装器退出、替换并重新打开应用；从旧版升级的重启边界见下一条。
+- **已安装的 0.2.5 升到准备中的 0.2.6**：0.2.5 的更新检查地址和下载白名单仍是 `https://github.com/cpython666/starclip`。0.2.6 的 `latest.json` 继续把安装包 URL 写在该兼容前缀下，仓库转移后的跳转指向组织附件。0.2.6 客户端自己的检查地址和白名单改为 `StarDreamTech/starclip`。0.2.6 尚未发布，这条升级路径还没有原生验收。
 - **macOS 0.2.2 升级到 0.2.3**：旧版可能在安装完成后退出而未自动重新打开。请从「应用程序」重新打开星笺一次，不必卸载或删除数据；本次真实旧版验收已确认新包替换、手动重开和数据保留。0.2.3 中的修复不能追溯改变旧进程的重启行为，该次验收不计为自动重启通过。
 - 更新服务不可达、尚无公开版本、签名不符或恢复点创建失败都会报告错误；不会把失败显示成已完成。GitHub 上的草稿对普通客户端不可见。
 - 浏览器预览不能安装桌面更新。当前更新平台为 Apple Silicon macOS 和 Windows x64；Intel Mac、Linux、其他 CPU 架构没有发布产物。
@@ -24,10 +25,11 @@
 
 ## Homebrew 安装源
 
-星笺维护两个 Tap，不需要额外 Homebrew 账号。安装描述都是 `Casks/starclip.rb`，安装包仍由本软件仓库的 GitHub Release 提供。组织 Tap 是 [StarDreamTech/homebrew-tap](https://github.com/StarDreamTech/homebrew-tap)，原个人 Tap 是 [cpython666/homebrew-tap](https://github.com/cpython666/homebrew-tap)。
+星笺维护两个 Tap，不需要额外 Homebrew 账号。安装描述都是 `Casks/starclip.rb`，安装包仍由本软件仓库的 GitHub Release 提供。新安装使用组织 Tap [StarDreamTech/homebrew-tap](https://github.com/StarDreamTech/homebrew-tap)。已经使用个人 Tap [cpython666/homebrew-tap](https://github.com/cpython666/homebrew-tap) 的安装保留原命令。
 
 ```sh
 brew install --cask stardreamtech/tap/starclip
+# 兼容：已经从个人 Tap 安装时继续使用
 brew install --cask cpython666/tap/starclip
 # 维护者发布并更新 Tap 后，先退出应用，再按安装来源升级：
 brew update
@@ -59,7 +61,7 @@ npm run version:check -- vX.Y.Z
 
 ## 一次性配置
 
-1. 使用能公开下载附件的 GitHub 仓库。应用当前稳定更新源固定为 `https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json`；更新端点与公钥位于 `src-tauri/tauri.conf.json`。迁移仓库前须保留旧地址的访问路径，或先通过旧地址发布包含新地址的过渡版本。
+1. 使用能公开下载附件的 GitHub 仓库。0.2.6 起，应用内更新检查地址固定为 `https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json`，下载白名单只接受 `https://github.com/StarDreamTech/starclip/releases/download/`；端点与公钥位于 `src-tauri/tauri.conf.json`，白名单位于 `src-tauri/src/updater.rs`。已发布的 0.2.5 仍只接受 `https://github.com/cpython666/starclip/releases/download/`。因此 0.2.6 的更新清单把安装包 URL 留在该兼容前缀，作为这一次过渡；0.2.7 起清单必须改回组织仓库地址。跳过 0.2.6 的已安装客户端不能直接接受更晚版本的组织地址。
 2. 保管与内置公钥对应的 Tauri 更新私钥，在仓库外安全备份。GitHub 仓库 → Settings → Secrets and variables → Actions 增加 `TAURI_SIGNING_PRIVATE_KEY`（完整私钥文件内容）；有密码时另设 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`，无密码时留空。不要把私钥、密码或真实数据加入 Git，不要在命令输出中打印。
 3. GitHub Actions 需要正常运行权限；只有最终创建草稿的 job 请求 `contents: write`。无需个人访问令牌，使用本次 workflow 的 `GITHUB_TOKEN`。建议限制发布 tag 的创建权限。
 4. 如需 macOS 正式签名及公证，可配置 `APPLE_SIGNING_IDENTITY`、`APPLE_CERTIFICATE`（导出的 `.p12` Base64 内容）、`APPLE_CERTIFICATE_PASSWORD`，以及 `APPLE_ID`、`APPLE_PASSWORD`（应用专用密码）、`APPLE_TEAM_ID`。工作流已将这些可选 secrets 交给 Tauri。未配置时使用 `-` ad-hoc 身份；这不等于 Apple Developer 签名或公证。Windows Authenticode 尚未接入。
@@ -113,7 +115,7 @@ npm run tauri -- signer generate -w /private/path/starclip-updater.key
 
 **0.2.5 已于 2026-11-11 00:42:14（北京时间，UTC 2026-11-10 16:42:14） 正式发布为 latest**，提供 Apple Silicon macOS 和 Windows x64 安装包与签名更新清单；[签名发布流水线](https://github.com/StarDreamTech/starclip/actions/runs/42848254909) 8 项检查通过。真实公开 0.2.4 → 0.2.5 的 [macOS](https://github.com/StarDreamTech/starclip/actions/runs/42856720920) 与 [Windows](https://github.com/StarDreamTech/starclip/actions/runs/42851606421) 均通过自动重启、原创固定数据 / PNG / 偏好保留、结构 4 → 5 和旧自动快照清理；旧应用副本保留。原生升级使用一次性 runner 的临时受信任 HTTPS 服务；8 个匿名公开附件及稳定 latest 的字节另已核对，不扩大为公网 GitHub / CDN 原生更新验收。本机正式安装未替换。完整摘要与证据见 [0.2.5 发布与升级](verification.md#025-正式发布与原生升级验收)。历史 0.2.4 证据见 [对应记录](verification.md#024-正式发布与原生升级验收)。
 
-0.2.5 发布准备已将 updater workflow 默认改为真实 `public-0.2.4`，包大小 / SHA / 内部版本由 `scripts/updater_baselines.py` 固定；SQLite 基线为 4，由元数据读取。0.2.4 必须自动重启，显式旧 0.2.2 仍可记录历史手动恢复，macOS source-comparison 实验保留并单独标明。下次发布应先更新并核对当时的真实公开基线，不以比较版本实验替代。
+0.2.6 发版准备把 `macos-updater-acceptance` / `windows-updater-acceptance` 的默认基线改为真实 `public-0.2.5`，包大小 / SHA / 内部版本由 `scripts/updater_baselines.py` 固定；SQLite 基线为 5，由元数据读取。0.2.5 必须自动重启，显式旧 0.2.2 仍可记录历史手动恢复，macOS source-comparison 实验保留并单独标明。0.2.5 → 0.2.6 的原生升级要等 `v0.2.6` 的签名草稿成功后，用这两个手动 workflow 选择 `public-0.2.5` 再跑；本轮没有创建 tag，也没有跑该验收。
 
 0.2.2 发布时记录的 11 项发布和版本脚本夹具测试，覆盖版本不一致、错误 tag、递增、缺失/重复产物、错误签名结构、密钥与绑定版本、不完整平台、验签失败和更新说明提取。已另用临时原创文件通过官方 Tauri signer → minisign 0.12 → 清单汇总的真实签名验证，并确认篡改文件被拒绝；两个 workflow 通过 actionlint 1.7.12 静态检查。原签名密钥已配置到 GitHub 加密 secret；0.2.2 的两平台签名构建、草稿上传、原生安装与覆盖升级已通过实际工作流，公开更新清单和下载包也已核验。这一阶段的原生安装冒烟只检查临时 runner 的启动和固定数据升级，不能单独证明完整应用内下载 / 弹窗 / 自替换链路。
 
