@@ -1,4 +1,7 @@
 name: macOS signed release updater acceptance
+# Installed clients through 0.2.5 read the separate cpython666/starclip compatibility manifest.
+# The signed organization latest.json keeps StarDreamTech/starclip download URLs.
+# The fixture rewrites only that compatibility response at runtime and serves the same package bytes.
 on:
   workflow_dispatch:
     inputs:

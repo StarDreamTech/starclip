@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, access, copyFile } from 'node:
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { bumpVersion, checkVersion, stableVersion } from '../scripts/version.mjs';
-import { assembleRelease, collectArtifacts, manifestDownloadRepository, releaseNames, releaseNotes, signatureEnvelope } from '../scripts/release-manifest.mjs';
+import { assembleRelease, collectArtifacts, releaseNames, releaseNotes, signatureEnvelope } from '../scripts/release-manifest.mjs';
 
 async function temporary(t) {
   const root = await mkdtemp(join(tmpdir(), 'starclip-release-test-'));
@@ -111,17 +111,16 @@ function signingFixtureFor(version) {
   };
 }
 
-test('0.2.6 清单保留旧下载前缀，其他版本使用组织仓库', async t => {
-  assert.equal(manifestDownloadRepository('0.2.6', 'StarDreamTech/starclip'), 'cpython666/starclip');
-  assert.equal(manifestDownloadRepository('0.2.7', 'StarDreamTech/starclip'), 'StarDreamTech/starclip');
+test('0.2.6 清单的安装包地址使用组织仓库', async t => {
   const root = await temporary(t), artifactsDir = join(root, 'artifacts'), outputDir = join(root, 'output');
   await mkdir(artifactsDir);
   const names = releaseNames('0.2.6'), { pubkey, signature } = signingFixtureFor('0.2.6');
   for (const name of [names.mac, names.dmg, names.windows]) await writeFile(join(artifactsDir, name), 'original fixed test artifact');
   for (const name of [names.mac, names.windows]) await writeFile(join(artifactsDir, name + '.sig'), signature + '\n');
   const manifest = await assembleRelease({ artifactsDir, outputDir, version: '0.2.6', tag: 'v0.2.6', repository: 'StarDreamTech/starclip', pubkey, notes: '测试更新说明', publishedAt: '2026-11-11T01:00:00Z', verify: async () => {} });
-  assert.equal(manifest.platforms['darwin-aarch64'].url, 'https://github.com/cpython666/starclip/releases/download/v0.2.6/Starclip_0.2.6_aarch64.app.tar.gz');
-  assert.equal(manifest.platforms['windows-x86_64'].url, 'https://github.com/cpython666/starclip/releases/download/v0.2.6/Starclip_0.2.6_x64-setup.exe');
+  assert.equal(manifest.platforms['darwin-aarch64'].url, 'https://github.com/StarDreamTech/starclip/releases/download/v0.2.6/Starclip_0.2.6_aarch64.app.tar.gz');
+  assert.equal(manifest.platforms['windows-x86_64'].url, 'https://github.com/StarDreamTech/starclip/releases/download/v0.2.6/Starclip_0.2.6_x64-setup.exe');
+  assert.doesNotMatch(JSON.stringify(manifest), /cpython666/);
 });
 
 test('缺少一个平台时拒绝生成 latest.json', async t => {

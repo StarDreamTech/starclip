@@ -6,15 +6,6 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { checkVersion, stableVersion, projectRoot } from './version.mjs';
 
-export const organizationRepository = 'StarDreamTech/starclip';
-// Installed clients through 0.2.5 only accept this download prefix.
-export const legacyDownloadRepository = 'cpython666/starclip';
-export const bridgeReleaseVersion = '0.2.6';
-
-export function manifestDownloadRepository(version, repository) {
-  return version === bridgeReleaseVersion ? legacyDownloadRepository : repository;
-}
-
 export function releaseNames(version) {
   stableVersion(version);
   return {
@@ -120,8 +111,7 @@ export async function assembleRelease({ artifactsDir, outputDir, version, tag, r
     const signature = (await readFile(byName.get(name + '.sig'), 'utf8')).trim();
     signatureEnvelope(signature, pubkey, version);
     await verify(byName.get(name), signature, pubkey);
-    const downloadRepository = manifestDownloadRepository(version, repository);
-    platforms[platform] = { signature, url: `https://github.com/${downloadRepository}/releases/download/${tag}/${name}` };
+    platforms[platform] = { signature, url: `https://github.com/${repository}/releases/download/${tag}/${name}` };
   }
   const manifest = { version, notes: notes.trim(), pub_date: publishedAt, platforms };
   // Neither latest.json nor a release directory exists until both signatures pass.

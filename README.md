@@ -56,7 +56,7 @@ brew install --cask stardreamtech/tap/starclip
 brew install --cask cpython666/tap/starclip
 ```
 
-Apple Silicon macOS 和 Windows x64 已可从 [0.2.5 GitHub Release](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) 下载。Homebrew 已[同步至 0.2.5](https://github.com/StarDreamTech/starclip/actions/runs/42861273222)，远端 Cask 版本与公开 DMG 摘要已回读一致；先退出应用，再运行 `brew update`，然后按安装来源执行 `brew upgrade --cask stardreamtech/tap/starclip` 或 `brew upgrade --cask cpython666/tap/starclip`，无需先卸载。已有带更新器的版本可在「偏好设置 → 帮助」检查更新。源码已准备 0.2.6，尚未发布；公开安装包仍是 0.2.5。0.2.6 会把应用内更新检查改到组织仓库，已安装的 0.2.5 仍从兼容仓库 `cpython666/starclip` 读取更新清单。
+Apple Silicon macOS 和 Windows x64 已可从 [0.2.5 GitHub Release](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) 下载。Homebrew 已[同步至 0.2.5](https://github.com/StarDreamTech/starclip/actions/runs/42861273222)，远端 Cask 版本与公开 DMG 摘要已回读一致；先退出应用，再运行 `brew update`，然后按安装来源执行 `brew upgrade --cask stardreamtech/tap/starclip` 或 `brew upgrade --cask cpython666/tap/starclip`，无需先卸载。已有带更新器的版本可在「偏好设置 → 帮助」检查更新。源码已准备 0.2.6，尚未发布；公开安装包仍是 0.2.5。0.2.6 的应用内更新检查和组织仓库清单都使用 `StarDreamTech/starclip`。已安装的 0.2.5 仍从独立兼容仓库 `cpython666/starclip` 读取更新清单；发版后需要把同一份安装包镜像到该仓库，并只改写那份清单里的地址。
 
 **0.2.5 已于 2026-11-11 00:42:14（北京时间，UTC 2026-11-10 16:42:14） 正式发布为 latest**，提供 Apple Silicon macOS 和 Windows x64 安装包与签名更新清单；[签名发布流水线](https://github.com/StarDreamTech/starclip/actions/runs/42848254909) 8 项检查通过。真实公开 0.2.4 → 0.2.5 的 [macOS](https://github.com/StarDreamTech/starclip/actions/runs/42856720920) 与 [Windows](https://github.com/StarDreamTech/starclip/actions/runs/42851606421) 均通过自动重启、原创固定数据 / PNG / 偏好保留、结构 4 → 5 和旧自动快照清理；旧应用副本保留。原生升级使用一次性 runner 的临时受信任 HTTPS 服务；8 个匿名公开附件及稳定 latest 的字节另已核对，不扩大为公网 GitHub / CDN 原生更新验收。本机正式安装未替换。
 

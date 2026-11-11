@@ -48,7 +48,7 @@ If you already installed from the personal tap [cpython666/homebrew-tap](https:/
 brew install --cask cpython666/tap/starclip
 ```
 
-The published installer is still v0.2.5. Source version 0.2.6 is prepared and not yet released. It moves in-app update checks to the organization repository; installed 0.2.5 clients still read the update manifest from the compatibility repository `cpython666/starclip`.
+The published installer is still v0.2.5. Source version 0.2.6 is prepared and not yet released. Its in-app update check and the organization manifest both use `StarDreamTech/starclip`. Installed 0.2.5 clients still read the update manifest from the separate compatibility repository `cpython666/starclip`; after publication, mirror the same packages there and rewrite only that manifest's URLs.
 
 Quit Starclip before upgrading with Homebrew, then upgrade the tap you originally installed:
 

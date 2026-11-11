@@ -5,7 +5,7 @@
 ## [0.2.6] - 2026-11-11
 
 - 仓库维护方改为 StarDreamTech（星梦科技）。README、帮助页、Homebrew Cask 主页和宣传素材改为组织仓库 `StarDreamTech/starclip`、组织主页 https://stardreamtech.github.io/ 与项目介绍页 https://stardreamtech.github.io/projects/starclip/。
-- 本版本起，应用内更新检查地址和下载白名单固定为 `https://github.com/StarDreamTech/starclip`。已安装的 0.2.5 及更早带更新器的版本只接受 `https://github.com/cpython666/starclip/releases/download/`；0.2.6 的更新清单仍把安装包地址写在该兼容前缀下，由仓库转移后的跳转提供同一份附件。安装 0.2.6 之后，下一版清单必须改用组织仓库地址，否则 0.2.6 会拒绝下载。
+- 本版本起，应用内更新检查地址、下载白名单和组织仓库的 `latest.json` 都使用 `https://github.com/StarDreamTech/starclip`。已安装的 0.2.5 及更早带更新器的版本只接受 `https://github.com/cpython666/starclip/releases/download/`，并继续从独立兼容仓库读取清单。发版后把同一份安装包镜像到该仓库的 v0.2.6 Release，并只把那份清单里的 URL 改成兼容前缀；签名覆盖安装包字节，不覆盖 URL。
 - 推荐的 Homebrew 安装命令改为 `brew install --cask stardreamtech/tap/starclip`。已经使用 `cpython666/tap/starclip` 的安装可以继续用原命令升级。
 - 自动更新验收的默认公开基线改为已发布的 0.2.5。本条目是发版准备，0.2.6 尚未公开，也尚未完成 0.2.5 → 0.2.6 的原生升级验收。
 

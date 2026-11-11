@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Real updater UI on a disposable GitHub macOS ARM runner, never a user Mac.
 
-Release mode defaults to genuine public 0.2.4. Older public packages and tag source with
+Release mode defaults to genuine public 0.2.5. Older public packages and tag source with
 comparison metadata 0.2.2 remain explicit baselines for signed draft artifacts
-over a runner-local trusted HTTPS fixture. Historical 0.2.2 may require explicitly recorded manual recovery;
+over a runner-local trusted HTTPS fixture. The fixture serves the signed organization
+manifest unchanged, and rewrites download URLs only for the cpython666 compatibility
+latest.json so an installed 0.2.5 client can accept the same bytes. Historical 0.2.2 may require explicitly recorded manual recovery;
 that never counts as an automatic restart pass or public GitHub delivery test.
 Without --fixture, retain the legacy comparison-0.2.1 to public-0.2.2 experiment.
 """

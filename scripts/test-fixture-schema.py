@@ -58,6 +58,24 @@ def installer(path, mode, schema):
 
 
 class FixtureSchemaTests(unittest.TestCase):
+    def test_compatibility_manifest_rewrites_download_urls_without_touching_signatures(self):
+        signature = "same-signature"
+        manifest = {
+            "version": "0.2.6",
+            "notes": "说明",
+            "platforms": {
+                "darwin-aarch64": {"signature": signature, "url": "https://github.com/StarDreamTech/starclip/releases/download/v0.2.6/Starclip_0.2.6_aarch64.app.tar.gz"},
+                "windows-x86_64": {"signature": signature, "url": "https://github.com/StarDreamTech/starclip/releases/download/v0.2.6/Starclip_0.2.6_x64-setup.exe"},
+            },
+        }
+        rewritten = RELEASE.compatibility_manifest(manifest)
+        self.assertEqual(manifest["platforms"]["darwin-aarch64"]["url"], "https://github.com/StarDreamTech/starclip/releases/download/v0.2.6/Starclip_0.2.6_aarch64.app.tar.gz")
+        self.assertEqual(rewritten["platforms"]["darwin-aarch64"]["signature"], signature)
+        self.assertEqual(rewritten["platforms"]["windows-x86_64"]["url"], "https://github.com/cpython666/starclip/releases/download/v0.2.6/Starclip_0.2.6_x64-setup.exe")
+        self.assertEqual(rewritten["notes"], "说明")
+        with self.assertRaisesRegex(ValueError, "organization"):
+            RELEASE.compatibility_manifest({"platforms": {"darwin-aarch64": {"url": "https://github.com/cpython666/starclip/releases/download/v0.2.6/pkg"}}})
+
     def test_public_baseline_selection_and_restart_requirements(self):
         for version, schema in (("0.2.2", 2), ("0.2.3", 2), ("0.2.4", 4), ("0.2.5", 5)):
             origin = "public-" + version

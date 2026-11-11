@@ -39,9 +39,9 @@ $targetSchema = [int]$fixture.targetSchema
 if ($targetSchema -lt 1) { throw 'The signed target schema is missing or invalid.' }
 $endpoint = 'https://github.com/StarDreamTech/starclip/releases/latest/download/latest.json'
 $packageName = "Starclip_${targetVersion}_x64-setup.exe"
-# 0.2.6 is the bridge release: installed 0.2.5 only accepts the previous repository prefix.
-$downloadOwner = if ($targetVersion -eq '0.2.6') { 'cpython666' } else { 'StarDreamTech' }
-$targetUrl = "https://github.com/$downloadOwner/starclip/releases/download/v$targetVersion/$packageName"
+# The signed organization manifest always uses this URL. Clients through 0.2.5 request the
+# cpython666 compatibility manifest; the fixture rewrites that response and serves the same bytes.
+$targetUrl = "https://github.com/StarDreamTech/starclip/releases/download/v$targetVersion/$packageName"
 if ($fixture.targetUrl -ne $targetUrl -or $fixture.targetFilename -ne $packageName) {
   throw 'Unexpected production update package URL or filename.'
 }
