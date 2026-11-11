@@ -44,17 +44,18 @@
 
 ## 安装与升级
 
-Apple Silicon Mac（M 系列芯片，macOS 11+）可通过星笺维护的 [Homebrew Tap](https://github.com/cpython666/homebrew-tap) 安装：
+Apple Silicon Mac（M 系列芯片，macOS 11+）可通过下面任一 Homebrew Tap 安装。两处使用同一份星笺 Cask，安装包来自本仓库的 GitHub Release。组织 Tap 是 [StarDreamTech/homebrew-tap](https://github.com/StarDreamTech/homebrew-tap)，原个人 Tap 是 [cpython666/homebrew-tap](https://github.com/cpython666/homebrew-tap)：
 
 ```sh
+brew install --cask stardreamtech/tap/starclip
 brew install --cask cpython666/tap/starclip
 ```
 
-Apple Silicon macOS 和 Windows x64 已可从 [0.2.5 GitHub Release](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) 下载。Homebrew 已[同步至 0.2.5](https://github.com/StarDreamTech/starclip/actions/runs/42861273222)，远端 Cask 版本与公开 DMG 摘要已回读一致；先退出应用，再运行 `brew update` 和 `brew upgrade --cask cpython666/tap/starclip`，无需先卸载。已有带更新器的版本可在「偏好设置 → 帮助」检查更新。
+Apple Silicon macOS 和 Windows x64 已可从 [0.2.5 GitHub Release](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5) 下载。Homebrew 已[同步至 0.2.5](https://github.com/StarDreamTech/starclip/actions/runs/42861273222)，远端 Cask 版本与公开 DMG 摘要已回读一致；先退出应用，再运行 `brew update`，然后按安装来源执行 `brew upgrade --cask stardreamtech/tap/starclip` 或 `brew upgrade --cask cpython666/tap/starclip`，无需先卸载。已有带更新器的版本可在「偏好设置 → 帮助」检查更新。
 
 **0.2.5 已于 2026-11-11 00:42:14（北京时间，UTC 2026-11-10 16:42:14） 正式发布为 latest**，提供 Apple Silicon macOS 和 Windows x64 安装包与签名更新清单；[签名发布流水线](https://github.com/StarDreamTech/starclip/actions/runs/42848254909) 8 项检查通过。真实公开 0.2.4 → 0.2.5 的 [macOS](https://github.com/StarDreamTech/starclip/actions/runs/42856720920) 与 [Windows](https://github.com/StarDreamTech/starclip/actions/runs/42851606421) 均通过自动重启、原创固定数据 / PNG / 偏好保留、结构 4 → 5 和旧自动快照清理；旧应用副本保留。原生升级使用一次性 runner 的临时受信任 HTTPS 服务；8 个匿名公开附件及稳定 latest 的字节另已核对，不扩大为公网 GitHub / CDN 原生更新验收。本机正式安装未替换。
 
-如果 Homebrew 提示 Cask 未受信任，执行 `brew trust --cask cpython666/tap/starclip` 后重试，只授权星笺这一项。自有 Tap 不等于 Homebrew 官方主仓收录；更新包具备 Tauri 签名校验，但尚无 Apple Developer 公证或 Windows 发行者证书。安装、升级和分发边界见 [发布说明](docs/releases.md)。
+如果 Homebrew 提示 Cask 未受信任，按安装来源执行 `brew trust --cask stardreamtech/tap/starclip` 或 `brew trust --cask cpython666/tap/starclip` 后重试，只授权星笺这一项。自有 Tap 不等于 Homebrew 官方主仓收录；更新包具备 Tauri 签名校验，但尚无 Apple Developer 公证或 Windows 发行者证书。安装、升级和分发边界见 [发布说明](docs/releases.md)。
 
 ## 已实现
 

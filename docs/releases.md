@@ -24,22 +24,24 @@
 
 ## Homebrew 安装源
 
-星笺的自有 Tap 是 [cpython666/homebrew-tap](https://github.com/cpython666/homebrew-tap)，不需要额外 Homebrew 账号。安装描述位于该仓库的 `Casks/starclip.rb`，安装包仍由本软件仓库的 GitHub Release 提供。
+星笺维护两个 Tap，不需要额外 Homebrew 账号。安装描述都是 `Casks/starclip.rb`，安装包仍由本软件仓库的 GitHub Release 提供。组织 Tap 是 [StarDreamTech/homebrew-tap](https://github.com/StarDreamTech/homebrew-tap)，原个人 Tap 是 [cpython666/homebrew-tap](https://github.com/cpython666/homebrew-tap)。
 
 ```sh
+brew install --cask stardreamtech/tap/starclip
 brew install --cask cpython666/tap/starclip
-# 维护者发布并更新 Tap 后，先退出应用再升级：
+# 维护者发布并更新 Tap 后，先退出应用，再按安装来源升级：
 brew update
+brew upgrade --cask stardreamtech/tap/starclip
 brew upgrade --cask cpython666/tap/starclip
 ```
 
 [0.2.5 已公开为最新稳定版](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5)；[Homebrew 同步](https://github.com/StarDreamTech/starclip/actions/runs/42861273222) 两个 job 已完成，当前 Cask 为 **0.2.5**。公开 DMG、应用身份 / 版本 / 架构及 Homebrew 在线审计通过，[机器人提交](https://github.com/cpython666/homebrew-tap/commit/52a9d65d938742c2188f15f9f12fc2ec0a842005) 和远端 Cask 的 SHA-256 已回读核对。更新包有 Tauri 签名，macOS 为 ad-hoc，仍无 Apple Developer 公证或 Windows 发行者证书。
 
-如果较新 Homebrew 提示该 Cask 尚未受信任，执行 `brew trust --cask cpython666/tap/starclip` 后重试；这只信任星笺这一项，不需要信任整个 Tap。
+如果较新 Homebrew 提示该 Cask 尚未受信任，按安装来源执行 `brew trust --cask stardreamtech/tap/starclip` 或 `brew trust --cask cpython666/tap/starclip` 后重试；这只信任星笺这一项，不需要信任整个 Tap。
 
 已有手动安装或较新本地开发版时，不用 `--force` 覆盖或降级。此 Cask 没有 `zap` 或删除数据脚本，普通升级 / 卸载只管理程序文件；程序内部的数据迁移边界仍由相应版本决定。自有 Tap 不代表 Homebrew 官方主仓收录；WinGet 尚未接入。
 
-正式 Release 发布后的 Tap 同步由 `.github/workflows/homebrew.yml` 承担：只处理公开、非预发布且为 latest 的 `vX.Y.Z`，重新下载 DMG 核对摘要、签名、应用身份 / 版本 / 架构并完成 Homebrew 检查后，才更新 Cask 的版本与 SHA-256。失败保留原 Cask；旧任务不得降级，同版本换摘要会被拒绝。0.2.2 已完成首次完整自动同步；没有把历史 alpha 改标为稳定版或覆盖其附件。配置、重试与预演见 [Homebrew 发布自动化](homebrew-release.md)。0.2.5 已完成双平台签名、全新 / 旧版覆盖安装、真实公开 0.2.4 应用内升级和匿名公开附件验收；详细证据见下方「当前验证边界」。
+正式 Release 发布后的 Tap 同步由 `.github/workflows/homebrew.yml` 承担：只处理公开、非预发布且为 latest 的 `vX.Y.Z`，重新下载 DMG 核对摘要、签名、应用身份 / 版本 / 架构并完成 Homebrew 检查后，才把同一份 Cask 的版本与 SHA-256 写入两个 Tap。个人 Tap 使用 `HOMEBREW_TAP_DEPLOY_KEY`，密钥缺失则该 job 失败并保留原 Cask。组织 Tap 使用 `HOMEBREW_ORG_TAP_DEPLOY_KEY`；secret 尚未配置时该 job 提示并成功跳过，不使个人 Tap 失败。旧任务不得降级，同版本换摘要会被拒绝。0.2.2 已完成首次完整自动同步；没有把历史 alpha 改标为稳定版或覆盖其附件。配置、重试与预演见 [Homebrew 发布自动化](homebrew-release.md)。0.2.5 已完成双平台签名、全新 / 旧版覆盖安装、真实公开 0.2.4 应用内升级和匿名公开附件验收；详细证据见下方「当前验证边界」。
 
 ## 版本与发布说明
 

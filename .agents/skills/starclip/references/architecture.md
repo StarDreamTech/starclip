@@ -107,7 +107,7 @@ SQLite 已发布 0.2.4 为结构 4，当前开发分支为 5，主要表为 `cli
 
 版本与分发：`scripts/version.mjs`、`scripts/release-manifest.mjs`、`CHANGELOG.md`、`.github/workflows/{verify,release}.yml`；固定 endpoint 与公开验签密钥位于 `tauri.conf.json`，私钥不得入仓库。见 [发布指南](../../../../docs/releases.md)。
 
-Homebrew 同步独立使用 `.github/workflows/homebrew.yml`、`scripts/homebrew-release.mjs` 与 `tests/homebrew-release.test.ts`。读取公开 latest 稳定 Release，校验实际 DMG 与清单及应用身份后生成 Cask；仅末尾 Tap job 使用单仓 deploy key，推送前重查 Release，拒绝降级 / 同版换摘要。详见 [Homebrew 自动化](../../../../docs/homebrew-release.md)，不能把同步验包称为完整安装升级验收。
+Homebrew 同步独立使用 `.github/workflows/homebrew.yml`、`scripts/homebrew-release.mjs` 与 `tests/homebrew-release.test.ts`。读取公开 latest 稳定 Release，校验实际 DMG 与清单及应用身份后生成同一份 Cask。`update-tap` 用 `HOMEBREW_TAP_DEPLOY_KEY` 写入 `cpython666/homebrew-tap`；`update-org-tap` 用 `HOMEBREW_ORG_TAP_DEPLOY_KEY` 写入 `StarDreamTech/homebrew-tap`。组织 secret 为空时该 job 提示并成功跳过，不使个人 Tap job 失败。两个写入 job 都在推送前重查 Release，拒绝降级 / 同版换摘要。组织 Tap 自动推送尚未经过正式 Release 实跑。详见 [Homebrew 自动化](../../../../docs/homebrew-release.md)，不能把同步验包称为完整安装升级验收。
 
 产品宣传素材源为 `scripts/share-posters.html`，直接渲染既有星芽组件与原创界面 / 代码示意；中文主题 ID 为 `overview` / `workflow` / `companion` / `creation` / `ai`，英文对应加 `-en`，均为 1080 × 1440。`scripts/compress-share-images.py` 按 `product-share-catalog.json` 的十个图片条目制作 256 色索引 PNG 并回填字节数，Pillow 仅为素材制作依赖；文案 ID 为 `short` / `detailed` 及其 `-en` 版本。素材语言由面板临时选择，不写应用偏好、不自动发布；macOS 英文 AI 图原生保存 / 取消已验收，复制 / 跨应用粘贴与 Windows 原生分享仍需单独验收。见 [分享说明](../../../../docs/product-share.md)。
 

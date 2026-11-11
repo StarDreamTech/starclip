@@ -127,7 +127,10 @@ test('Homebrew 从 alpha Cask 过渡稳定版，写入固定模板并保持重�
   const cask = await readFile(path, 'utf8');
   assert.match(cask, /version "0\.2\.0"/);
   assert.match(cask, new RegExp(`sha256 "${evidence.sha256}"`));
-  assert.match(cask, /Starclip_#\{version\}_aarch64\.dmg/);
+  assert.match(cask, /url "https:\/\/github\.com\/StarDreamTech\/starclip\/releases\/download\/v#\{version\}\/Starclip_#\{version\}_aarch64\.dmg"/);
+  assert.match(cask, /homepage "https:\/\/github\.com\/StarDreamTech\/starclip"/);
+  assert.match(cask, /https:\/\/github\.com\/StarDreamTech\/starclip\/releases\/tag\/v#\{version\}/);
+  assert.doesNotMatch(cask, /cpython666/);
   assert.match(cask, /depends_on arch: :arm64/);
   assert.match(cask, /app "Starclip\.app"/);
   assert.doesNotMatch(cask, /alpha|zap|auto_updates|system\(/);
@@ -176,4 +179,21 @@ test('Homebrew CLI 从公开元数据、真实下载文件到 Cask 的本地完�
   assert.equal(run('recheck', evidencePath, releasePath, releasePath).unchanged, true);
   assert.equal(run('cask', evidencePath, caskPath).changed, true);
   assert.equal(run('cask', evidencePath, caskPath).changed, false);
+});
+
+test('Homebrew 工作流把同一份 Cask 写入两个 Tap，组织密钥缺失时跳过', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/homebrew.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /github\.repository == 'StarDreamTech\/starclip'/);
+  const personal = workflow.split(/^ {2}update-org-tap:/m)[0];
+  const organization = workflow.split(/^ {2}update-org-tap:/m)[1];
+  assert.ok(organization);
+  assert.match(personal, /repository: cpython666\/homebrew-tap/);
+  assert.match(personal, /secrets\.HOMEBREW_TAP_DEPLOY_KEY/);
+  assert.match(personal, /Missing HOMEBREW_TAP_DEPLOY_KEY repository secret\./);
+  assert.match(organization, /repository: StarDreamTech\/homebrew-tap/);
+  assert.match(organization, /secrets\.HOMEBREW_ORG_TAP_DEPLOY_KEY/);
+  assert.match(organization, /configured=false/);
+  assert.match(organization, /steps\.org_key\.outputs\.configured == 'true'/);
+  assert.doesNotMatch(organization, /exit 1/);
+  assert.doesNotMatch(workflow, /needs:\s*(?:\[verify,\s*update-tap\]|update-tap)/);
 });

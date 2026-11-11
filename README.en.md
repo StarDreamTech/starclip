@@ -36,20 +36,22 @@ Each PNG is 1080 × 1440. Use the Share page to select and copy the correspondin
 
 Starclip v0.2.5 is available for **Apple Silicon macOS 11+** and **Windows x64**. Download an installer from the [v0.2.5 release](https://github.com/StarDreamTech/starclip/releases/tag/v0.2.5).
 
-On an Apple Silicon Mac, you can also use the project-maintained Homebrew tap:
+On an Apple Silicon Mac, you can use either project-maintained Homebrew tap. Both install the same Starclip cask from this repository's GitHub Releases. The organization tap is [StarDreamTech/homebrew-tap](https://github.com/StarDreamTech/homebrew-tap); the original personal tap is [cpython666/homebrew-tap](https://github.com/cpython666/homebrew-tap):
 
 ```sh
+brew install --cask stardreamtech/tap/starclip
 brew install --cask cpython666/tap/starclip
 ```
 
-Quit Starclip before upgrading with Homebrew:
+Quit Starclip before upgrading with Homebrew, then upgrade the tap you originally installed:
 
 ```sh
 brew update
+brew upgrade --cask stardreamtech/tap/starclip
 brew upgrade --cask cpython666/tap/starclip
 ```
 
-If Homebrew asks you to trust the cask, run `brew trust --cask cpython666/tap/starclip` and try again. The tap is maintained by this project and is separate from Homebrew's main repository.
+If Homebrew asks you to trust the cask, run `brew trust --cask stardreamtech/tap/starclip` or `brew trust --cask cpython666/tap/starclip` and try again. These taps are maintained by this project and are separate from Homebrew's main repository.
 
 Versions with the built-in updater can check for updates in **Preferences → Help**. Update checks notify you; downloading and installing require your action. Updates are checked at startup and at most once every 24 hours automatically. You can disable automatic checks or ignore a particular version. Only stable releases are accepted; no preview update channel or LTS maintenance term is offered.
 
