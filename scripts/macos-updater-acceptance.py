@@ -289,6 +289,12 @@ def main():
         release_fixture = json.loads((args.fixture / "fixture.json").read_text())
         assert release_fixture["platform"] == "darwin-aarch64" and release_fixture["publicKey"] == PUBLIC_KEY
         assert release_fixture["endpoint"] == ENDPOINT
+        assert release_fixture["commitMatch"] in ("exact", "ci-only")
+        assert re.fullmatch(r"[a-f0-9]{40}", release_fixture["releaseRunHeadSha"])
+        if release_fixture["commitMatch"] == "exact":
+            assert release_fixture["releaseRunHeadSha"] == release_fixture["sourceHeadSha"]
+        else:
+            assert release_fixture["releaseRunHeadSha"] != release_fixture["sourceHeadSha"]
         TARGET = release_fixture["targetVersion"]
         MANIFEST_HASH = release_fixture["latestManifestSha256"]
         TARGET_URL, TARGET_HASH = release_fixture["targetUrl"], release_fixture["targetSha256"]
@@ -520,7 +526,10 @@ def main():
         write("result.json", dict(result="passed" if restart_mode == "automatic" else "passed-with-manual-recovery",
                                   restartMode=restart_mode, baselineOrigin=args.baseline_origin,
                                   baselinePackage=baseline_package,
-                                  sourceCommit=release_fixture["sourceHeadSha"] if release_fixture else os.environ["GITHUB_SHA"], comparisonVersion=COMPARISON,
+                                  sourceCommit=release_fixture["sourceHeadSha"] if release_fixture else os.environ["GITHUB_SHA"],
+                                  commitMatch=release_fixture["commitMatch"] if release_fixture else None,
+                                  releaseRunHeadSha=release_fixture["releaseRunHeadSha"] if release_fixture else None,
+                                  comparisonVersion=COMPARISON,
                                   targetVersion=TARGET, manifestSha256=MANIFEST_HASH, targetArchiveSha256=TARGET_HASH,
                                   originalPid=original_pid, restartedPid=restarted_pid,
                                   originalExecutableSha256=baseline_hash, installedExecutableSha256=installed_hash))

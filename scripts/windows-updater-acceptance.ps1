@@ -7,7 +7,7 @@ param(
   [Parameter(Mandatory)][ValidatePattern('^[1-9][0-9]*$')][string]$ReleaseRunId
 )
 
-# Selected genuine public baseline -> signed draft target on a disposable VM.
+# Selected genuine public baseline -> signed published target on a disposable VM.
 # The private HTTPS fixture retains production URLs and signature verification.
 # Never run on a user PC; neither package nor product configuration is modified.
 $ErrorActionPreference = 'Stop'
@@ -33,6 +33,9 @@ $fixture = Get-Content -LiteralPath (Join-Path $FixtureDirectory 'fixture.json')
 if ($fixture.platform -ne 'windows-x86_64' -or $fixture.sourceHeadSha -ne $SourceHeadSha -or
     [string]$fixture.releaseRunId -ne $ReleaseRunId -or $fixture.sourceRef -ne "v$($fixture.targetVersion)" -or
     [version]$fixture.targetVersion -le [version]$baselineVersion) { throw 'The signed fixture provenance or version does not match this run.' }
+if ($fixture.commitMatch -ne 'exact' -and $fixture.commitMatch -ne 'ci-only') { throw 'The release commit match is missing.' }
+if ($fixture.commitMatch -eq 'exact' -and $fixture.releaseRunHeadSha -ne $fixture.sourceHeadSha) { throw 'Exact tag match does not agree with the release run head.' }
+if ($fixture.commitMatch -eq 'ci-only' -and $fixture.releaseRunHeadSha -eq $fixture.sourceHeadSha) { throw 'CI-only match must record a different release run head.' }
 $targetVersion = [string]$fixture.targetVersion
 $baselineSchema = [int]$baseline.schema
 $targetSchema = [int]$fixture.targetSchema
@@ -355,7 +358,7 @@ try {
   for ($i = 0; $i -lt 3; $i++) { Start-Sleep -Seconds 1; Check-UpdaterFixture 'after-install' }
   Stop-OwnedApplication
   Check-UpdaterFixture 'after-install'
-  @{ result='passed'; sourceHeadSha=$SourceHeadSha; releaseRunId=$ReleaseRunId; baselineOrigin=$BaselineOrigin; baselineVersion=$baselineVersion; targetVersion=$targetVersion;
+  @{ result='passed'; sourceHeadSha=$SourceHeadSha; releaseRunHeadSha=$fixture.releaseRunHeadSha; commitMatch=$fixture.commitMatch; releaseRunId=$ReleaseRunId; baselineOrigin=$BaselineOrigin; baselineVersion=$baselineVersion; targetVersion=$targetVersion;
     baselineInstallerSize=$baseline.size; baselineInstallerUrl=$baseline.url;
     baselineInstallerSha256=$baselineInstallerHash; targetInstallerSha256=$fixture.targetSha256; manifestSha256=$fixture.latestManifestSha256;
     originalPid=$originalPid; originalExeSha256=$baselineHash; installedExeSha256=$installedHash; restartMode='automatic';
