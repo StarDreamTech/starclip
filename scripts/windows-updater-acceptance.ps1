@@ -122,19 +122,28 @@ function Wait-ForPausedWindow {
       try {
         $root = [System.Windows.Automation.AutomationElement]::FromHandle($script:appProcess.MainWindowHandle)
         $nodes = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+        $paused = $null
+        $closer = $null
+        $skip = $null
         foreach ($node in $nodes) {
-          if (!$node.Current.IsOffscreen -and $node.Current.IsEnabled -and $node.Current.Name -match '^(?:跳过教程|Skip tour)$') {
-            $pattern = $null
-            if ($node.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) { $pattern.Invoke() }
-          }
-          if (!$node.Current.IsOffscreen -and $node.Current.Name -match '^(?:记录已暂停|Recording paused)(?:\s|/|$)' -and
-              (Test-Path -LiteralPath $database -PathType Leaf)) { return }
+          if ($node.Current.IsOffscreen) { continue }
+          if ($node.Current.Name -match '^(?:记录已暂停|Recording paused)(?:\s|/|$)') { $paused = $node }
+          if ($node.Current.IsEnabled -and $node.Current.Name -match '^(?:关闭弹窗|Close dialog)$') { $closer = $node }
+          if ($node.Current.IsEnabled -and $node.Current.Name -match '^(?:跳过教程|Skip tour)$') { $skip = $node }
         }
+        # 0.2.5 persists an open preferences dialog. Installing from Help restores
+        # that modal and can hide the pause status from UI Automation.
+        foreach ($node in @($closer, $skip)) {
+          if ($null -eq $node) { continue }
+          $pattern = $null
+          if ($node.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) { $pattern.Invoke() }
+        }
+        if ($null -ne $paused -and (Test-Path -LiteralPath $database -PathType Leaf)) { return }
       } catch [System.Windows.Automation.ElementNotAvailableException] { }
     }
     Start-Sleep -Milliseconds 500
   } while ([DateTime]::UtcNow -lt $deadline)
-  throw 'The rendered pause status did not appear within one minute.'
+  throw 'The rendered pause status did not appear within one minute. A preferences dialog restored from the pre-install session can cover it.'
 }
 
 function Start-And-AssertPaused {

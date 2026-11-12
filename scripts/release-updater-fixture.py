@@ -20,6 +20,7 @@ import sqlite3
 import ssl
 import struct
 import subprocess
+import sys
 import time
 from urllib.parse import urlsplit
 import zlib
@@ -56,6 +57,52 @@ def png_chunk(kind, body):
 PNG = (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 6, 0, 0, 0))
        + png_chunk(b"IDAT", zlib.compress(b"\0" + PIXELS[:8] + b"\0" + PIXELS[8:]))
        + png_chunk(b"IEND", b""))
+
+
+def configure_stdio():
+    """The Windows runner encodes the console as cp1252 unless a stream says otherwise."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
+def text_output(value, stream):
+    if isinstance(value, str):
+        return value
+    raise RuntimeError(
+        f"Subprocess {stream} was not captured as text ({type(value).__name__}). "
+        "Windows Python decodes text=True with cp1252 unless encoding='utf-8' is set; "
+        "a UnicodeDecodeError in the reader thread leaves that stream as None."
+    )
+
+
+def run_text(args, *, timeout, check=False):
+    result = subprocess.run(
+        list(args), check=False, capture_output=True, timeout=timeout,
+        text=True, encoding="utf-8", errors="replace",
+    )
+    stdout = text_output(result.stdout, "stdout")
+    stderr = text_output(result.stderr, "stderr")
+    if check and result.returncode != 0:
+        detail = (stderr or stdout).strip() or f"exit {result.returncode} with no output"
+        raise RuntimeError("Command failed: " + detail)
+    result.stdout = stdout
+    result.stderr = stderr
+    return result
+
+
+def require_success_text(result, failure):
+    stdout = text_output(result.stdout, "stdout")
+    stderr = text_output(result.stderr, "stderr")
+    if result.returncode != 0:
+        detail = (stderr or stdout).strip()
+        raise ValueError(detail or f"{failure} (exit {result.returncode}, no output)")
+    return stdout
 
 
 def guard_runner():
@@ -169,7 +216,7 @@ def prepare(args, temporary):
     if args.source_ref != "v" + args.version or not re.fullmatch(r"[a-f0-9]{40}", args.source_head_sha):
         raise ValueError("Tag and tag commit are required")
     source = args.source_directory.resolve(strict=True)
-    actual_head = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+    actual_head = run_text(["git", "-C", str(source), "rev-parse", "HEAD"], timeout=15, check=True).stdout.strip()
     if actual_head != args.source_head_sha:
         raise ValueError("Target schema source is not the tag commit")
     binding_path = args.published_binding.resolve(strict=True)
@@ -178,13 +225,12 @@ def prepare(args, temporary):
     binding = validate_published_binding(json.loads(binding_path.read_text(encoding="utf-8")),
                                          version=args.version, source_ref=args.source_ref,
                                          source_head_sha=args.source_head_sha, release_run_id=args.release_run_id)
-    verified = subprocess.run(["node", str(Path(__file__).resolve().parent / "release-run-binding.mjs"),
-                               "verify-assets", "--binding", str(binding_path), "--assets", str(assets)],
-                              check=False, capture_output=True, text=True, timeout=120)
-    if verified.returncode != 0:
-        raise ValueError((verified.stderr or verified.stdout).strip() or "Published asset verification failed")
-    if verified.stdout.strip():
-        print(verified.stdout.strip())
+    verified = run_text(["node", str(Path(__file__).resolve().parent / "release-run-binding.mjs"),
+                         "verify-assets", "--binding", str(binding_path), "--assets", str(assets)],
+                        timeout=120)
+    summary = require_success_text(verified, "Published asset verification failed")
+    if summary.strip():
+        print(summary.strip())
     target_schema = source_schema(source)
     manifest, hashes, mapping = verify_assets(assets, args.version)
     output.mkdir(mode=0o700)
@@ -345,6 +391,7 @@ def main():
         data_command.add_argument("--database", type=Path, required=True)
         data_command.add_argument("--expected-schema", type=int, required=True)
     args = parser.parse_args()
+    configure_stdio()
     temporary = guard_runner()
     if args.command == "prepare":
         prepare(args, temporary)

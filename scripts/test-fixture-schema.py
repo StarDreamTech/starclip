@@ -54,7 +54,7 @@ def database(path, schema):
 
 def installer(path, mode, schema):
     return subprocess.run([sys.executable, str(SCRIPTS / 'installer-fixture.py'), str(path), mode, str(schema)],
-                          capture_output=True, text=True, timeout=15)
+                          capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
 
 
 class FixtureSchemaTests(unittest.TestCase):
@@ -94,7 +94,7 @@ class FixtureSchemaTests(unittest.TestCase):
         self.assertEqual(MAC.baseline_comparison("source-comparison", 4, 4, release_mode=True, allow_manual_recovery=False), "0.2.2")
         self.assertEqual(MAC.baseline_comparison("source-comparison", 2, 2, release_mode=False, allow_manual_recovery=False), "0.2.1")
         metadata = subprocess.run([sys.executable, str(SCRIPTS / "updater_baselines.py"), "metadata", "--platform", "windows-x86_64"],
-                                  check=True, capture_output=True, text=True, timeout=15)
+                                  check=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
         self.assertEqual(json.loads(metadata.stdout)["origin"], "public-0.2.5")
 
     def test_pinned_public_package_rejects_bytes_and_wrong_internal_version(self):
@@ -312,6 +312,82 @@ class FixtureSchemaTests(unittest.TestCase):
                 context['fixture']('after-install')
             self.assertEqual(output[-1]['recoveryPoints'], 1)
             self.assertEqual(current.read_bytes(), b'original current database fixture')
+
+    def test_subprocess_text_uses_utf8_and_explains_missing_output(self):
+        # The published-binding summary starts with this sentence. Byte 0x8d is
+        # the third byte of 配 and is undefined in cp1252, which is what made
+        # Windows text=True set stdout to None.
+        message = "匹配方式：仅 CI 文件差异"
+        raw = message.encode("utf-8")
+        self.assertEqual(raw[5], 0x8D)
+        script = "import sys; sys.stdout.buffer.write(" + repr(raw) + ")"
+        result = RELEASE.run_text([sys.executable, "-c", script], timeout=15)
+        self.assertEqual(result.stdout, message)
+        self.assertEqual(RELEASE.require_success_text(result, "Published asset verification failed"), message)
+        missing = subprocess.CompletedProcess(["node", "verify-assets"], 0, None, "")
+        with self.assertRaisesRegex(RuntimeError, "stdout"):
+            RELEASE.require_success_text(missing, "Published asset verification failed")
+        empty = subprocess.CompletedProcess(["node", "verify-assets"], 1, "", "")
+        with self.assertRaisesRegex(ValueError, r"Published asset verification failed \(exit 1, no output\)"):
+            RELEASE.require_success_text(empty, "Published asset verification failed")
+        failed = subprocess.CompletedProcess(["node", "verify-assets"], 1, "", "签名不匹配")
+        with self.assertRaisesRegex(ValueError, "签名不匹配"):
+            RELEASE.require_success_text(failed, "Published asset verification failed")
+
+    def test_restarted_acceptance_closes_restored_preferences_before_the_paused_button(self):
+        source = (SCRIPTS / "macos-updater-acceptance.py").read_text(encoding="utf-8")
+        restarted = source.split('stage = "restarted-paused-with-fixed-data"', 1)[1].split("stage =", 1)[0]
+        self.assertLess(restarted.index("dismiss_restored_preferences("), restarted.index("wait_ui(PAUSED_CAPTURE_BUTTON)"))
+        windows = (SCRIPTS / "windows-updater-acceptance.ps1").read_text(encoding="utf-8")
+        paused = windows.split("function Wait-ForPausedWindow", 1)[1].split("\nfunction ", 1)[0]
+        self.assertIn("关闭弹窗|Close dialog", paused)
+        self.assertLess(paused.index("关闭弹窗|Close dialog"), paused.index("if ($null -ne $paused"))
+
+        class Clock:
+            def __init__(self):
+                self.now = 0
+            def __call__(self):
+                return self.now
+            def sleep(self, seconds):
+                self.now += seconds
+
+        clock = Clock()
+        pressed = []
+        state = {"closed": False}
+
+        def find(pattern):
+            if pattern == MAC.PAUSED_CAPTURE_BUTTON:
+                return {"found": state["closed"]}
+            if pattern == MAC.RESTORED_PREFERENCES_CLOSE:
+                return {"found": not state["closed"], "count": 1}
+            return {"found": False}
+
+        def press(pattern):
+            pressed.append(pattern)
+            state["closed"] = True
+            return {"found": True}
+
+        MAC.dismiss_restored_preferences(find, press, seconds=5, sleep=clock.sleep, clock=clock)
+        self.assertEqual(pressed, [MAC.RESTORED_PREFERENCES_CLOSE])
+
+        def already_visible(pattern):
+            return {"found": pattern == MAC.PAUSED_CAPTURE_BUTTON, "count": 1}
+
+        MAC.dismiss_restored_preferences(already_visible, lambda pattern: (_ for _ in ()).throw(AssertionError(pattern)),
+                                         seconds=5, sleep=clock.sleep, clock=clock)
+
+        def ambiguous(pattern):
+            if pattern == MAC.RESTORED_PREFERENCES_CLOSE:
+                return {"found": True, "count": 2}
+            return {"found": False}
+
+        stalled = Clock()
+        ambiguous_presses = []
+        with self.assertRaisesRegex(RuntimeError, "preferences dialog"):
+            MAC.dismiss_restored_preferences(
+                ambiguous, lambda pattern: ambiguous_presses.append(pattern) or {"found": True},
+                seconds=1, sleep=stalled.sleep, clock=stalled)
+        self.assertEqual(ambiguous_presses, [])
 
 
 if __name__ == '__main__':

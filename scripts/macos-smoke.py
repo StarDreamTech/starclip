@@ -15,6 +15,9 @@ from fixture_schema import source_schema
 
 
 def command(*args, **kwargs):
+    if kwargs.get("text") or kwargs.get("universal_newlines"):
+        kwargs.setdefault("encoding", "utf-8")
+        kwargs.setdefault("errors", "replace")
     return subprocess.run(args, check=True, timeout=120, **kwargs)
 
 
