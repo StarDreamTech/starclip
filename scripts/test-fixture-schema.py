@@ -150,6 +150,48 @@ class FixtureSchemaTests(unittest.TestCase):
         self.assertIn("source-comparison", text)
         self.assertIn('scripts/updater_baselines.py metadata --origin "$BASELINE"', text)
 
+    def test_updater_workflows_match_published_assets_without_requiring_the_same_commit(self):
+        workflows = SCRIPTS.parent / ".github/workflows"
+        script = (SCRIPTS / "release-run-binding.mjs").read_text(encoding="utf-8")
+        fixture = (SCRIPTS / "release-updater-fixture.py").read_text(encoding="utf-8")
+        self.assertIn("匹配方式：精确匹配", script)
+        self.assertIn("匹配方式：仅 CI 文件差异 + 资产 sha256 一致", script)
+        for prefix in (".github/", "docs/", ".agents/"):
+            self.assertIn(f"'{prefix}'", script)
+            self.assertIn(f'"{prefix}"', fixture)
+        for name in ("macos-updater-acceptance.yml", "windows-updater-acceptance.yml"):
+            text = (workflows / name).read_text(encoding="utf-8")
+            self.assertIn("node scripts/release-run-binding.mjs bind", text)
+            self.assertIn("node scripts/release-run-binding.mjs verify-assets", text)
+            self.assertIn("--published-binding", text)
+            self.assertNotIn("immutable tag build", text)
+            self.assertNotIn("exact target tag commit", text)
+            self.assertNotIn("head_sha !== commit", text)
+
+    def test_published_binding_accepts_exact_tag_and_documentation_only_diff(self):
+        tag, run = "a" * 40, "b" * 40
+        files = [".github/workflows/release.yml", "docs/releases.md",
+                 ".agents/skills/starclip/SKILL.md", ".agents/skills/starclip/references/development.md"]
+        exact = dict(repository="StarDreamTech/starclip", tag="v0.2.6", version="0.2.6",
+                     tagSha=tag, runHeadSha=tag, runId=43050585288, mode="exact", files=[])
+        self.assertEqual(RELEASE.validate_published_binding(
+            exact, version="0.2.6", source_ref="v0.2.6", source_head_sha=tag, release_run_id=43050585288)["mode"], "exact")
+        ci = dict(exact, mode="ci-only", runHeadSha=run, files=files)
+        self.assertEqual(RELEASE.validate_published_binding(
+            ci, version="0.2.6", source_ref="v0.2.6", source_head_sha=tag, release_run_id=43050585288)["files"], files)
+        for changed in (
+            dict(ci, files=files + ["src/App.vue"]),
+            dict(ci, files=["scripts/release-manifest.mjs"]),
+            dict(ci, files=["CHANGELOG.md"]),
+            dict(ci, files=["docs/../../src/main.rs"]),
+            dict(exact, runHeadSha=run),
+            dict(ci, runHeadSha=tag),
+            dict(ci, repository="other/starclip"),
+        ):
+            with self.assertRaises(ValueError):
+                RELEASE.validate_published_binding(changed, version="0.2.6", source_ref="v0.2.6",
+                                                   source_head_sha=tag, release_run_id=43050585288)
+
     def test_target_schema_is_exact_source_not_installed_database(self):
         self.assertEqual(source_schema(SCRIPTS.parent), 5)
         with tempfile.TemporaryDirectory() as temp:

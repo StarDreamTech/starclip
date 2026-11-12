@@ -2,8 +2,10 @@
 """Disposable-runner HTTPS/data fixtures for authentic signed release artifacts.
 
 The caller must bind the downloaded complete-release artifact to a successful
-release.yml run and its existing tag. This server does not exercise GitHub's
-public download infrastructure. It never disables TLS or updater signatures.
+release.yml run. The run head is either the tag commit or a descendant whose
+compare diff stays outside application source. Package bytes must match the
+published release. This server does not exercise GitHub's public download
+infrastructure. It never disables TLS or updater signatures.
 """
 import argparse
 from contextlib import closing
@@ -82,6 +84,45 @@ def compatibility_manifest(manifest):
     return rewritten
 
 
+ALLOWED_DIFF_PREFIXES = (".github/", "docs/", ".agents/")
+
+
+def is_allowed_diff_path(file):
+    if not isinstance(file, str) or not file or len(file) > 512 or "\\" in file or file.startswith("/") or "\0" in file:
+        return False
+    parts = file.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        return False
+    return any(file.startswith(prefix) for prefix in ALLOWED_DIFF_PREFIXES)
+
+
+def validate_published_binding(binding, *, version, source_ref, source_head_sha, release_run_id):
+    """Reject a binding that does not record the tag source and an allowed commit match."""
+    if not isinstance(binding, dict):
+        raise ValueError("Published release binding is missing")
+    mode = binding.get("mode")
+    if mode not in ("exact", "ci-only"):
+        raise ValueError("Unknown release commit match")
+    if binding.get("repository") != "StarDreamTech/starclip":
+        raise ValueError("Published release binding is for a different repository")
+    if binding.get("tag") != source_ref or binding.get("version") != version or source_ref != "v" + version:
+        raise ValueError("Published release binding does not match the requested tag")
+    tag_sha, run_head, files = binding.get("tagSha"), binding.get("runHeadSha"), binding.get("files")
+    if tag_sha != source_head_sha or not re.fullmatch(r"[a-f0-9]{40}", str(run_head or "")):
+        raise ValueError("Schema source is not the tag commit recorded in the published binding")
+    if binding.get("runId") != release_run_id:
+        raise ValueError("Published release binding does not match the release run")
+    if mode == "exact" and (run_head != tag_sha or files != []):
+        raise ValueError("Exact match disagrees with the release run head")
+    if mode == "ci-only" and (run_head == tag_sha or not isinstance(files, list) or not files):
+        raise ValueError("CI-only match disagrees with the recorded diff")
+    if mode == "ci-only":
+        for name in files:
+            if not is_allowed_diff_path(name):
+                raise ValueError("Recorded diff includes a path outside CI and documentation")
+    return binding
+
+
 def verify_assets(assets, version):
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Expected stable target version")
@@ -126,11 +167,24 @@ def prepare(args, temporary):
     if not assets.is_relative_to(temporary) or not output.is_relative_to(temporary) or output.exists():
         raise ValueError("Assets and a new private output folder must be inside RUNNER_TEMP")
     if args.source_ref != "v" + args.version or not re.fullmatch(r"[a-f0-9]{40}", args.source_head_sha):
-        raise ValueError("Tag and exact release source revision are required")
+        raise ValueError("Tag and tag commit are required")
     source = args.source_directory.resolve(strict=True)
     actual_head = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], check=True, capture_output=True, text=True, timeout=15).stdout.strip()
     if actual_head != args.source_head_sha:
-        raise ValueError("Target schema source is not the exact signed release commit")
+        raise ValueError("Target schema source is not the tag commit")
+    binding_path = args.published_binding.resolve(strict=True)
+    if not binding_path.is_relative_to(temporary):
+        raise ValueError("Published binding must be inside RUNNER_TEMP")
+    binding = validate_published_binding(json.loads(binding_path.read_text(encoding="utf-8")),
+                                         version=args.version, source_ref=args.source_ref,
+                                         source_head_sha=args.source_head_sha, release_run_id=args.release_run_id)
+    verified = subprocess.run(["node", str(Path(__file__).resolve().parent / "release-run-binding.mjs"),
+                               "verify-assets", "--binding", str(binding_path), "--assets", str(assets)],
+                              check=False, capture_output=True, text=True, timeout=120)
+    if verified.returncode != 0:
+        raise ValueError((verified.stderr or verified.stdout).strip() or "Published asset verification failed")
+    if verified.stdout.strip():
+        print(verified.stdout.strip())
     target_schema = source_schema(source)
     manifest, hashes, mapping = verify_assets(assets, args.version)
     output.mkdir(mode=0o700)
@@ -168,7 +222,8 @@ authorityKeyIdentifier = keyid,issuer
     metadata = dict(latestManifestSha256=hashes["latest.json"], targetVersion=args.version,
                     platform=args.platform, targetSchema=target_schema, targetFilename=filename, targetSha256=hashes[filename],
                     targetUrl=target["url"], releaseRunId=args.release_run_id, sourceRef=args.source_ref,
-                    sourceHeadSha=args.source_head_sha, publicKey=PUBLIC_KEY, endpoint=ENDPOINT,
+                    sourceHeadSha=args.source_head_sha, commitMatch=binding["mode"],
+                    releaseRunHeadSha=binding["runHeadSha"], publicKey=PUBLIC_KEY, endpoint=ENDPOINT,
                     assetDirectory=str(assets), mapping=mapping, hashes=hashes,
                     transport="runner-local HTTPS fixture; public GitHub delivery not exercised")
     (output / "fixture.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
@@ -281,6 +336,7 @@ def main():
     for name in ("version", "source-ref", "source-head-sha"):
         preparation.add_argument("--" + name, required=True)
     preparation.add_argument("--source-directory", type=Path, required=True)
+    preparation.add_argument("--published-binding", type=Path, required=True)
     preparation.add_argument("--release-run-id", type=int, required=True)
     preparation.add_argument("--platform", choices=("darwin-aarch64", "windows-x86_64"), required=True)
     commands.add_parser("serve").add_argument("--directory", type=Path, required=True)

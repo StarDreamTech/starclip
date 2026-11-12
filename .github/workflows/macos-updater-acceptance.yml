@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       release_run_id:
-        description: 'Successful release.yml run containing complete-release artifacts'
+        description: 'Successful release.yml run whose head is the tag or a descendant that does not change application source'
         required: true
         type: string
       source_ref:
-        description: 'Existing release tag, for example v0.2.4'
+        description: 'Existing published release tag, for example v0.2.6'
         required: true
         default: 'v0.2.6'
         type: string
@@ -29,25 +29,19 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - name: Bind artifacts to the successful tagged release build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # The release run head may equal the tag, or the tag may be its ancestor
+      # when compare only changes .github/, docs/ or .agents/. Checked-out
+      # source stays the tag. Package sha256 is checked after download.
+      - name: Bind the release run to the published tag
         id: target
-        uses: actions/github-script@v7
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
           SOURCE_REF: ${{ inputs.source_ref }}
-        with:
-          script: |
-            if (context.repo.owner !== 'StarDreamTech' || context.repo.repo !== 'starclip') throw new Error('Unexpected repository');
-            const tag = process.env.SOURCE_REF, runText = process.env.RELEASE_RUN_ID;
-            if (!/^v\d+\.\d+\.\d+$/.test(tag) || !/^\d+$/.test(runText)) throw new Error('Invalid release tag/run input');
-            const runId = Number(runText), version = tag.slice(1);
-            const commit = (await github.rest.repos.getCommit({...context.repo, ref: tag})).data.sha;
-            const run = (await github.rest.actions.getWorkflowRun({...context.repo, run_id: runId})).data;
-            if (run.path !== '.github/workflows/release.yml' || run.status !== 'completed' || run.conclusion !== 'success' || run.head_sha !== commit || run.head_repository?.full_name !== 'StarDreamTech/starclip') throw new Error('Release run is not the successful immutable tag build');
-            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {...context.repo, run_id: runId});
-            const matches = artifacts.filter(a => a.name === `complete-release-${version}` && !a.expired && a.workflow_run?.head_sha === commit);
-            if (matches.length !== 1) throw new Error('Expected one complete release artifact');
-            core.setOutput('revision', commit); core.setOutput('version', version); core.setOutput('artifact', matches[0].id);
+        run: node scripts/release-run-binding.mjs bind --tag "$SOURCE_REF" --run-id "$RELEASE_RUN_ID" --output "$RUNNER_TEMP/starclip-release-binding.json"
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.target.outputs.revision }}
@@ -59,14 +53,13 @@ jobs:
           github-token: ${{ github.token }}
           merge-multiple: true
           path: ${{ runner.temp }}/starclip-release-assets
+      - name: Require downloaded packages to match the published release sha256
+        run: node scripts/release-run-binding.mjs verify-assets --binding "$RUNNER_TEMP/starclip-release-binding.json" --assets "$RUNNER_TEMP/starclip-release-assets"
       - name: Check runner isolation and native UI authorization
         run: |
           python3 scripts/macos-updater-acceptance.py --preflight
           xcrun swiftc scripts/macos-updater-acceptance.swift -o "$RUNNER_TEMP/starclip-updater-ui"
           "$RUNNER_TEMP/starclip-updater-ui" preflight
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
       - name: Verify genuine signatures and rejection of changed package bytes
         env:
           TARGET_VERSION: ${{ steps.target.outputs.version }}
@@ -132,7 +125,7 @@ jobs:
           SOURCE_SHA: ${{ steps.target.outputs.revision }}
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
         run: |
-          python3 scripts/release-updater-fixture.py prepare --assets "$RUNNER_TEMP/starclip-release-assets" --output "$RUNNER_TEMP/starclip-private-updater-fixture" --version "$TARGET_VERSION" --source-ref "$SOURCE_REF" --source-head-sha "$SOURCE_SHA" --release-run-id "$RELEASE_RUN_ID" --platform darwin-aarch64 --source-directory "$PWD/release-source"
+          python3 scripts/release-updater-fixture.py prepare --assets "$RUNNER_TEMP/starclip-release-assets" --output "$RUNNER_TEMP/starclip-private-updater-fixture" --version "$TARGET_VERSION" --source-ref "$SOURCE_REF" --source-head-sha "$SOURCE_SHA" --release-run-id "$RELEASE_RUN_ID" --platform darwin-aarch64 --source-directory "$PWD/release-source" --published-binding "$RUNNER_TEMP/starclip-release-binding.json"
       - name: Exercise authentic target upgrade over runner-local trusted HTTPS
         env:
           BASELINE: ${{ inputs.baseline }}
