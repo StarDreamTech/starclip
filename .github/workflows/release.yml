@@ -162,7 +162,17 @@ jobs:
           pattern: release-*
           path: downloaded
       - name: Install the signature verifier
-        run: sudo apt-get update && sudo apt-get install --yes minisign
+        run: |
+          set -euo pipefail
+          url=https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz
+          sha=9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73
+          if curl -fsSL --retry 5 --retry-all-errors -o /tmp/minisign.tgz "$url" && echo "$sha  /tmp/minisign.tgz" | sha256sum -c -; then
+            tar xzf /tmp/minisign.tgz -C /tmp
+            sudo install -m 0755 /tmp/minisign-linux/x86_64/minisign /usr/local/bin/minisign
+          else
+            sudo apt-get update -o Acquire::Retries=5 && sudo apt-get install --yes -o Acquire::Retries=5 minisign
+          fi
+          minisign -v
       - name: Verify both platforms and assemble the update feed
         env:
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
