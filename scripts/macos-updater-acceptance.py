@@ -43,10 +43,42 @@ SETTINGS = dict(paused=True, pauseRevision=0, uiLanguage="system", theme="forest
                 maxHistory=0, shortcut="CommandOrControl+Shift+V", alwaysOnTop=False,
                 retentionDays=0, showStartup=False, stickerPack="none")
 NOTE, TITLE, GROUP = "Starclip CI original note: a quiet orbit.", "CI original note", "CI original group"
+PAUSED_CAPTURE_BUTTON = r"^(?:开启剪贴记录|Start recording)$"
+RESTORED_PREFERENCES_CLOSE = r"^(?:关闭弹窗|Close dialog)$"
+
+
+def utf8_text(kwargs):
+    if kwargs.get("text") or kwargs.get("universal_newlines"):
+        kwargs.setdefault("encoding", "utf-8")
+        kwargs.setdefault("errors", "replace")
+    return kwargs
 
 
 def command(*args, **kwargs):
-    return subprocess.run(args, check=True, timeout=120, **kwargs)
+    return subprocess.run(args, check=True, timeout=120, **utf8_text(kwargs))
+
+
+def dismiss_restored_preferences(find, press, *, seconds=60, sleep=time.sleep, clock=time.monotonic):
+    """Close preferences restored from the session that confirmed installation.
+
+    0.2.5 persists settingsOpen. This acceptance installs from the Help tab, so
+    the restarted app shows that modal and the sidebar button is absent from
+    the accessibility tree. A baseline that never saved the flag leaves the
+    button visible, and this returns without clicking.
+    """
+    deadline = clock() + seconds
+    while clock() < deadline:
+        if find(PAUSED_CAPTURE_BUTTON).get("found"):
+            return
+        close = find(RESTORED_PREFERENCES_CLOSE)
+        if close.get("found") and close.get("count") == 1:
+            if not press(RESTORED_PREFERENCES_CLOSE).get("found"):
+                raise RuntimeError("Could not close the restored preferences dialog: " + RESTORED_PREFERENCES_CLOSE)
+        sleep(0.5)
+    raise RuntimeError(
+        "Expected UI was not ready: " + PAUSED_CAPTURE_BUTTON
+        + ". The restarted app may still be showing the preferences dialog that was open before install."
+    )
 
 
 def digest(path):
@@ -139,7 +171,7 @@ def fixture_transport(directory, temporary):
 
     def transport_command(stage, *arguments):
         event(stage + "-started")
-        result = subprocess.run(arguments, check=True, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(arguments, check=True, capture_output=True, timeout=30, **utf8_text(dict(text=True)))
         event(stage + "-finished")
         return result
 
@@ -196,7 +228,7 @@ def fixture_transport(directory, temporary):
         def cleanup_command(*arguments):
             try:
                 event("cleanup-command", command=list(arguments[:4]))
-                return subprocess.run(arguments, check=False, capture_output=True, text=True, timeout=30)
+                return subprocess.run(arguments, check=False, capture_output=True, timeout=30, **utf8_text(dict(text=True)))
             except Exception as error:
                 errors.append(str(error))
                 return None
@@ -465,7 +497,7 @@ def main():
             seed_database(database, baseline_schema)
         start()
         original_pid = active_pid
-        wait_ui(r"^(?:开启剪贴记录|Start recording)$")
+        wait_ui(PAUSED_CAPTURE_BUTTON)
         fixture("before-check")
         stage = "check"
         wait_ui(r"^(?:偏好设置|Preferences)(?:\s|$)", press=True)
@@ -515,7 +547,11 @@ def main():
         stage = "restarted-paused-with-fixed-data"
         wait_window()
         write("accessibility-prepare-" + str(active_pid) + ".json", ui("prepare", active_pid))
-        wait_ui(r"^(?:开启剪贴记录|Start recording)$")
+        dismiss_restored_preferences(
+            lambda pattern: ui("find", active_pid, pattern),
+            lambda pattern: ui("press", active_pid, pattern),
+        )
+        wait_ui(PAUSED_CAPTURE_BUTTON)
         command("pbcopy", input=b"Starclip CI post-update original canary: a new orbit.")
         for _ in range(3):
             time.sleep(1)
